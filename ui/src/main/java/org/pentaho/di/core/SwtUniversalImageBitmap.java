@@ -1,30 +1,23 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core;
 
 import org.eclipse.swt.graphics.Device;
 import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.graphics.ImageData;
 import org.eclipse.swt.graphics.Transform;
 
 public class SwtUniversalImageBitmap extends SwtUniversalImage {
@@ -49,13 +42,9 @@ public class SwtUniversalImageBitmap extends SwtUniversalImage {
 
   @Override
   protected Image renderSimple( Device device, int width, int height ) {
-    int xsize = bitmap.getBounds().width;
-    int ysize = bitmap.getBounds().height;
-    Image result = new Image( device, width, height );
-    GC gc = new GC( result );
-    gc.drawImage( bitmap, 0, 0, xsize, ysize, 0, 0, width, height );
-    gc.dispose();
-    return result;
+    ImageData imageData = bitmap.getImageData();
+    ImageData scaledData = imageData.scaledTo( width, height );
+    return new Image( device, scaledData );
   }
 
   @Override

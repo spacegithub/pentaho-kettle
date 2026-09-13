@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.repository.kdr.delegates;
 
@@ -55,7 +47,6 @@ import org.pentaho.di.repository.RepositoryDirectory;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
 import org.pentaho.di.repository.RepositoryObjectType;
 import org.pentaho.di.repository.kdr.KettleDatabaseRepository;
-import org.pentaho.di.shared.SharedObjects;
 import org.pentaho.di.trans.TransDependency;
 import org.pentaho.di.trans.TransHopMeta;
 import org.pentaho.di.trans.TransMeta;
@@ -173,7 +164,8 @@ public class KettleDatabaseRepositoryTransDelegate extends KettleDatabaseReposit
       }
 
       int nrWorks =
-        2 + transMeta.nrDatabases() + transMeta.nrNotes() + transMeta.nrSteps() + transMeta.nrTransHops();
+        2 + transMeta.getDatabaseManagementInterface().getAll().size() + transMeta.nrNotes()
+          + transMeta.nrSteps() + transMeta.nrTransHops();
       if ( monitor != null ) {
         monitor.beginTask( BaseMessages.getString( PKG, "TransMeta.Monitor.SavingTransformationTask.Title" )
           + transMeta.getPathAndName(), nrWorks );
@@ -244,14 +236,13 @@ public class KettleDatabaseRepositoryTransDelegate extends KettleDatabaseReposit
       if ( log.isDebug() ) {
         log.logDebug( BaseMessages.getString( PKG, "TransMeta.Log.SavingDatabaseConnections" ) );
       }
-      for ( int i = 0; i < transMeta.nrDatabases(); i++ ) {
+      for ( DatabaseMeta databaseMeta : transMeta.getDatabaseManagementInterface().getAll() ) {
         if ( monitor != null && monitor.isCanceled() ) {
           throw new KettleDatabaseException( BaseMessages.getString( PKG, "TransMeta.Log.UserCancelledTransSave" ) );
         }
 
         // if (monitor != null) monitor.subTask(BaseMessages.getString(PKG,
         // "TransMeta.Monitor.SavingDatabaseTask.Title") + (i + 1) + "/" + transMeta.nrDatabases());
-        DatabaseMeta databaseMeta = transMeta.getDatabase( i );
         // Save the database connection if we're overwriting objects or (it has changed and nothing was saved in the
         // repository)
         if ( overwriteAssociated || databaseMeta.hasChanged() || databaseMeta.getObjectId() == null ) {
@@ -496,13 +487,6 @@ public class KettleDatabaseRepositoryTransDelegate extends KettleDatabaseReposit
           if ( monitor != null ) {
             monitor.subTask( BaseMessages.getString(
               PKG, "TransMeta.Monitor.ReadingTheAvailableSharedObjectsTask.Title" ) );
-          }
-          try {
-            transMeta.setSharedObjects( readTransSharedObjects( transMeta ) );
-          } catch ( Exception e ) {
-            log.logError( BaseMessages
-              .getString( PKG, "TransMeta.ErrorReadingSharedObjects.Message", e.toString() ) );
-            log.logError( Const.getStackTracker( e ) );
           }
 
           if ( monitor != null ) {
@@ -956,7 +940,7 @@ public class KettleDatabaseRepositoryTransDelegate extends KettleDatabaseReposit
                                                                                // transformation
         if ( check == null || overWriteShared ) { // We only add, never overwrite database connections.
           if ( databaseMeta.getName() != null ) {
-            transMeta.addOrReplaceDatabase( databaseMeta );
+            transMeta.getDatabaseManagementInterface().add( databaseMeta );
             if ( !overWriteShared ) {
               databaseMeta.setChanged( false );
             }
@@ -1354,9 +1338,6 @@ public class KettleDatabaseRepositoryTransDelegate extends KettleDatabaseReposit
     repository.connectionDelegate.insertTransAttribute(
       transMeta.getObjectId(), 0, KettleDatabaseRepository.TRANS_ATTRIBUTE_USING_THREAD_PRIORITIES, 0, transMeta
         .isUsingThreadPriorityManagment() ? "Y" : "N" );
-    repository.connectionDelegate.insertTransAttribute(
-      transMeta.getObjectId(), 0, KettleDatabaseRepository.TRANS_ATTRIBUTE_SHARED_FILE, 0, transMeta
-        .getSharedObjectsFile() );
 
     repository.connectionDelegate.insertTransAttribute(
       transMeta.getObjectId(), 0, KettleDatabaseRepository.TRANS_ATTRIBUTE_CAPTURE_STEP_PERFORMANCE, 0,
@@ -1480,20 +1461,13 @@ public class KettleDatabaseRepositoryTransDelegate extends KettleDatabaseReposit
     return repository.connectionDelegate.getTransAttributeInteger( id_transformation, nr, code );
   }
 
-  public SharedObjects readTransSharedObjects( TransMeta transMeta ) throws KettleException {
-
-    transMeta.setSharedObjectsFile( getTransAttributeString( transMeta.getObjectId(), 0, "SHARED_FILE" ) );
-
-    transMeta.setSharedObjects( transMeta.readSharedObjects() );
-
+  public void readTransSharedObjects( TransMeta transMeta ) throws KettleException {
     // Repository objects take priority so let's overwrite them...
     //
     readDatabases( transMeta, true );
     readPartitionSchemas( transMeta, true );
     readSlaves( transMeta, true );
     readClusters( transMeta, true );
-
-    return transMeta.getSharedObjects();
   }
 
   public synchronized void moveTransformation( String transname, ObjectId id_directory_from,
@@ -1564,10 +1538,12 @@ public class KettleDatabaseRepositoryTransDelegate extends KettleDatabaseReposit
 
   private void saveTransAttributesMap( ObjectId transformationId, Map<String, Map<String, String>> attributesMap ) throws KettleException {
 
-    for ( final String groupName : attributesMap.keySet() ) {
-      Map<String, String> attributes = attributesMap.get( groupName );
-      for ( final String key : attributes.keySet() ) {
-        final String value = attributes.get( key );
+    for ( final Map.Entry<String, Map<String, String>> attributesEntry : attributesMap.entrySet() ) {
+      Map<String, String> attributes = attributesEntry.getValue();
+      String groupName = attributesEntry.getKey();
+      for ( final Map.Entry<String, String> entry : attributes.entrySet() ) {
+        final String value = entry.getValue();
+        final String key = entry.getKey();
         if ( key != null && value != null ) {
           repository.connectionDelegate.insertTransAttribute( transformationId, 0, TRANS_ATTRIBUTE_PREFIX
             + groupName + TRANS_ATTRIBUTE_PREFIX_DELIMITER + key, 0, value );

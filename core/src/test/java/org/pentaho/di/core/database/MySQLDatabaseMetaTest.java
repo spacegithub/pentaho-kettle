@@ -1,33 +1,32 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.core.database;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import static org.mockito.BDDMockito.doReturn;
+import static org.mockito.BDDMockito.mock;
+import static org.mockito.Mockito.doThrow;
+
+import com.mysql.cj.jdbc.Driver;
 import org.junit.Before;
 import org.junit.Test;
+import org.pentaho.di.core.exception.KettleDatabaseException;
 import org.pentaho.di.core.row.value.ValueMetaBigNumber;
 import org.pentaho.di.core.row.value.ValueMetaBinary;
 import org.pentaho.di.core.row.value.ValueMetaBoolean;
@@ -38,30 +37,30 @@ import org.pentaho.di.core.row.value.ValueMetaNumber;
 import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.core.row.value.ValueMetaTimestamp;
 
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.util.Map;
+
 public class MySQLDatabaseMetaTest {
-  MySQLDatabaseMeta nativeMeta, odbcMeta;
+  MySQLDatabaseMeta nativeMeta;
 
   @Before
-  public void setupBefore() {
+  public void setupBefore() throws Exception {
     nativeMeta = new MySQLDatabaseMeta();
     nativeMeta.setAccessType( DatabaseMeta.TYPE_ACCESS_NATIVE );
-    odbcMeta = new MySQLDatabaseMeta();
-    odbcMeta.setAccessType( DatabaseMeta.TYPE_ACCESS_ODBC );
-
+    Class.forName( Driver.class.getName() );
   }
 
   @Test
   public void testSettings() throws Exception {
-    assertArrayEquals( new int[] { DatabaseMeta.TYPE_ACCESS_NATIVE, DatabaseMeta.TYPE_ACCESS_ODBC, DatabaseMeta.TYPE_ACCESS_JNDI },
+    assertArrayEquals( new int[] { DatabaseMeta.TYPE_ACCESS_NATIVE, DatabaseMeta.TYPE_ACCESS_JNDI },
         nativeMeta.getAccessTypeList() );
     assertEquals( 3306, nativeMeta.getDefaultDatabasePort() );
-    assertEquals( -1, odbcMeta.getDefaultDatabasePort() );
     assertTrue( nativeMeta.supportsAutoInc() );
     assertEquals( 1, nativeMeta.getNotFoundTK( true ) );
     assertEquals( 0, nativeMeta.getNotFoundTK( false ) );
-    assertEquals( "org.gjt.mm.mysql.Driver", nativeMeta.getDriverClass() );
-    assertEquals( "sun.jdbc.odbc.JdbcOdbcDriver", odbcMeta.getDriverClass() );
-    assertEquals( "jdbc:odbc:FOO", odbcMeta.getURL(  "IGNORED", "IGNORED", "FOO" ) );
+    assertEquals( "com.mysql.cj.jdbc.Driver", nativeMeta.getDriverClass() );
     assertEquals( "jdbc:mysql://FOO:BAR/WIBBLE", nativeMeta.getURL( "FOO", "BAR", "WIBBLE" ) );
     assertEquals( "jdbc:mysql://FOO/WIBBLE", nativeMeta.getURL( "FOO", "", "WIBBLE" ) );
     assertEquals( "&", nativeMeta.getExtraOptionSeparator() );
@@ -96,7 +95,7 @@ public class MySQLDatabaseMetaTest {
     assertEquals( "`", nativeMeta.getStartQuote() );
     assertEquals( "`", nativeMeta.getEndQuote() );
     assertTrue( nativeMeta.needsToLockAllTables() );
-    assertEquals( "http://dev.mysql.com/doc/refman/5.0/en/connector-j-reference-configuration-properties.html", nativeMeta.getExtraOptionsHelpText() );
+    assertEquals( "https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-configuration-properties.html", nativeMeta.getExtraOptionsHelpText() );
     assertArrayEquals( new String[] { "mysql-connector-java-3.1.14-bin.jar" }, nativeMeta.getUsedLibraries() ); // this is way wrong
     assertTrue( nativeMeta.isSystemTable( "sysTest" ) );
     assertTrue( nativeMeta.isSystemTable( "dtproperties" ) );
@@ -184,19 +183,8 @@ public class MySQLDatabaseMetaTest {
     assertEquals( "ALTER TABLE FOO MODIFY BAR TINYTEXT",
         nativeMeta.getModifyColumnStatement( "FOO", new ValueMetaString( "BAR" ), "", false, "", true ) );
 
-    odbcMeta.setSupportsBooleanDataType( true ); // some subclass of the MSSQL meta probably ...
-    assertEquals( "ALTER TABLE FOO ADD BAR BOOLEAN",
-        odbcMeta.getAddColumnStatement( "FOO", new ValueMetaBoolean( "BAR" ), "", false, "", false ) );
-    odbcMeta.setSupportsBooleanDataType( false );
-
     assertEquals( "ALTER TABLE FOO ADD BAR INT",
         nativeMeta.getAddColumnStatement( "FOO", new ValueMetaInteger( "BAR", 4, 0 ), "", true, "", false ) );
-
-    // do a boolean check
-    odbcMeta.setSupportsBooleanDataType( true );
-    assertEquals( "ALTER TABLE FOO ADD BAR BOOLEAN",
-        odbcMeta.getAddColumnStatement( "FOO", new ValueMetaBoolean( "BAR" ), "", false, "", false ) );
-    odbcMeta.setSupportsBooleanDataType( false );
 
     assertEquals( "ALTER TABLE FOO ADD BAR BIGINT NOT NULL PRIMARY KEY",
         nativeMeta.getAddColumnStatement( "FOO", new ValueMetaInteger( "BAR" ), "BAR", false, "", false ) );
@@ -223,4 +211,190 @@ public class MySQLDatabaseMetaTest {
     assertEquals( "insert into FOO(FOOKEY, FOOVERSION) values (1, 1)", nativeMeta.getSQLInsertAutoIncUnknownDimensionRow( "FOO", "FOOKEY", "FOOVERSION" ) );
   }
 
+  /**
+   *
+   * @return
+   * @throws Exception
+   */
+  private ResultSetMetaData getResultSetMetaData() throws Exception {
+    ResultSetMetaData resultSetMetaData = mock( ResultSetMetaData.class );
+
+    /**
+     * Fields setup around the following query:
+     *
+     * select
+     *   CUSTOMERNUMBER as NUMBER
+     * , CUSTOMERNAME as NAME
+     * , CONTACTLASTNAME as LAST_NAME
+     * , CONTACTFIRSTNAME as FIRST_NAME
+     * , 'MySQL' as DB
+     * , 'NoAliasText'
+     * from CUSTOMERS
+     * ORDER BY CUSTOMERNAME;
+     */
+
+    doReturn( "NUMBER" ).when( resultSetMetaData ).getColumnLabel( 1 );
+    doReturn( "NAME" ).when( resultSetMetaData ).getColumnLabel( 2 );
+    doReturn( "LAST_NAME" ).when( resultSetMetaData ).getColumnLabel( 3 );
+    doReturn( "FIRST_NAME" ).when( resultSetMetaData ).getColumnLabel( 4 );
+    doReturn( "DB" ).when( resultSetMetaData ).getColumnLabel( 5 );
+    doReturn( "NoAliasText" ).when( resultSetMetaData ).getColumnLabel( 6 );
+
+    doReturn( "CUSTOMERNUMBER" ).when( resultSetMetaData ).getColumnName( 1 );
+    doReturn( "CUSTOMERNAME" ).when( resultSetMetaData ).getColumnName( 2 );
+    doReturn( "CONTACTLASTNAME" ).when( resultSetMetaData ).getColumnName( 3 );
+    doReturn( "CONTACTFIRSTNAME" ).when( resultSetMetaData ).getColumnName( 4 );
+    doReturn( "MySQL" ).when( resultSetMetaData ).getColumnName( 5 );
+    doReturn( "NoAliasText" ).when( resultSetMetaData ).getColumnName( 6 );
+
+    return resultSetMetaData;
+  }
+
+  /**
+   *
+   * @return
+   * @throws Exception
+   */
+  private ResultSetMetaData getResultSetMetaDataException() throws Exception {
+    ResultSetMetaData resultSetMetaData = mock( ResultSetMetaData.class );
+
+    doThrow( new SQLException() ).when( resultSetMetaData ).getColumnLabel( 1 );
+    doThrow( new SQLException() ).when( resultSetMetaData ).getColumnName( 1 );
+
+    return resultSetMetaData;
+  }
+
+  @Test
+  public void testGetLegacyColumnNameDriverGreaterThanThreeFieldNumber() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 5 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    assertEquals( "NUMBER", new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaData(), 1 ) );
+  }
+
+  @Test
+  public void testGetLegacyColumnNameDriverGreaterThanThreeFieldName() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 5 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    assertEquals( "NAME", new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaData(), 2 ) );
+  }
+
+  @Test
+  public void testGetLegacyColumnNameDriverGreaterThanThreeFieldLastName() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 5 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    assertEquals( "LAST_NAME", new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaData(), 3 ) );
+  }
+
+  @Test
+  public void testGetLegacyColumnNameDriverGreaterThanThreeFieldFirstName() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 5 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    assertEquals( "FIRST_NAME", new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaData(), 4 ) );
+  }
+
+  @Test
+  public void testGetLegacyColumnNameDriverGreaterThanThreeFieldDB() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 5 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    assertEquals( "DB", new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaData(), 5 ) );
+  }
+
+  @Test
+  public void testGetLegacyColumnNameDriverGreaterThanThreeFieldNoAliasText() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 5 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    assertEquals( "NoAliasText", new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaData(), 6 ) );
+  }
+
+  @Test
+  public void testGetLegacyColumnNameDriverLessOrEqualToThreeFieldCustomerNumber() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 3 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    assertEquals( "CUSTOMERNUMBER", new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaData(), 1 ) );
+  }
+
+  @Test
+  public void testGetLegacyColumnNameDriverLessOrEqualToThreeFieldCustomerName() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 3 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    assertEquals( "CUSTOMERNAME", new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaData(), 2 ) );
+  }
+
+  @Test
+  public void testGetLegacyColumnNameDriverLessOrEqualToThreeFieldContactLastName() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 3 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    assertEquals( "CONTACTLASTNAME", new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaData(), 3 ) );
+  }
+
+  @Test
+  public void testGetLegacyColumnNameDriverLessOrEqualToThreeFieldContactFirstName() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 3 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    assertEquals( "CONTACTFIRSTNAME", new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaData(), 4 ) );
+  }
+
+  @Test
+  public void testGetLegacyColumnNameDriverLessOrEqualToThreeFieldMySQL() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 3 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    assertEquals( "MySQL", new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaData(), 5 ) );
+  }
+
+  @Test
+  public void testGetLegacyColumnNameDriverLessOrEqualToThreeFieldNoAliasText() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 3 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    assertEquals( "NoAliasText", new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaData(), 6 ) );
+  }
+
+  @Test( expected = KettleDatabaseException.class )
+  public void testGetLegacyColumnNameNullDBMetaDataException() throws Exception {
+    new MySQLDatabaseMeta().getLegacyColumnName( null, getResultSetMetaData(), 1 );
+  }
+
+  @Test( expected = KettleDatabaseException.class )
+  public void testGetLegacyColumnNameNullRSMetaDataException() throws Exception {
+    new MySQLDatabaseMeta().getLegacyColumnName( mock( DatabaseMetaData.class ), null, 1 );
+  }
+
+  @Test( expected = KettleDatabaseException.class )
+  public void testGetLegacyColumnNameDriverGreaterThanThreeException() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 5 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaDataException(), 1 );
+  }
+
+  @Test( expected = KettleDatabaseException.class )
+  public void testGetLegacyColumnNameDriverLessOrEqualToThreeException() throws Exception {
+    DatabaseMetaData databaseMetaData = mock( DatabaseMetaData.class );
+    doReturn( 3 ).when( databaseMetaData ).getDriverMajorVersion();
+
+    new MySQLDatabaseMeta().getLegacyColumnName( databaseMetaData, getResultSetMetaDataException(), 1 );
+  }
+
+  @Test
+  public void testGetDefaultOptions() {
+    MySQLDatabaseMeta mySQLDatabaseMeta = new MySQLDatabaseMeta();
+    mySQLDatabaseMeta.setPluginId( "foobar" );
+    Map<String, String> map =mySQLDatabaseMeta.getDefaultOptions();
+    assertNotNull( map );
+    assertEquals( 2, map.size() );
+    for ( String key : map.keySet() ) {
+      assert( key.startsWith( "foobar." ) );
+    }
+  }
 }

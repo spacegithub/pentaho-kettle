@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step.jms.context;
 
@@ -43,8 +35,13 @@ import javax.net.ssl.TrustManagerFactory;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.security.KeyManagementException;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -54,6 +51,8 @@ import static org.pentaho.di.i18n.BaseMessages.getString;
 import static org.pentaho.di.trans.step.jms.context.JmsProvider.ConnectionType.WEBSPHERE;
 
 public class WebsphereMQProvider implements JmsProvider {
+
+  public static final String PW_DEBUG_MASK = "********";
 
   @Override public boolean supports( ConnectionType type ) {
     return type == WEBSPHERE;
@@ -67,81 +66,99 @@ public class WebsphereMQProvider implements JmsProvider {
     connDetails.append( "\nChannel: " ).append( resolver.channel );
     connDetails.append( "\nQueueManager: " ).append( resolver.queueManager );
     connDetails.append( "\nUser Name: " ).append( meta.ibmUsername );
-    connDetails.append( "\nPassword: " ).append( meta.ibmPassword );
+    connDetails.append( "\nPassword: " ).append( PW_DEBUG_MASK );
 
     if ( meta.sslEnabled ) {
       connDetails.append( "\nSSL Enabled: true" );
       connDetails.append( "\nKey Store: " ).append( meta.sslKeystorePath );
-      connDetails.append( "\nKey Store Pass: " ).append( meta.sslKeystorePassword );
+      connDetails.append( "\nKey Store Pass: " ).append( PW_DEBUG_MASK );
       connDetails.append( "\nKey Store Type: " ).append( meta.sslKeystoreType );
       connDetails.append( "\nTrust Store: " ).append( meta.sslTruststorePath );
-      connDetails.append( "\nTrust Store Pass: " ).append( meta.sslTruststorePassword );
+      connDetails.append( "\nTrust Store Pass: " ).append( PW_DEBUG_MASK );
       connDetails.append( "\nTrust Store Type: " ).append( meta.sslTruststoreType );
       connDetails.append( "\nSSL Context Algorithm: " ).append( meta.sslContextAlgorithm );
       connDetails.append( "\nCipher Suite: " ).append( meta.sslCipherSuite );
       connDetails.append( "\nFIPS Required: " ).append( meta.ibmSslFipsRequired );
+      connDetails.append( "\nUse Default SSL Context:" ).append( meta.sslUseDefaultContext );
     }
 
     return connDetails.toString();
   }
 
   @Override public JMSContext getContext( JmsDelegate meta ) {
-
-    MQUrlResolver resolver = new MQUrlResolver( meta );
-
-    MQConnectionFactory connFactory = isQueue( meta )
-      ? new MQQueueConnectionFactory() : new MQTopicConnectionFactory();
-
-    connFactory.setHostName( resolver.host );
-
-    if ( meta.sslEnabled ) {
-      // try to configure SSL settings
-      try {
-        KeyStore trustStore = KeyStore.getInstance( meta.sslTruststoreType );
-        trustStore.load( new FileInputStream( meta.sslTruststorePath ),
-          Strings.isNullOrEmpty( meta.sslTruststorePassword ) ? null : meta.sslTruststorePassword.toCharArray() );
-
-        TrustManagerFactory trustManagerFactory =
-          TrustManagerFactory.getInstance( TrustManagerFactory.getDefaultAlgorithm() );
-
-        trustManagerFactory.init( trustStore );
-
-        KeyManagerFactory keyManagerFactory = null;
-        // the keystore is optional; use if client authentication is desired
-        if ( !Strings.isNullOrEmpty( meta.sslKeystorePath ) ) {
-          KeyStore keyStore = KeyStore.getInstance( meta.sslKeystoreType );
-          keyStore.load( new FileInputStream( meta.sslKeystorePath ), meta.sslKeystorePassword.toCharArray() );
-
-          keyManagerFactory = KeyManagerFactory.getInstance( KeyManagerFactory.getDefaultAlgorithm() );
-          keyManagerFactory.init( keyStore, meta.sslKeystorePassword.toCharArray() );
-        }
-
-        SSLContext sslContext = SSLContext.getInstance( meta.sslContextAlgorithm );
-        sslContext.init( ( null == keyManagerFactory ? null : keyManagerFactory.getKeyManagers() ),
-          trustManagerFactory.getTrustManagers(), new SecureRandom() );
-
-        SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
-
-        connFactory.setSSLFipsRequired( meta.ibmSslFipsRequired.toLowerCase().startsWith( "t" )
-          || meta.ibmSslFipsRequired.toLowerCase().startsWith( "y" ) );
-        connFactory.setSSLSocketFactory( sslSocketFactory );
-        connFactory.setSSLCipherSuite( meta.sslCipherSuite );
-
-      } catch ( GeneralSecurityException | IOException e ) {
-        throw new RuntimeException( e );
-      }
-    }
+    ClassLoader currentClassLoader = Thread.currentThread().getContextClassLoader();
 
     try {
-      connFactory.setPort( resolver.port );
-      connFactory.setQueueManager( resolver.queueManager );
-      connFactory.setChannel( resolver.channel );
-      connFactory.setTransportType( WMQConstants.WMQ_CM_CLIENT );
-    } catch ( JMSException e ) {
-      throw new RuntimeException( e );
-    }
-    return connFactory.createContext( meta.ibmUsername, meta.ibmPassword );
+      // Buried in the IBM jar is a json file of cipher suite mappings that the client needs to read during
+      // Java class initialization. Setting the thread classloader to the plugin's classloader so that it can be found.
+      Thread.currentThread().setContextClassLoader( MQConnectionFactory.class.getClassLoader() );
+      MQUrlResolver resolver = new MQUrlResolver( meta );
 
+      MQConnectionFactory connFactory = isQueue( meta )
+        ? new MQQueueConnectionFactory() : new MQTopicConnectionFactory();
+
+      connFactory.setHostName( resolver.host );
+
+      if ( meta.sslEnabled ) {
+        // try to configure SSL settings
+        try {
+          SSLContext sslContext = meta.sslUseDefaultContext ? SSLContext.getDefault() : getSslContext( meta );
+          SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+
+          connFactory.setSSLFipsRequired( meta.ibmSslFipsRequired.toLowerCase().startsWith( "t" )
+            || meta.ibmSslFipsRequired.toLowerCase().startsWith( "y" ) );
+          connFactory.setSSLSocketFactory( sslSocketFactory );
+          connFactory.setSSLCipherSuite( meta.sslCipherSuite );
+
+        } catch ( GeneralSecurityException | IOException e ) {
+          throw new IllegalStateException( e );
+        }
+      }
+
+      try {
+        connFactory.setPort( resolver.port );
+        connFactory.setQueueManager( resolver.queueManager );
+        connFactory.setChannel( resolver.channel );
+        connFactory.setTransportType( WMQConstants.WMQ_CM_CLIENT );
+      } catch ( JMSException e ) {
+        throw new IllegalStateException( e );
+      }
+      return connFactory.createContext( meta.ibmUsername, meta.ibmPassword );
+    } finally {
+      Thread.currentThread().setContextClassLoader( currentClassLoader );
+    }
+
+  }
+
+  private SSLContext getSslContext( JmsDelegate meta )
+    throws KeyStoreException, IOException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException,
+    KeyManagementException {
+    SSLContext sslContext;
+    KeyStore trustStore = KeyStore.getInstance( meta.sslTruststoreType );
+    try ( FileInputStream stream = new FileInputStream( meta.sslTruststorePath ) ) {
+      trustStore.load( stream,
+        Strings.isNullOrEmpty( meta.sslTruststorePassword ) ? null : meta.sslTruststorePassword.toCharArray() );
+    }
+    TrustManagerFactory trustManagerFactory =
+      TrustManagerFactory.getInstance( TrustManagerFactory.getDefaultAlgorithm() );
+
+    trustManagerFactory.init( trustStore );
+
+    KeyManagerFactory keyManagerFactory = null;
+    // the keystore is optional; use if client authentication is desired
+    if ( !Strings.isNullOrEmpty( meta.sslKeystorePath ) ) {
+      KeyStore keyStore = KeyStore.getInstance( meta.sslKeystoreType );
+      try ( FileInputStream stream = new FileInputStream( meta.sslKeystorePath ) ) {
+        keyStore.load( stream, meta.sslKeystorePassword.toCharArray() );
+      }
+      keyManagerFactory = KeyManagerFactory.getInstance( KeyManagerFactory.getDefaultAlgorithm() );
+      keyManagerFactory.init( keyStore, meta.sslKeystorePassword.toCharArray() );
+    }
+
+    sslContext = SSLContext.getInstance( meta.sslContextAlgorithm );
+    sslContext.init( ( null == keyManagerFactory ? null : keyManagerFactory.getKeyManagers() ),
+      trustManagerFactory.getTrustManagers(), new SecureRandom() );
+    return sslContext;
   }
 
   @Override public Destination getDestination( JmsDelegate meta ) {
@@ -152,7 +169,7 @@ public class WebsphereMQProvider implements JmsProvider {
         ? new MQQueue( destName )
         : new MQTopic( destName );
     } catch ( JMSException e ) {
-      throw new RuntimeException( e );
+      throw new IllegalStateException( e );
     }
   }
 

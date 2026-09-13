@@ -1,18 +1,16 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara. All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 define(function() {
   // missing use strict
 
@@ -32,7 +30,7 @@ define(function() {
       /**
        * Determine if the value passed is a `function`.
        *
-       * @param {Object|Function|*} f Value to be tested.
+       * @param {*} f Value to be tested.
        * @return {boolean} `true` if `f` is a function, `false` otherwise.
        */
       is: function(f) {
@@ -51,7 +49,7 @@ define(function() {
        * Creates a function that always returns the same value.
        *
        * @param {*} v Value to be return by the constant function.
-       * @return {Function} Constant function.
+       * @return {function} Constant function.
        */
       constant: function(v) {
         return function() {
@@ -78,7 +76,7 @@ define(function() {
        *
        * When the created list is empty, will return `null`.
        *
-       * @param {Object} [attrs] Attribute names and values to test for.
+       * @param {?object} [attrs] Attribute names and values to test for.
        * @return {?function} A predicate function, or `null`.
        */
       predicate: function(attrs) {

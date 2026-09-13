@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.jsoninput;
 
@@ -27,19 +19,17 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.BitSet;
 
-import org.apache.commons.lang.NotImplementedException;
+import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
-import org.apache.poi.util.IOUtils;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.QueueRowSet;
 import org.pentaho.di.core.ResultFile;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
-import org.pentaho.di.core.exception.KettleValueException;
 import org.pentaho.di.core.row.RowDataUtil;
 import org.pentaho.di.core.row.RowMeta;
 import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.Trans;
@@ -69,6 +59,8 @@ public class JsonInput extends BaseFileInputStep<JsonInputMeta, JsonInputData> i
   private RowOutputConverter rowOutputConverter;
 
   private static final byte[] EMPTY_JSON = "{}".getBytes(); // for replacing null inputs
+  private static final String OBJECT = "Object";
+  private static final String ARRAY = "Array";
 
   public JsonInput( StepMeta stepMeta, StepDataInterface stepDataInterface, int copyNr, TransMeta transMeta,
                     Trans trans ) {
@@ -80,7 +72,6 @@ public class JsonInput extends BaseFileInputStep<JsonInputMeta, JsonInputData> i
     data.rownr = 1L;
     data.nrInputFields = meta.getInputFields().length;
     data.repeatedFields = new BitSet( data.nrInputFields );
-    // Take care of variable substitution
     for ( int i = 0; i < data.nrInputFields; i++ ) {
       JsonInputField field = meta.getInputFields()[ i ];
       if ( field.isRepeated() ) {
@@ -89,7 +80,9 @@ public class JsonInput extends BaseFileInputStep<JsonInputMeta, JsonInputData> i
     }
     try {
       // Init a new JSON reader
-      createReader();
+      data.reader =
+        new FastJsonReader( this, meta.getInputFields(), meta.isDefaultPathLeafToNull(), meta.isIgnoreMissingPath(),
+          meta.isIncludeNulls(), log );
     } catch ( KettleException e ) {
       logError( e.getMessage() );
       return false;
@@ -104,10 +97,9 @@ public class JsonInput extends BaseFileInputStep<JsonInputMeta, JsonInputData> i
       prepareToRowProcessing();
     }
 
-    Object[] outRow = null;
     try {
       // Grab a row
-      outRow = getOneOutputRow();
+      Object[] outRow = getOneOutputRow();
       if ( outRow == null ) {
         setOutputDone(); // signal end to receiver(s)
         return false; // end of data or error.
@@ -151,7 +143,7 @@ public class JsonInput extends BaseFileInputStep<JsonInputMeta, JsonInputData> i
   }
 
   @Override
-  protected void prepareToRowProcessing() throws KettleException, KettleStepException, KettleValueException {
+  protected void prepareToRowProcessing() throws KettleException {
     if ( !meta.isInFields() ) {
       data.outputRowMeta = new RowMeta();
       if ( !meta.isDoNotFailIfNoFile() && data.files.nrOfFiles() == 0 ) {
@@ -195,24 +187,15 @@ public class JsonInput extends BaseFileInputStep<JsonInputMeta, JsonInputData> i
         data.totalpreviousfields = data.inputRowMeta.size();
       }
     }
-    meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+    meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+                    metaStore );
 
     // Create convert meta-data objects that will contain Date & Number formatters
     data.convertRowMeta = data.outputRowMeta.cloneToType( ValueMetaInterface.TYPE_STRING );
     data.inputs = new InputsReader( this, meta, data, new InputErrorHandler() ).iterator();
-    // data.recordnr = 0;
     data.readerRowSet = new QueueRowSet();
     data.readerRowSet.setDone();
     this.rowOutputConverter = new RowOutputConverter( getLogChannel() );
-
-    // provide reader input fields with real path [PDI-15942]
-    JsonInputField[] inputFields = new JsonInputField[data.nrInputFields];
-    for ( int i = 0; i < data.nrInputFields; i++ ) {
-      JsonInputField field = meta.getInputFields()[ i ].clone();
-      field.setPath( environmentSubstitute( field.getPath() ) );
-      inputFields[i] = field;
-    }
-    data.reader.setFields( inputFields );
   }
 
   private void addFileToResultFilesname( FileObject file ) {
@@ -331,7 +314,7 @@ public class JsonInput extends BaseFileInputStep<JsonInputMeta, JsonInputData> i
     if ( meta.isInFields() && !data.hasFirstRow ) {
       return null;
     }
-    Object[] rawReaderRow = null;
+    Object[] rawReaderRow;
     while ( ( rawReaderRow = data.readerRowSet.getRow() ) == null ) {
       if ( data.inputs.hasNext() && data.readerRowSet.isDone() ) {
         try ( InputStream nextIn = data.inputs.next() ) {
@@ -403,7 +386,7 @@ public class JsonInput extends BaseFileInputStep<JsonInputMeta, JsonInputData> i
   }
 
   // should be refactored
-  private void addExtraFields( Object[] outputRowData, JsonInputData data ) {
+  private void addExtraFields( Object[] outputRowData, JsonInputData data ) throws KettleException {
     int rowIndex = data.totalpreviousfields + data.nrInputFields;
 
     // See if we need to add the filename to the row...
@@ -432,7 +415,12 @@ public class JsonInput extends BaseFileInputStep<JsonInputMeta, JsonInputData> i
     }
     // add Hidden
     if ( meta.isHiddenField() != null && meta.isHiddenField().length() > 0 ) {
-      outputRowData[ rowIndex++ ] = new Boolean( data.path );
+      try {
+        outputRowData[ rowIndex++ ] = new Boolean( data.file.isHidden() );
+      } catch ( FileSystemException e ) {
+        logError( BaseMessages.getString( PKG, "JsonInput.Log.ErrorOccurredWhileDeterminingHiddenFileProperty" ) );
+        throw new KettleException( e );
+      }
     }
     // Add modification date
     if ( meta.getLastModificationDateField() != null && meta.getLastModificationDateField().length() > 0 ) {
@@ -448,9 +436,18 @@ public class JsonInput extends BaseFileInputStep<JsonInputMeta, JsonInputData> i
     }
   }
 
-  private void createReader() throws KettleException {
-    data.reader = new FastJsonReader( meta.getInputFields(), meta.isDefaultPathLeafToNull(), log );
-    data.reader.setIgnoreMissingPath( meta.isIgnoreMissingPath() );
+  @Override
+  public void setOutputDone() {
+    if ( null != data.inputs ) {
+      try {
+        data.inputs.close();
+      } catch ( IOException e ) {
+        // Implementations have an Error Handler that handle these errors, as so, this should never happen... but...
+        logError( BaseMessages.getString( PKG, "JsonInput.Log.UnexpectedError", e.toString() ) );
+      }
+    }
+
+    super.setOutputDone();
   }
 
   @Override
@@ -458,7 +455,21 @@ public class JsonInput extends BaseFileInputStep<JsonInputMeta, JsonInputData> i
     meta = (JsonInputMeta) smi;
     data = (JsonInputData) sdi;
     if ( data.file != null ) {
-      IOUtils.closeQuietly( data.file );
+      try {
+        data.file.close();
+      } catch ( IOException e ) {
+        logError( BaseMessages.getString( PKG, "JsonInput.Log.UnexpectedError", e.toString() ) );
+      }
+    }
+    data.previousRow = null;
+    data.readrow = null;
+    if ( null != data.inputs ) {
+      // Make sure everything was closed.
+      try {
+        data.inputs.close();
+      } catch ( IOException e ) {
+        logError( BaseMessages.getString( PKG, "JsonInput.Log.UnexpectedError", e.toString() ) );
+      }
     }
     data.inputs = null;
     data.reader = null;

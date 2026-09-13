@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.www;
 
@@ -27,12 +19,12 @@ import java.io.PrintWriter;
 import java.net.URLEncoder;
 import java.util.UUID;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.owasp.encoder.Encode;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
@@ -43,6 +35,8 @@ import org.pentaho.di.core.logging.SimpleLoggingObject;
 import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.Trans;
+import org.pentaho.di.trans.TransConfiguration;
+import org.pentaho.di.trans.TransExecutionConfiguration;
 import org.pentaho.di.www.cache.CarteStatusCache;
 
 
@@ -208,9 +202,28 @@ public class StartTransServlet extends BaseHttpServlet implements CartePluginInt
         trans = getTransformationMap().getTransformation( entry );
       }
 
+      try {
+        getTransformationMap().deallocateServerSocketPorts( transName, id );
+      } catch ( Exception e ) {
+        // nothing to do
+      }
+
       if ( trans != null ) {
+        TransConfiguration transConfiguration = getTransformationMap().getConfiguration( entry );
+        if ( transConfiguration != null ) {
+          TransExecutionConfiguration executionConfiguration = transConfiguration.getTransExecutionConfiguration();
+          // Set the appropriate logging, variables, arguments, replay date, ...
+          // etc.
+          trans.setArguments( executionConfiguration.getArgumentStrings() );
+          trans.setReplayDate( executionConfiguration.getReplayDate() );
+          trans.setSafeModeEnabled( executionConfiguration.isSafeModeEnabled() );
+          trans.setGatheringMetrics( executionConfiguration.isGatheringMetrics() );
+          trans.injectVariables( executionConfiguration.getVariables() );
+          trans.setPreviousResult( executionConfiguration.getPreviousResult() );
+        }
 
         cache.remove( trans.getLogChannelId() );
+        trans.cleanup();
 
         // Discard old log lines from old transformation runs
         //
@@ -222,6 +235,9 @@ public class StartTransServlet extends BaseHttpServlet implements CartePluginInt
         servletLoggingObject.setContainerObjectId( carteObjectId );
         servletLoggingObject.setLogLevel( trans.getLogLevel() );
         trans.setParent( servletLoggingObject );
+
+        trans.getTransMeta().getBowl().clearCache();
+        trans.getTransMeta().allDatabasesUpdated();
 
         executeTrans( trans );
 
@@ -245,6 +261,7 @@ public class StartTransServlet extends BaseHttpServlet implements CartePluginInt
           out.println( "<a href=\""
             + convertContextPath( GetStatusServlet.CONTEXT_PATH ) + "\">"
             + BaseMessages.getString( PKG, "TransStatusServlet.BackToStatusPage" ) + "</a><p>" );
+          response.setStatus( HttpServletResponse.SC_BAD_REQUEST );
         }
       }
     } catch ( Exception ex ) {
@@ -256,6 +273,7 @@ public class StartTransServlet extends BaseHttpServlet implements CartePluginInt
         out.println( "<pre>" );
         out.println( Encode.forHtml( Const.getStackTracker( ex ) ) );
         out.println( "</pre>" );
+        response.setStatus( HttpServletResponse.SC_BAD_REQUEST );
       }
     }
 

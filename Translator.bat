@@ -1,42 +1,24 @@
-@echo on
+@echo off
+REM ******************************************************************************
+REM
+REM Pentaho
+REM
+REM Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+REM
+REM Use of this software is governed by the Business Source License included
+REM in the LICENSE.TXT file.
+REM
+REM Change Date: 2030-06-15
+REM ******************************************************************************
+setlocal 
 
-REM *****************************************************************************
-REM
-REM Pentaho Data Integration
-REM
-REM Copyright (C) 2006-2018 by Hitachi Vantara : http://www.pentaho.com
-REM
-REM *****************************************************************************
-REM
-REM Licensed under the Apache License, Version 2.0 (the "License");
-REM you may not use this file except in compliance with
-REM the License. You may obtain a copy of the License at
-REM
-REM    http://www.apache.org/licenses/LICENSE-2.0
-REM
-REM Unless required by applicable law or agreed to in writing, software
-REM distributed under the License is distributed on an "AS IS" BASIS,
-REM WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-REM See the License for the specific language governing permissions and
-REM limitations under the License.
-REM
-REM *****************************************************************************
+SET "XMLFILE=%1%"
+SET "SRCDIR=%2%"
 
-REM **************************************************
-REM ** Libraries used by Kettle:                    **
-REM **************************************************
-
-set RUNDIR=%CD%\dist
-set XMLFILE=%CD%\%1%
-set SRCDIR=%CD%\%2%
-
-echo RUNDIR=%RUNDIR%
 echo XMLFILE=%XMLFILE%
 echo SRCDIR=%SRCDIR%
 
-cd dist
-
-set IS64BITJAVA=0
+SET IS64BITJAVA=0
 
 REM **************************************************
 REM   Platform Specific SWT       **
@@ -63,49 +45,30 @@ IF %IS64BITJAVA% == 1 GOTO :USE64
 REM ===========================================
 REM Using 32bit Java, so include 32bit SWT Jar
 REM ===========================================
-set LIBSPATH=libswt\win32
-
+SET "LIBSPATH=libswt\win32"
 GOTO :CONTINUE
 :USE64
 REM ===========================================
 REM Using 64bit java, so include 64bit SWT Jar
 REM ===========================================
-set LIBSPATH=libswt\win64
-set SWTJAR=..\libswt\win64
-
+SET "LIBSPATH=libswt\win64"
+SET "SWTJAR=..\libswt\win64"
 :CONTINUE
-
-
-REM **********************
-REM   Collect arguments
-REM **********************
-
-set _cmdline=
-:TopArg
-if %1!==! goto EndArg
-set _cmdline=%_cmdline% %1
-shift
-goto TopArg
-:EndArg
 
 REM ******************************************************************
 REM ** Set java runtime options                                     **
 REM ** Change 512m to higher values in case you run out of memory   **
-REM ** or set the PENTAHO_DI_JAVA_OPTIONS environment variable      **
 REM ******************************************************************
 
-set PENTAHO_DI_JAVA_OPTIONS="-Xmx512m" "-XX:MaxPermSize=256m"
-set OPT="-Djava.library.path=%LIBSPATH%" "-DKETTLE_HOME=%KETTLE_HOME%" "-DKETTLE_REPOSITORY=%KETTLE_REPOSITORY%" "-DKETTLE_USER=%KETTLE_USER%" "-DKETTLE_PASSWORD=%KETTLE_PASSWORD%" "-DKETTLE_PLUGIN_PACKAGES=%KETTLE_PLUGIN_PACKAGES%" "-DKETTLE_LOG_SIZE_LIMIT=%KETTLE_LOG_SIZE_LIMIT%" "-DKETTLE_JNDI_ROOT=%KETTLE_JNDI_ROOT%"
+SET "OPT=-Xmx512m"
 
 REM ***************
 REM ** Run...    **
 REM ***************
 
 REM Eventually call java instead of javaw and do not run in a separate window
-set TRANSLATOR_START_OPTION=start "Translator"
+SET "TRANSLATOR_START_OPTION=start "Translator""
 
 @echo on
-%TRANSLATOR_START_OPTION% java %OPT% -jar launcher\launcher-1.0.0.jar -lib ..\%LIBSPATH% -main org.pentaho.di.ui.i18n.editor.Translator2 %XMLFILE% %SRCDIR%
+%TRANSLATOR_START_OPTION% java %OPT% -jar launcher\launcher.jar -lib "..\%LIBSPATH%" -main org.pentaho.di.ui.i18n.editor.Translator2 "%XMLFILE%" "%SRCDIR%"
 @echo off
-
-cd %RUNDIR%\..

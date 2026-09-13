@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.stringoperations;
 
@@ -55,13 +47,13 @@ public class StringOperations extends BaseStep implements StepInterface {
     super( stepMeta, stepDataInterface, copyNr, transMeta, trans );
   }
 
-  private String processString( String string, int trimType, int lowerUpper, int padType, String padChar, int padLen,
-      int iniCap, int maskHTML, int digits, int removeSpecialCharacters ) {
+  private String processString( String string, String trimType, String lowerUpper, String padType, String padChar, int padLen,
+                                String iniCap, String maskHTML, String digits, String removeSpecialCharacters ) {
     String rcode = string;
 
     // Trim ?
     if ( !Utils.isEmpty( rcode ) ) {
-      switch ( trimType ) {
+      switch ( StringOperationsMeta.getTrimTypeByDesc( trimType ) ) {
         case StringOperationsMeta.TRIM_RIGHT:
           rcode = Const.rtrim( rcode );
           break;
@@ -77,7 +69,7 @@ public class StringOperations extends BaseStep implements StepInterface {
     }
     // Lower/Upper ?
     if ( !Utils.isEmpty( rcode ) ) {
-      switch ( lowerUpper ) {
+      switch ( StringOperationsMeta.getLowerUpperByDesc( lowerUpper ) ) {
         case StringOperationsMeta.LOWER_UPPER_LOWER:
           rcode = rcode.toLowerCase();
           break;
@@ -91,7 +83,7 @@ public class StringOperations extends BaseStep implements StepInterface {
 
     // pad String?
     if ( !Utils.isEmpty( rcode ) ) {
-      switch ( padType ) {
+      switch ( StringOperationsMeta.getPaddingByDesc( padType ) ) {
         case StringOperationsMeta.PADDING_LEFT:
           rcode = Const.Lpad( rcode, padChar, padLen );
           break;
@@ -105,7 +97,7 @@ public class StringOperations extends BaseStep implements StepInterface {
 
     // InitCap ?
     if ( !Utils.isEmpty( rcode ) ) {
-      switch ( iniCap ) {
+      switch ( StringOperationsMeta.getInitCapByDesc( iniCap ) ) {
         case StringOperationsMeta.INIT_CAP_NO:
           break;
         case StringOperationsMeta.INIT_CAP_YES:
@@ -118,7 +110,7 @@ public class StringOperations extends BaseStep implements StepInterface {
 
     // escape ?
     if ( !Utils.isEmpty( rcode ) ) {
-      switch ( maskHTML ) {
+      switch ( StringOperationsMeta.getMaskXMLByDesc( maskHTML ) ) {
         case StringOperationsMeta.MASK_ESCAPE_XML:
           rcode = Const.escapeXml( rcode );
           break;
@@ -143,7 +135,7 @@ public class StringOperations extends BaseStep implements StepInterface {
     }
     // digits only or remove digits ?
     if ( !Utils.isEmpty( rcode ) ) {
-      switch ( digits ) {
+      switch ( StringOperationsMeta.getDigitsByDesc( digits ) ) {
         case StringOperationsMeta.DIGITS_NONE:
           break;
         case StringOperationsMeta.DIGITS_ONLY:
@@ -159,7 +151,7 @@ public class StringOperations extends BaseStep implements StepInterface {
 
     // remove special characters ?
     if ( !Utils.isEmpty( rcode ) ) {
-      switch ( removeSpecialCharacters ) {
+      switch ( StringOperationsMeta.getRemoveSpecialCharactersByDesc( removeSpecialCharacters ) ) {
         case StringOperationsMeta.REMOVE_SPECIAL_CHARACTERS_NONE:
           break;
         case StringOperationsMeta.REMOVE_SPECIAL_CHARACTERS_CR:
@@ -231,7 +223,8 @@ public class StringOperations extends BaseStep implements StepInterface {
       // What's the format of the output row?
       data.outputRowMeta = getInputRowMeta().clone();
       data.inputFieldsNr = data.outputRowMeta.size();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
       data.nrFieldsInStream = meta.getFieldInStream().length;
       data.inStreamNrs = new int[data.nrFieldsInStream];
       for ( int i = 0; i < meta.getFieldInStream().length; i++ ) {
@@ -255,18 +248,18 @@ public class StringOperations extends BaseStep implements StepInterface {
 
       // Keep track of the trim operators locally for a very small
       // optimization.
-      data.trimOperators = new int[data.nrFieldsInStream];
+      data.trimOperators = new String[data.nrFieldsInStream];
       for ( int i = 0; i < meta.getFieldInStream().length; i++ ) {
         data.trimOperators[i] = meta.getTrimType()[i];
       }
       // lower Upper
-      data.lowerUpperOperators = new int[data.nrFieldsInStream];
+      data.lowerUpperOperators = new String[data.nrFieldsInStream];
       for ( int i = 0; i < meta.getFieldInStream().length; i++ ) {
         data.lowerUpperOperators[i] = meta.getLowerUpper()[i];
       }
 
       // padding type?
-      data.padType = new int[data.nrFieldsInStream];
+      data.padType = new String[data.nrFieldsInStream];
       for ( int i = 0; i < meta.getFieldInStream().length; i++ ) {
         data.padType[i] = meta.getPaddingType()[i];
       }
@@ -283,22 +276,22 @@ public class StringOperations extends BaseStep implements StepInterface {
         data.padLen[i] = Const.toInt( environmentSubstitute( meta.getPadLen()[i] ), 0 );
       }
       // InitCap?
-      data.initCap = new int[data.nrFieldsInStream];
+      data.initCap = new String[data.nrFieldsInStream];
       for ( int i = 0; i < meta.getFieldInStream().length; i++ ) {
         data.initCap[i] = meta.getInitCap()[i];
       }
       // MaskXML?
-      data.maskHTML = new int[data.nrFieldsInStream];
+      data.maskHTML = new String[data.nrFieldsInStream];
       for ( int i = 0; i < meta.getFieldInStream().length; i++ ) {
         data.maskHTML[i] = meta.getMaskXML()[i];
       }
       // digits?
-      data.digits = new int[data.nrFieldsInStream];
+      data.digits = new String[data.nrFieldsInStream];
       for ( int i = 0; i < meta.getFieldInStream().length; i++ ) {
         data.digits[i] = meta.getDigits()[i];
       }
       // remove special characters?
-      data.removeSpecialCharacters = new int[data.nrFieldsInStream];
+      data.removeSpecialCharacters = new String[data.nrFieldsInStream];
       for ( int i = 0; i < meta.getFieldInStream().length; i++ ) {
         data.removeSpecialCharacters[i] = meta.getRemoveSpecialCharacters()[i];
       }

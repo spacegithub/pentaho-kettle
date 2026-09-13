@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.trans.step.mqtt;
 
 import com.google.common.collect.ImmutableMap;
@@ -27,7 +19,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.encryption.Encr;
@@ -35,6 +27,7 @@ import org.pentaho.di.core.encryption.TwoWayPasswordEncoderPluginType;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleXMLException;
 import org.pentaho.di.core.plugins.PluginRegistry;
+import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.util.EnvUtil;
 import org.pentaho.di.core.variables.Variables;
 import org.pentaho.di.core.xml.XMLHandler;
@@ -42,6 +35,7 @@ import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.repository.StringObjectId;
 import org.pentaho.di.trans.TransMeta;
+import org.pentaho.di.trans.step.StepHelperInterface;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepOption;
 import org.pentaho.metastore.api.IMetaStore;
@@ -244,7 +238,8 @@ public class MQTTConsumerMetaTest {
   @Test
   public void testCheckDefaults() {
     List<CheckResultInterface> remarks = new ArrayList<>();
-    meta.check( remarks, null, null, null, null, null, null, new Variables(), null, null );
+    TransMeta transMeta = mock( TransMeta.class );
+    meta.check( remarks, transMeta, null, null, null, null, null, new Variables(), null, null );
 
     assertEquals( 0, remarks.size() );
   }
@@ -258,7 +253,8 @@ public class MQTTConsumerMetaTest {
     meta.setCleanSession( "asdf" );
     meta.setAutomaticReconnect( "adsf" );
     meta.setMqttVersion( "9" );
-    meta.check( remarks, null, null, null, null, null, null, new Variables(), null, null );
+    TransMeta transMeta = mock( TransMeta.class );
+    meta.check( remarks, transMeta, null, null, null, null, null, new Variables(), null, null );
 
     assertEquals( 6, remarks.size() );
     assertEquals( BaseMessages
@@ -286,6 +282,25 @@ public class MQTTConsumerMetaTest {
         .getString( PKG, "MQTTMeta.CheckResult.NotABoolean",
           BaseMessages.getString( PKG, "MQTTDialog.Options." + AUTOMATIC_RECONNECT ) ),
       remarks.get( 5 ).getText() );
+  }
+
+  @Test
+  public void rowMetaUsesMessageDataType() {
+    MQTTConsumerMeta meta = new MQTTConsumerMeta();
+    meta.messageDataType = ValueMetaInterface.getTypeDescription( ValueMetaInterface.TYPE_BINARY );
+    assertEquals( ValueMetaInterface.TYPE_BINARY, meta.getRowMeta( "", new Variables() ).getValueMeta( 0 ).getType() );
+    meta.messageDataType = ValueMetaInterface.getTypeDescription( ValueMetaInterface.TYPE_STRING );
+    assertEquals( ValueMetaInterface.TYPE_STRING, meta.getRowMeta( "", new Variables() ).getValueMeta( 0 ).getType() );
+  }
+
+  @Test
+  public void testGetStepHelperInterface() {
+    MQTTConsumerMeta mqttConsumerMeta = new MQTTConsumerMeta();
+    StepHelperInterface stepHelperInterface = mqttConsumerMeta.getStepHelperInterface();
+
+    assertNotNull( "StepHelperInterface should not be null", stepHelperInterface );
+    Assert.assertTrue( "StepHelperInterface should be an instance of MQTTConsumerHelper",
+        stepHelperInterface instanceof MQTTConsumerHelper );
   }
 
   private void metaMatchesTestMetaFields( MQTTConsumerMeta consumerMeta ) {

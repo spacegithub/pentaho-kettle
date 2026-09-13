@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.job.entries.ping;
 
@@ -119,6 +111,15 @@ public class JobEntryPingDialog extends JobEntryDialog implements JobEntryDialog
     };
     changed = jobEntry.hasChanged();
 
+    ModifyListener lsValidate = event -> {
+      String currentText = ((Text) event.getSource()).getText().trim();
+      boolean isPosInt = JobEntryPing.isPositiveInteger( currentText );
+      if ( !isPosInt && !( currentText.equals( "" ) ) ) {
+        displayInfoMessage( BaseMessages.getString( PKG, "JobPing.InfoOnlyPositiveInteger" ) );
+        ((Text) event.getSource()).setText( "" );
+      }
+    };
+
     FormLayout formLayout = new FormLayout();
     formLayout.marginWidth = Const.FORM_MARGIN;
     formLayout.marginHeight = Const.FORM_MARGIN;
@@ -213,6 +214,7 @@ public class JobEntryPingDialog extends JobEntryDialog implements JobEntryDialog
     wlTimeOut.setToolTipText( BaseMessages.getString( PKG, "JobPing.TimeOut.Tooltip" ) );
     props.setLook( wTimeOut );
     wTimeOut.addModifyListener( lsMod );
+    wTimeOut.addModifyListener( lsValidate );
     fdTimeOut = new FormData();
     fdTimeOut.left = new FormAttachment( middle, 0 );
     fdTimeOut.top = new FormAttachment( wPingType, margin );
@@ -232,6 +234,7 @@ public class JobEntryPingDialog extends JobEntryDialog implements JobEntryDialog
     wNbrPackets = new TextVar( jobMeta, shell, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
     props.setLook( wNbrPackets );
     wNbrPackets.addModifyListener( lsMod );
+    wNbrPackets.addModifyListener( lsValidate );
     fdNbrPackets = new FormData();
     fdNbrPackets.left = new FormAttachment( middle, 0 );
     fdNbrPackets.top = new FormAttachment( wTimeOut, margin );
@@ -297,6 +300,13 @@ public class JobEntryPingDialog extends JobEntryDialog implements JobEntryDialog
       }
     }
     return jobEntry;
+  }
+
+  public void displayInfoMessage( String infoMessage ) {
+    MessageBox box = new MessageBox( shell, SWT.OK );
+    box.setText( "INFO" );
+    box.setMessage( infoMessage );
+    box.open();
   }
 
   private void setPingType() {

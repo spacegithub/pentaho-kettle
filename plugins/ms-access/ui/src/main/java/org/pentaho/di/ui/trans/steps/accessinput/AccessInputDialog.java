@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.accessinput;
 
@@ -43,10 +35,8 @@ import org.eclipse.swt.layout.FormData;
 import org.eclipse.swt.layout.FormLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
-import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
@@ -78,6 +68,8 @@ import org.pentaho.di.ui.core.dialog.EnterSelectionDialog;
 import org.pentaho.di.ui.core.dialog.EnterTextDialog;
 import org.pentaho.di.ui.core.dialog.ErrorDialog;
 import org.pentaho.di.ui.core.dialog.PreviewRowsDialog;
+import org.pentaho.di.ui.core.events.dialog.FilterType;
+import org.pentaho.di.ui.core.events.dialog.SelectionOperation;
 import org.pentaho.di.ui.core.widget.ColumnInfo;
 import org.pentaho.di.ui.core.widget.TableView;
 import org.pentaho.di.ui.core.widget.TextVar;
@@ -86,10 +78,12 @@ import org.pentaho.di.ui.trans.step.BaseStepDialog;
 
 import com.healthmarketscience.jackcess.Column;
 import com.healthmarketscience.jackcess.Database;
+import com.healthmarketscience.jackcess.DatabaseBuilder;
 import com.healthmarketscience.jackcess.Table;
+import org.pentaho.di.ui.util.DialogHelper;
 
 @PluginDialog( id = "AccessInput", image = "ACI.svg", pluginType = PluginDialog.PluginType.STEP,
-  documentationUrl = "http://wiki.pentaho.com/display/EAI/Access+Input" )
+  documentationUrl = "pdi-transformation-steps-reference-overview/microsoft-access-input" )
 public class AccessInputDialog extends BaseStepDialog implements StepDialogInterface {
   private static Class<?> PKG = AccessInputDialog.class; // for i18n purposes, needed by Translator2!!
 
@@ -994,7 +988,7 @@ public class AccessInputDialog extends BaseStepDialog implements StepDialogInter
         try {
           AccessInputMeta tfii = new AccessInputMeta();
           getInfo( tfii );
-          FileInputList fileInputList = tfii.getFiles( transMeta );
+          FileInputList fileInputList = tfii.getFiles( transMeta.getBowl(), transMeta );
           String[] files = fileInputList.getFileStrings();
 
           if ( files.length > 0 ) {
@@ -1049,40 +1043,9 @@ public class AccessInputDialog extends BaseStepDialog implements StepDialogInter
     } );
 
     // Listen to the Browse... button
-    wbbFilename.addSelectionListener( new SelectionAdapter() {
-      @Override
-      public void widgetSelected( SelectionEvent e ) {
-        if ( !Utils.isEmpty( wFilemask.getText() ) || !Utils.isEmpty( wExcludeFilemask.getText() ) ) {
-          DirectoryDialog dialog = new DirectoryDialog( shell, SWT.OPEN );
-          if ( wFilename.getText() != null ) {
-            String fpath = ""; // StringUtil.environmentSubstitute(wFilename.getText());
-            dialog.setFilterPath( fpath );
-          }
-
-          if ( dialog.open() != null ) {
-            String str = dialog.getFilterPath();
-            wFilename.setText( str );
-          }
-        } else {
-          FileDialog dialog = new FileDialog( shell, SWT.OPEN );
-          dialog.setFilterExtensions( new String[] { "*.mdb;*.MDB;*.accdb;*.ACCDB", "*" } );
-          if ( wFilename.getText() != null ) {
-            String fname = ""; // StringUtil.environmentSubstitute(wFilename.getText());
-            dialog.setFileName( fname );
-          }
-
-          dialog.setFilterNames( new String[] {
-            BaseMessages.getString( PKG, "AccessInputDialog.FileType.AccessFiles" ),
-            BaseMessages.getString( PKG, "System.FileType.AllFiles" ) } );
-
-          if ( dialog.open() != null ) {
-            String str = dialog.getFilterPath() + System.getProperty( "file.separator" ) + dialog.getFileName();
-            wFilename.setText( str );
-          }
-        }
-      }
-    } );
-
+    wbbFilename.addSelectionListener( DialogHelper.constructSelectionAdapterFileDialogTextVarForUserFile( log
+        , wFilename, transMeta, SelectionOperation.FILE, new FilterType[] { FilterType.MDB
+            , FilterType.ACCDB, FilterType.ALL }, FilterType.MDB ) );
     // Detect X or ALT-F4 or something that kills this window...
     shell.addShellListener( new ShellAdapter() {
       @Override
@@ -1147,30 +1110,32 @@ public class AccessInputDialog extends BaseStepDialog implements StepDialogInter
         return;
       }
 
-      FileInputList inputList = meta.getFiles( transMeta );
+      FileInputList inputList = meta.getFiles( transMeta.getBowl(), transMeta );
 
       if ( inputList.getFiles().size() > 0 ) {
         // Open the file (only first file)...
+        try ( Database d = new DatabaseBuilder( new File( AccessInputMeta.getFilename( inputList.getFile( 0 ) ) ) )
+          .setReadOnly( true )
+          .open() ) {
+          String realTableName = transMeta.environmentSubstitute( meta.getTableName() );
 
-        Database d = Database.open( new File( AccessInputMeta.getFilename( inputList.getFile( 0 ) ) ), true );
-        String realTableName = transMeta.environmentSubstitute( meta.getTableName() );
+          Table t = null;
+          if ( realTableName.startsWith( AccessInputMeta.PREFIX_SYSTEM ) ) {
+            t = d.getSystemTable( realTableName );
+          } else {
+            t = d.getTable( realTableName );
+          }
 
-        Table t = null;
-        if ( realTableName.startsWith( AccessInputMeta.PREFIX_SYSTEM ) ) {
-          t = d.getSystemTable( realTableName );
-        } else {
-          t = d.getTable( realTableName );
-        }
+          // Get the list of columns
+          List<? extends Column> col = t.getColumns();
+          int nr = col.size();
+          for ( int i = 0; i < nr; i++ ) {
+            Column c = col.get( i );
 
-        // Get the list of columns
-        List<Column> col = t.getColumns();
-        int nr = col.size();
-        for ( int i = 0; i < nr; i++ ) {
-          Column c = col.get( i );
-
-          ValueMetaInterface field = AccessInputMeta.getValueMeta( c );
-          if ( field != null && fields.indexOfValue( field.getName() ) < 0 ) {
-            fields.addValueMeta( field );
+            ValueMetaInterface field = AccessInputMeta.getValueMeta( c );
+            if ( field != null && fields.indexOfValue( field.getName() ) < 0 ) {
+              fields.addValueMeta( field );
+            }
           }
         }
       }
@@ -1544,7 +1509,7 @@ public class AccessInputDialog extends BaseStepDialog implements StepDialogInter
       AccessInputMeta meta = new AccessInputMeta();
       getInfo( meta );
 
-      FileInputList fileInputList = meta.getFiles( transMeta );
+      FileInputList fileInputList = meta.getFiles( transMeta.getBowl(), transMeta );
 
       if ( fileInputList.nrOfFiles() > 0 ) {
 
@@ -1553,7 +1518,9 @@ public class AccessInputDialog extends BaseStepDialog implements StepDialogInter
           // Open the file (only first file) in readOnly ...
           //
           accessDatabase =
-            Database.open( new File( AccessInputMeta.getFilename( fileInputList.getFile( 0 ) ) ), true );
+            new DatabaseBuilder( new File( AccessInputMeta.getFilename( fileInputList.getFile( 0 ) ) ) )
+              .setReadOnly( true )
+              .open();
 
           // Get user tables
           //

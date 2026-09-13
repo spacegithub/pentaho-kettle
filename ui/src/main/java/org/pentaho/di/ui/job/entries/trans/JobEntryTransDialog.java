@@ -1,28 +1,20 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.job.entries.trans;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.eclipse.jface.dialogs.Dialog;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.SWT;
@@ -36,9 +28,7 @@ import org.eclipse.swt.layout.FormData;
 import org.eclipse.swt.layout.FormLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
-import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.TableItem;
 import org.pentaho.di.core.Const;
@@ -48,7 +38,6 @@ import org.pentaho.di.core.extension.ExtensionPointHandler;
 import org.pentaho.di.core.extension.KettleExtensionPoint;
 import org.pentaho.di.core.logging.LogLevel;
 import org.pentaho.di.core.util.Utils;
-import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.job.entries.trans.JobEntryTrans;
@@ -64,6 +53,8 @@ import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.ui.core.ConstUI;
 import org.pentaho.di.ui.core.dialog.ErrorDialog;
 import org.pentaho.di.ui.core.dialog.SimpleMessageDialog;
+import org.pentaho.di.ui.core.events.dialog.FilterType;
+import org.pentaho.di.ui.core.events.dialog.SelectionOperation;
 import org.pentaho.di.ui.core.gui.WindowProperty;
 import org.pentaho.di.ui.core.widget.ComboVar;
 import org.pentaho.di.ui.job.dialog.JobDialog;
@@ -73,7 +64,6 @@ import org.pentaho.di.ui.util.DialogHelper;
 import org.pentaho.di.ui.util.DialogUtils;
 import org.pentaho.di.ui.util.SwtSvgImageUtil;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -85,6 +75,8 @@ import java.util.List;
  */
 public class JobEntryTransDialog extends JobEntryBaseDialog implements JobEntryDialogInterface {
   private static Class<?> PKG = JobEntryTrans.class; // for i18n purposes, needed by Translator2!!
+
+  protected Button wSuppressResultData;
 
   protected JobEntryTrans jobEntry;
 
@@ -174,6 +166,14 @@ public class JobEntryTransDialog extends JobEntryBaseDialog implements JobEntryD
     fdFollow.left = new FormAttachment( 0, 0 );
     wFollowingAbortRemotely.setLayoutData( fdFollow );
 
+    wSuppressResultData = new Button( gExecution, SWT.CHECK );
+    props.setLook( wSuppressResultData );
+    wSuppressResultData.setText( BaseMessages.getString( PKG, "JobTrans.SuppressResults.Label" ) );
+    FormData fdSuppress = new FormData();
+    fdSuppress.top = new FormAttachment( wFollowingAbortRemotely, 10 );
+    fdSuppress.left = new FormAttachment( 0, 0 );
+    wSuppressResultData.setLayoutData( fdSuppress );
+
     Composite cRunConfiguration = new Composite( wOptions, SWT.NONE );
     cRunConfiguration.setLayout( new FormLayout() );
     props.setLook( cRunConfiguration );
@@ -211,15 +211,8 @@ public class JobEntryTransDialog extends JobEntryBaseDialog implements JobEntryD
       }
     } );
 
-    wbBrowse.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        if ( rep != null ) {
-          selectTransformation();
-        } else {
-          pickFileVFS();
-        }
-      }
-    } );
+    wbBrowse.addSelectionListener(DialogHelper.constructSelectionAdapterFileDialogTextVarForKettleFile(log, wPath, jobMeta
+        ,SelectionOperation.FILE, FilterType.KTR, rep ) );
 
     wbLogFilename.addSelectionListener( new SelectionAdapter() {
       public void widgetSelected( SelectionEvent e ) {
@@ -278,87 +271,6 @@ public class JobEntryTransDialog extends JobEntryBaseDialog implements JobEntryD
 
   }
 
-  private void selectTransformation() {
-    RepositoryObject repositoryObject = DialogHelper.selectRepositoryObject( "*.ktr", log );
-
-    if ( repositoryObject != null ) {
-      String path = DialogUtils
-        .getPath( jobMeta.getRepositoryDirectory().getPath(), repositoryObject.getRepositoryDirectory().getPath() );
-      String fullPath = ( path.equals( "/" ) ? "/" : path + "/" ) + repositoryObject.getName();
-      wPath.setText( fullPath );
-    }
-  }
-
-  protected void pickFileVFS() {
-
-    FileDialog dialog = new FileDialog( shell, SWT.OPEN );
-    dialog.setFilterExtensions( Const.STRING_TRANS_FILTER_EXT );
-    dialog.setFilterNames( Const.getTransformationFilterNames() );
-    String prevName = jobMeta.environmentSubstitute( wPath.getText() );
-    String parentFolder = null;
-    try {
-      parentFolder =
-        KettleVFS.getFilename( KettleVFS
-          .getFileObject( jobMeta.environmentSubstitute( jobMeta.getFilename() ) ).getParent() );
-    } catch ( Exception e ) {
-      // not that important
-    }
-    if ( !Utils.isEmpty( prevName ) ) {
-      try {
-        if ( KettleVFS.fileExists( prevName ) ) {
-          dialog.setFilterPath( KettleVFS.getFilename( KettleVFS.getFileObject( prevName ).getParent() ) );
-        } else {
-
-          if ( !prevName.endsWith( ".ktr" ) ) {
-            prevName = getEntryName( Const.trim( wPath.getText() ) + ".ktr" );
-          }
-          if ( KettleVFS.fileExists( prevName ) ) {
-            specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
-            wPath.setText( prevName );
-            return;
-          } else {
-            // File specified doesn't exist. Ask if we should create the file...
-            //
-            MessageBox mb = new MessageBox( shell, SWT.YES | SWT.NO | SWT.ICON_QUESTION );
-            mb.setMessage( BaseMessages.getString( PKG, "JobTrans.Dialog.CreateTransformationQuestion.Message" ) );
-            mb.setText( BaseMessages.getString( PKG, "JobTrans.Dialog.CreateTransformationQuestion.Title" ) ); // Sorry!
-            int answer = mb.open();
-            if ( answer == SWT.YES ) {
-
-              Spoon spoon = Spoon.getInstance();
-              spoon.newTransFile();
-              TransMeta transMeta = spoon.getActiveTransformation();
-              transMeta.initializeVariablesFrom( jobEntry );
-              transMeta.setFilename( jobMeta.environmentSubstitute( prevName ) );
-              wPath.setText( prevName );
-              specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
-              spoon.saveFile();
-              return;
-            }
-          }
-        }
-      } catch ( Exception e ) {
-        dialog.setFilterPath( parentFolder );
-      }
-    } else if ( !Utils.isEmpty( parentFolder ) ) {
-      dialog.setFilterPath( parentFolder );
-    }
-
-    String fname = dialog.open();
-    if ( fname != null ) {
-      File file = new File( fname );
-      String name = file.getName();
-      String parentFolderSelection = file.getParentFile().toString();
-
-      if ( !Utils.isEmpty( parentFolder ) && parentFolder.equals( parentFolderSelection ) ) {
-        wPath.setText( getEntryName( name ) );
-      } else {
-        wPath.setText( fname );
-      }
-
-    }
-  }
-
   String getEntryName( String name ) {
     return "${"
       + Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY + "}/" + name;
@@ -414,6 +326,8 @@ public class JobEntryTransDialog extends JobEntryBaseDialog implements JobEntryD
           ti.setText( 1, Const.NVL( jobEntry.parameters[ i ], "" ) );
           ti.setText( 2, Const.NVL( jobEntry.parameterFieldNames[ i ], "" ) );
           ti.setText( 3, Const.NVL( jobEntry.parameterValues[ i ], "" ) );
+          // Check disable listeners to shade fields gray
+          parameterTableHelper.checkTableOnOpen( ti, i );
         }
       }
       wParameters.setRowNums();
@@ -439,6 +353,7 @@ public class JobEntryTransDialog extends JobEntryBaseDialog implements JobEntryD
     wClearFiles.setSelection( jobEntry.clearResultFiles );
     wWaitingToFinish.setSelection( jobEntry.isWaitingToFinish() );
     wFollowingAbortRemotely.setSelection( jobEntry.isFollowingAbortRemotely() );
+    wSuppressResultData.setSelection( jobEntry.isSuppressResultData() );
     wAppendLogfile.setSelection( jobEntry.setAppendLogfile );
 
     wbLogFilename.setSelection( jobEntry.setAppendLogfile );
@@ -492,6 +407,7 @@ public class JobEntryTransDialog extends JobEntryBaseDialog implements JobEntryD
 
   private void getInfo( JobEntryTrans jet ) throws KettleException {
     jet.setName( wName.getText() );
+    jet.setParentJobMeta( jobMeta );
     if ( rep != null ) {
       specificationMethod = ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME;
     } else {
@@ -605,6 +521,7 @@ public class JobEntryTransDialog extends JobEntryBaseDialog implements JobEntryD
     jet.setAppendLogfile = wAppendLogfile.getSelection();
     jet.setWaitingToFinish( wWaitingToFinish.getSelection() );
     jet.setFollowingAbortRemotely( wFollowingAbortRemotely.getSelection() );
+    jet.setSuppressResultData( wSuppressResultData.getSelection() );
 
     TransExecutionConfiguration executionConfiguration = new TransExecutionConfiguration();
     executionConfiguration.setRunConfiguration( jet.getRunConfiguration() );
@@ -637,6 +554,11 @@ public class JobEntryTransDialog extends JobEntryBaseDialog implements JobEntryD
       dialog.open();
       return;
     }
+    // Check if all parameters have names. If so, continue on.
+    if ( parameterTableHelper.checkParams( shell ) ) {
+      return;
+    }
+
     jobEntry.setName( wName.getText() );
 
     try {

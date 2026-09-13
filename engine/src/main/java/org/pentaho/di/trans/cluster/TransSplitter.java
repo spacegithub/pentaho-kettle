@@ -1,30 +1,23 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.cluster;
 
 import org.pentaho.di.cluster.ClusterSchema;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.Const;
+import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.NotePadMeta;
 import org.pentaho.di.core.encryption.CertificateGenEncryptUtil;
 import org.pentaho.di.core.exception.KettleException;
@@ -125,12 +118,11 @@ public class TransSplitter {
     String transXML = transMeta.getXML();
     this.originalTransformation =
         transMetaFactory
-            .create( XMLHandler.getSubNode( XMLHandler.loadXMLString( transXML ), TransMeta.XML_TAG ), null );
+            .create( XMLHandler.getSubNode( XMLHandler.loadXMLString( transXML ), TransMeta.XML_TAG ), transMeta.getRepository() );
     this.originalTransformation.shareVariablesWith( transMeta );
     this.originalTransformation.copyParametersFrom( transMeta );
 
     // Retain repository information
-    this.originalTransformation.setRepository( transMeta.getRepository() );
     this.originalTransformation.setRepositoryDirectory( transMeta.getRepositoryDirectory() );
 
     Repository rep = transMeta.getRepository();
@@ -337,7 +329,10 @@ public class TransSplitter {
       transMeta.getClusterSchemas().add( schema.clone() );
     }
 
-    transMeta.setDatabases( originalTransformation.getDatabases() );
+    transMeta.setBowl( originalTransformation.getBowl() );
+    for ( DatabaseMeta dbMeta : originalTransformation.getDatabaseManagementInterface().getAll() ) {
+      transMeta.getDatabaseManagementInterface().add( dbMeta );
+    }
 
     // Feedback
     transMeta.setFeedbackShown( originalTransformation.isFeedbackShown() );
@@ -1388,7 +1383,8 @@ public class TransSplitter {
       // if some of steps is expected to run on master partitioned, that is the case
       // when partition schema should exists as 'local' partition schema instead of slave's remote one
       // see PDI-12766
-      masterTransMeta.setPartitionSchemas( originalTransformation.getPartitionSchemas() );
+      //NOTE: PDI-18333 keep newly created partitionSchemas and add back in original per PDI-12766
+      masterTransMeta.addOrReplacePartitionSchema( originalTransformation.getPartitionSchemas() );
 
       masterTransMeta.setSlaveStepCopyPartitionDistribution( slaveStepCopyPartitionDistribution );
       if ( encrypt ) {
@@ -1474,11 +1470,6 @@ public class TransSplitter {
       //
       copy.setCopies( 1 );
     }
-
-    // Remove the clustering information on the slave transformation step
-    // We don't need it anymore, it only confuses.
-    //
-    copy.setClusterSchema( null );
 
     transMeta.addStep( copy );
     return copy;

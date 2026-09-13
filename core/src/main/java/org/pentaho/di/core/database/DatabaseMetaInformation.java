@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.database;
 
@@ -311,7 +303,7 @@ public class DatabaseMetaInformation {
               schemaResultSet.close();
               schemaStatement.close();
             } else {
-              ResultSet schemaResultSet = dbmd.getSchemas();
+              ResultSet schemaResultSet = databaseMeta.getDatabaseInterface().getSchemas( dbmd, databaseMeta );
               while ( schemaResultSet != null && schemaResultSet.next() ) {
                 String schemaName = schemaResultSet.getString( 1 );
                 schemaList.add( new Schema( schemaName ) );
@@ -325,7 +317,7 @@ public class DatabaseMetaInformation {
             ArrayList<String> schemaTables = new ArrayList<String>();
 
             try {
-              ResultSet schemaTablesResultSet = dbmd.getTables( null, schema.getSchemaName(), null, null );
+              ResultSet schemaTablesResultSet = dbmd.getTables( db.getDatabaseMeta().getDatabaseName(), schema.getSchemaName(), null, null );
               while ( schemaTablesResultSet.next() ) {
                 String tableName = schemaTablesResultSet.getString( 3 );
                 if ( !db.isSystemTable( tableName ) ) {
@@ -416,7 +408,7 @@ public class DatabaseMetaInformation {
         monitor.subTask( BaseMessages.getString( PKG, "DatabaseMeta.Info.ClosingDbConnection" ) );
       }
 
-      db.disconnect();
+      db.close();
       if ( monitor != null ) {
         monitor.worked( 1 );
       }

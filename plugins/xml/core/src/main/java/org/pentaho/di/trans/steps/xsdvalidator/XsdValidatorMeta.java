@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.xsdvalidator;
 
@@ -26,7 +18,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.vfs2.FileObject;
+import org.pentaho.di.core.Const;
 import org.pentaho.di.core.annotations.Step;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.util.Utils;
@@ -79,9 +73,20 @@ public class XsdValidatorMeta extends BaseStepMeta implements StepMetaInterface 
 
   private String xsdSource;
 
+  private boolean allowExternalEntities;
+
   public String SPECIFY_FILENAME = "filename";
   public String SPECIFY_FIELDNAME = "fieldname";
   public String NO_NEED = "noneed";
+
+
+  public boolean isAllowExternalEntities() {
+    return allowExternalEntities;
+  }
+
+  public void setAllowExternalEntities( boolean allowExternalEntities ) {
+    this.allowExternalEntities = allowExternalEntities;
+  }
 
   public void setXSDSource( String xsdsourcein ) {
     this.xsdSource = xsdsourcein;
@@ -149,6 +154,7 @@ public class XsdValidatorMeta extends BaseStepMeta implements StepMetaInterface 
 
   public XsdValidatorMeta() {
     super(); // allocate BaseStepMeta
+    allowExternalEntities = Boolean.valueOf( System.getProperties().getProperty( Const.ALLOW_EXTERNAL_ENTITIES_FOR_XSD_VALIDATION, Const.ALLOW_EXTERNAL_ENTITIES_FOR_XSD_VALIDATION_DEFAULT ) );
   }
 
   /**
@@ -208,6 +214,7 @@ public class XsdValidatorMeta extends BaseStepMeta implements StepMetaInterface 
       ifXmlInvalid = XMLHandler.getTagValue( stepnode, "ifxmlunvalid" );
       outputStringField = "Y".equalsIgnoreCase( XMLHandler.getTagValue( stepnode, "outputstringfield" ) );
       xmlSourceFile = "Y".equalsIgnoreCase( XMLHandler.getTagValue( stepnode, "xmlsourcefile" ) );
+      allowExternalEntities = "Y".equalsIgnoreCase( XMLHandler.getTagValue( stepnode, "allowExternalEntities" ) );
 
     } catch ( Exception e ) {
       throw new KettleXMLException( BaseMessages.getString( PKG,
@@ -227,10 +234,11 @@ public class XsdValidatorMeta extends BaseStepMeta implements StepMetaInterface 
     xmlSourceFile = false;
     xsdDefinedField = "";
     xsdSource = SPECIFY_FILENAME;
-
+    allowExternalEntities = Boolean.valueOf( System.getProperties().getProperty( Const.ALLOW_EXTERNAL_ENTITIES_FOR_XSD_VALIDATION, Const.ALLOW_EXTERNAL_ENTITIES_FOR_XSD_VALIDATION_DEFAULT ) );
   }
 
-  public void getFields( RowMetaInterface inputRowMeta, String name, RowMetaInterface[] info, StepMeta nextStep,
+  @Override
+  public void getFields( Bowl bowl, RowMetaInterface inputRowMeta, String name, RowMetaInterface[] info, StepMeta nextStep,
       VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
     if ( !Utils.isEmpty( resultFieldname ) ) {
       if ( outputStringField ) {
@@ -271,6 +279,7 @@ public class XsdValidatorMeta extends BaseStepMeta implements StepMetaInterface 
     retval.append( "    " + XMLHandler.addTagValue( "xmlsourcefile", xmlSourceFile ) );
     retval.append( "    " + XMLHandler.addTagValue( "xsddefinedfield", xsdDefinedField ) );
     retval.append( "    " + XMLHandler.addTagValue( "xsdsource", xsdSource ) );
+    retval.append( "    " + XMLHandler.addTagValue( "allowExternalEntities", allowExternalEntities ) );
 
     return retval.toString();
   }
@@ -292,6 +301,9 @@ public class XsdValidatorMeta extends BaseStepMeta implements StepMetaInterface 
       xsdDefinedField = rep.getStepAttributeString( id_step, "xsddefinedfield" );
       xsdSource = rep.getStepAttributeString( id_step, "xsdsource" );
 
+      allowExternalEntities =
+        Boolean.parseBoolean( rep.getJobEntryAttributeString( id_step, "allowExternalEntities" ) );
+
     } catch ( Exception e ) {
       throw new KettleException( BaseMessages.getString( PKG,
           "XsdValidatorMeta.Exception.UnexpectedErrorInReadingStepInfo" ), e );
@@ -312,6 +324,7 @@ public class XsdValidatorMeta extends BaseStepMeta implements StepMetaInterface 
       rep.saveStepAttribute( id_transformation, id_step, "outputstringfield", outputStringField );
       rep.saveStepAttribute( id_transformation, id_step, "xsddefinedfield", xsdDefinedField );
       rep.saveStepAttribute( id_transformation, id_step, "xsdsource", xsdSource );
+      rep.saveJobEntryAttribute( id_transformation, id_step, "allowExternalEntities", allowExternalEntities );
 
     } catch ( Exception e ) {
       throw new KettleException( BaseMessages.getString( PKG, "XsdValidatorMeta.Exception.UnableToSaveStepInfo" )
@@ -405,6 +418,11 @@ public class XsdValidatorMeta extends BaseStepMeta implements StepMetaInterface 
    * For now, we'll simply turn it into an absolute path and pray that the file is on a shared drive or something like
    * that.
    * 
+   * @param executionBowl
+   *          For file access
+   * @param globalManagementBowl
+   *          if needed for access to the current "global" (System or Repository) level config for export. If null, no
+   *          global config will be exported.
    * @param space
    *          the variable space to use
    * @param definitions
@@ -416,9 +434,10 @@ public class XsdValidatorMeta extends BaseStepMeta implements StepMetaInterface 
    * 
    * @return the filename of the exported resource
    */
-  public String exportResources( VariableSpace space, Map<String, ResourceDefinition> definitions,
-      ResourceNamingInterface resourceNamingInterface, Repository repository, IMetaStore metaStore )
-    throws KettleException {
+  @Override
+  public String exportResources( Bowl executionBowl, Bowl globalManagementBowl, VariableSpace space,
+      Map<String, ResourceDefinition> definitions, ResourceNamingInterface namingInterface,
+      Repository repository, IMetaStore metaStore ) throws KettleException {
     try {
       // The object that we're modifying here is a copy of the original!
       // So let's change the filename from relative to absolute by grabbing the file object...
@@ -429,8 +448,9 @@ public class XsdValidatorMeta extends BaseStepMeta implements StepMetaInterface 
       // To : /home/matt/test/files/foo/bar.xsd
       //
       if ( !Utils.isEmpty( xsdFilename ) ) {
-        FileObject fileObject = KettleVFS.getFileObject( space.environmentSubstitute( xsdFilename ), space );
-        xsdFilename = resourceNamingInterface.nameResource( fileObject, space, true );
+        FileObject fileObject = KettleVFS.getInstance( executionBowl )
+          .getFileObject( space.environmentSubstitute( xsdFilename ), space );
+        xsdFilename = namingInterface.nameResource( fileObject, space, true );
         return xsdFilename;
       }
 

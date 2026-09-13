@@ -1,22 +1,16 @@
-/*
- * Pentaho Data Integration
+/*! ******************************************************************************
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Pentaho
  *
- * **************************************************************************
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 
 package org.pentaho.di.core.util.serialization;
 
@@ -33,9 +27,9 @@ import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.variables.Variables;
 import org.pentaho.di.trans.step.StepMetaInterface;
 
-import javax.xml.bind.annotation.XmlAttribute;
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlRootElement;
+import jakarta.xml.bind.annotation.XmlAttribute;
+import jakarta.xml.bind.annotation.XmlElement;
+import jakarta.xml.bind.annotation.XmlRootElement;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
@@ -264,6 +258,14 @@ public class StepMetaProps {
 
   @Override public String toString() {
     return "StepMetaProps{" + "groups=" + groups + '}';
+  }
+
+  public List<Object> getPropertyValue( String group, String property ) {
+    PropGroup propGroup = groups.stream().filter( pg -> pg.name.equals( group ) ).findFirst()
+      .orElseThrow( () -> new IllegalArgumentException( "Group " + group + " not found" ) );
+    Prop prop = propGroup.props.stream().filter( p -> p.name.equals( property ) ).findFirst()
+      .orElseThrow( () -> new IllegalArgumentException( "Property " + property + " not found" ) );
+    return prop.value;
   }
 
   /**

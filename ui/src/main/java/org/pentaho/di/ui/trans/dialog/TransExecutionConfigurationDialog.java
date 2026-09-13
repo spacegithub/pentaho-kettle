@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.dialog;
 
@@ -35,6 +27,7 @@ import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.extension.ExtensionPointHandler;
 import org.pentaho.di.core.extension.KettleExtensionPoint;
 import org.pentaho.di.core.logging.LogLevel;
+import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.TransExecutionConfiguration;
@@ -118,7 +111,7 @@ public class TransExecutionConfigurationDialog extends ConfigurationDialog {
     parametersSectionLayout( PKG, "TransExecutionConfigurationDialog" );
 
     String docUrl =
-        Const.getDocUrl( BaseMessages.getString( Spoon.class, "Spoon.TransExecutionConfigurationDialog.Help" ) );
+        Const.getDocUrl( "data-integration-perspective-in-the-pdi-client/work-with-transformations-cp" );
     String docTitle = BaseMessages.getString( PKG, "TransExecutionConfigurationDialog.docTitle" );
     String docHeader = BaseMessages.getString( PKG, "TransExecutionConfigurationDialog.docHeader" );
     buttonsSectionLayout( PKG, "TransExecutionConfigurationDialog", docTitle, docUrl, docHeader );
@@ -143,6 +136,11 @@ public class TransExecutionConfigurationDialog extends ConfigurationDialog {
         tableItem.setText( 1, variableName );
         tableItem.setText( 2, Const.NVL( variableValue, "" ) );
       }
+    }
+    //Internal Varibles should get disabled based on the kettle varible HIDE_INTERNAL_VARIABLES=Y
+    if ( ValueMetaString.convertStringToBoolean( System.getProperty( Const.HIDE_INTERNAL_VARIABLES,
+            Const.HIDE_INTERNAL_VARIABLES_DEFAULT ) ) ) {
+      wVariables.table.setEnabled(false);
     }
     wVariables.removeEmptyRows();
     wVariables.setRowNums();

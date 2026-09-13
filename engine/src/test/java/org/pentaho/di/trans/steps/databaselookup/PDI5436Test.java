@@ -1,37 +1,18 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
 
+
+
 package org.pentaho.di.trans.steps.databaselookup;
-
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.anyString;
-import static org.mockito.Mockito.doCallRealMethod;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.when;
-
-import java.util.Arrays;
 
 import org.junit.After;
 import org.junit.AfterClass;
@@ -43,6 +24,7 @@ import org.junit.Test;
 import org.pentaho.di.core.KettleEnvironment;
 import org.pentaho.di.core.QueueRowSet;
 import org.pentaho.di.core.RowSet;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.Database;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleDatabaseException;
@@ -61,6 +43,19 @@ import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepMetaInterface;
 import org.pentaho.di.trans.steps.mock.StepMockHelper;
 import org.pentaho.metastore.api.IMetaStore;
+
+import java.sql.ResultSet;
+import java.util.function.Consumer;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 /**
  * Tests for DatabaseLookup step
@@ -84,9 +79,7 @@ public class PDI5436Test {
 
   @Before
   public void setUp() {
-    smh =
-        new StepMockHelper<DatabaseLookupMeta, DatabaseLookupData>( "Database Lookup", DatabaseLookupMeta.class,
-            DatabaseLookupData.class );
+    smh = new StepMockHelper<>( "Database Lookup", DatabaseLookupMeta.class, DatabaseLookupData.class );
     when( smh.logChannelInterfaceFactory.create( any(), any( LoggingObjectInterface.class ) ) ).thenReturn(
         smh.logChannelInterface );
     when( smh.trans.isRunning() ).thenReturn( true );
@@ -122,9 +115,9 @@ public class PDI5436Test {
     doReturn( mock( DatabaseMeta.class ) ).when( stepMeta ).getDatabaseMeta();
     doReturn( new String[] { "=" } ).when( stepMeta ).getKeyCondition();
 
-    doCallRealMethod().when( stepMeta ).getFields( any( RowMetaInterface.class ), anyString(),
-        any( RowMetaInterface[].class ), any( StepMeta.class ), any( VariableSpace.class ), any( Repository.class ),
-        any( IMetaStore.class ) );
+    doCallRealMethod().when( stepMeta ).getFields( any( Bowl.class ), any( RowMetaInterface.class ), anyString(),
+      nullable( RowMetaInterface[].class ), nullable( StepMeta.class ), any( VariableSpace.class ), nullable( Repository.class ),
+      nullable( IMetaStore.class ) );
     doReturn( new String[] { "value" } ).when( stepMeta ).getReturnValueNewName();
     doReturn( new int[] { ValueMetaInterface.TYPE_STRING } ).when( stepMeta ).getReturnValueDefaultType();
     doReturn( true ).when( stepMeta ).isCached();
@@ -146,11 +139,15 @@ public class PDI5436Test {
     RowMeta databaseRowMeta = new RowMeta();
     databaseRowMeta.addValueMeta( new ValueMetaString( "id" ) );
     databaseRowMeta.addValueMeta( new ValueMetaString( "value" ) );
-    doReturn( databaseRowMeta ).when( databaseMock ).getTableFields( anyString() );
-    doReturn( databaseRowMeta ).when( databaseMock ).getTableFieldsMeta( anyString(), anyString() );
-    doReturn( Arrays.asList( new Object[][] { { "1", "value" } } ) ).when( databaseMock ).getRows( anyString(),
-        anyInt() );
+    doReturn( databaseRowMeta ).when( databaseMock ).getTableFields( nullable( String.class ) );
+    doReturn( databaseRowMeta ).when( databaseMock )
+      .getTableFieldsMeta( nullable( String.class ), nullable( String.class ) );
     doReturn( databaseRowMeta ).when( databaseMock ).getReturnRowMeta();
+    doCallRealMethod().when( databaseMock ).forEachRow( anyString(), anyInt(), any( Consumer.class ) );
+    ResultSet resultSetMock = mock( ResultSet.class );
+    doReturn( resultSetMock ).when( databaseMock ).openQuery( anyString() );
+    doReturn( new Object[] { "1", "value1" }, new Object[] { "2", "value2" }, new Object[] { "3", "value3" },
+      null ).when( databaseMock ).getRow( resultSetMock );
 
     return databaseMock;
   }
@@ -167,12 +164,11 @@ public class PDI5436Test {
     stepSpy.setInputRowMeta( mockInputRowMeta() );
     RowSet outputRowSet = new QueueRowSet();
     stepSpy.addRowSetToOutputRowSets( outputRowSet );
-
     StepMetaInterface meta = mockStepMeta();
     StepDataInterface data = smh.initStepDataInterface;
 
     Assert.assertTrue( "Step init failed", stepSpy.init( meta, data ) );
     Assert.assertTrue( "Error processing row", stepSpy.processRow( meta, data ) );
-    Assert.assertEquals( "Cache lookup failed", "value", outputRowSet.getRow()[2] );
+    Assert.assertEquals( "Cache lookup failed", "value1", outputRowSet.getRow()[2] );
   }
 }

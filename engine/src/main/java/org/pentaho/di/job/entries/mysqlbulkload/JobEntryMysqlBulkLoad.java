@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.mysqlbulkload;
 
@@ -273,7 +265,7 @@ public class JobEntryMysqlBulkLoad extends JobEntryBase implements Cloneable, Jo
         // As such, we're going to verify that it's a local file...
         // We're also going to convert VFS FileObject to File
         //
-        FileObject fileObject = KettleVFS.getFileObject( vfsFilename, this );
+        FileObject fileObject = KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( vfsFilename, this );
         if ( !( fileObject instanceof LocalFile ) ) {
           // MySQL LOAD DATA can only use local files, so that's what we limit ourselves to.
           //
@@ -400,20 +392,21 @@ public class JobEntryMysqlBulkLoad extends JobEntryBase implements Cloneable, Jo
                   db.execStatement( SQLBULKLOAD );
 
                   // Everything is OK...we can deconnect now
-                  db.disconnect();
+                  db.close();
 
                   if ( isAddFileToResult() ) {
                     // Add zip filename to output files
                     ResultFile resultFile =
                       new ResultFile(
-                        ResultFile.FILE_TYPE_GENERAL, KettleVFS.getFileObject( realFilename, this ), parentJob
+                        ResultFile.FILE_TYPE_GENERAL, KettleVFS.getInstance( parentJobMeta.getBowl() )
+                          .getFileObject( realFilename, this ), parentJob
                           .getJobname(), toString() );
                     result.getResultFiles().put( resultFile.getFile().toString(), resultFile );
                   }
 
                   result.setResult( true );
                 } catch ( KettleDatabaseException je ) {
-                  db.disconnect();
+                  db.close();
                   result.setNrErrors( 1 );
                   logError( "An error occurred executing this job entry : " + je.getMessage() );
                 } catch ( KettleFileException e ) {
@@ -422,14 +415,14 @@ public class JobEntryMysqlBulkLoad extends JobEntryBase implements Cloneable, Jo
                 }
               } else {
                 // Of course, the table should have been created already before the bulk load operation
-                db.disconnect();
+                db.close();
                 result.setNrErrors( 1 );
                 if ( log.isDetailed() ) {
                   logDetailed( "Table [" + realTablename + "] doesn't exist!" );
                 }
               }
             } catch ( KettleDatabaseException dbe ) {
-              db.disconnect();
+              db.close();
               result.setNrErrors( 1 );
               logError( "An error occurred executing this entry: " + dbe.getMessage() );
             }
@@ -620,9 +613,9 @@ public class JobEntryMysqlBulkLoad extends JobEntryBase implements Cloneable, Jo
     ValidatorContext ctx = new ValidatorContext();
     AbstractFileValidator.putVariableSpace( ctx, getVariables() );
     AndValidator.putValidators( ctx, JobEntryValidatorUtils.notBlankValidator(), JobEntryValidatorUtils.fileExistsValidator() );
-    JobEntryValidatorUtils.andValidator().validate( this, "filename", remarks, ctx );
+    JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "filename", remarks, ctx );
 
-    JobEntryValidatorUtils.andValidator().validate( this, "tablename", remarks,
+    JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "tablename", remarks,
         AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
   }
 

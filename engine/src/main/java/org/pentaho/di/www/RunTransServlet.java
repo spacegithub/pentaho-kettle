@@ -1,44 +1,28 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.www;
 
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.Enumeration;
-import java.util.UUID;
-
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
-import com.google.common.annotations.VisibleForTesting;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.logging.KettleLogStore;
 import org.pentaho.di.core.logging.LogLevel;
 import org.pentaho.di.core.logging.LoggingObjectType;
 import org.pentaho.di.core.logging.SimpleLoggingObject;
+import org.pentaho.di.core.util.Utils;
+import org.pentaho.di.core.variables.VariableSpace;
+import org.pentaho.di.core.variables.Variables;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.Repository;
@@ -48,6 +32,15 @@ import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransConfiguration;
 import org.pentaho.di.trans.TransExecutionConfiguration;
 import org.pentaho.di.trans.TransMeta;
+
+import com.google.common.annotations.VisibleForTesting;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.Enumeration;
+import java.util.UUID;
 
 public class RunTransServlet extends BaseHttpServlet implements CartePluginInterface {
 
@@ -173,7 +166,8 @@ public class RunTransServlet extends BaseHttpServlet implements CartePluginInter
     try {
 
       final Repository repository = transformationMap.getSlaveServerConfig().getRepository();
-      final TransMeta transMeta = loadTrans( repository, transOption );
+      clearBowlCache( repository );
+      final TransMeta transMeta = loadTrans( repository, transOption, getPopulatedVariableSpaceFromRequest( request, new Variables() ) );
 
       // Set the servlet parameters as variables in the transformation
       //
@@ -221,7 +215,7 @@ public class RunTransServlet extends BaseHttpServlet implements CartePluginInter
 
       // Setting variables
       //
-      trans.initializeVariablesFrom( null );
+      trans.initializeVariablesFrom( transMeta.getBowl().getADefaultVariableSpace() );
       trans.getTransMeta().setInternalKettleVariables( trans );
       trans.injectVariables( transConfiguration.getTransExecutionConfiguration().getVariables() );
 
@@ -259,6 +253,7 @@ public class RunTransServlet extends BaseHttpServlet implements CartePluginInter
         throw new KettleException( "Error executing Transformation: " + logging, executionException );
       }
     } catch ( Exception ex ) {
+      logError( "Error occurred while executing transformation", ex );
       out.println( new WebResult( WebResult.STRING_ERROR, BaseMessages.getString(
         PKG, "RunTransServlet.Error.UnexpectedError", Const.CR + Const.getStackTracker( ex ) ) ) );
     }
@@ -269,7 +264,7 @@ public class RunTransServlet extends BaseHttpServlet implements CartePluginInter
     return new Trans( transMeta, servletLoggingObject );
   }
 
-  private TransMeta loadTrans( Repository repository, String transformationName ) throws KettleException {
+  private TransMeta loadTrans( Repository repository, String transformationName, VariableSpace parentVariableSpace ) throws KettleException {
 
     if ( repository == null ) {
       throw new KettleException( "Repository required." );
@@ -295,7 +290,8 @@ public class RunTransServlet extends BaseHttpServlet implements CartePluginInter
 
         ObjectId transformationId = repository.getTransformationID( name, directory );
 
-        TransMeta transMeta = repository.loadTransformation( transformationId, null );
+        // TODO BACKLOG-44138 need to pass parent variablespace
+        TransMeta transMeta = repository.loadTransformation( transformationId, null, parentVariableSpace );
         return transMeta;
       }
     }

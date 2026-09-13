@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.concatfields;
 
@@ -64,10 +56,13 @@ import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaFactory;
 import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.i18n.BaseMessages;
+import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.BaseStepMeta;
 import org.pentaho.di.trans.step.StepDialogInterface;
 import org.pentaho.di.trans.step.StepMeta;
+import org.pentaho.di.trans.steps.concatfields.ConcatFields;
+import org.pentaho.di.trans.steps.concatfields.ConcatFieldsHelper;
 import org.pentaho.di.trans.steps.concatfields.ConcatFieldsMeta;
 import org.pentaho.di.trans.steps.textfileoutput.TextFileField;
 import org.pentaho.di.ui.core.dialog.ErrorDialog;
@@ -1053,23 +1048,14 @@ public class ConcatFieldsDialog extends BaseStepDialog implements StepDialogInte
       item.setText( 4, "" );
       item.setText( 5, "" );
       item.setText( 9, ValueMetaString.getTrimTypeDesc( ValueMetaInterface.TRIM_TYPE_BOTH ) );
-
       int type = ValueMetaFactory.getIdForValueMeta( item.getText( 2 ) );
-      switch ( type ) {
-        case ValueMetaInterface.TYPE_STRING:
-          item.setText( 3, "" );
-          break;
-        case ValueMetaInterface.TYPE_INTEGER:
-          item.setText( 3, "0" );
-          break;
-        case ValueMetaInterface.TYPE_NUMBER:
-          item.setText( 3, "0.#####" );
-          break;
-        case ValueMetaInterface.TYPE_DATE:
-          break;
-        default:
-          break;
-      }
+      Trans trans = new Trans( transMeta, null );
+      trans.rowsets = new ArrayList<>();
+
+      getInfo( input );
+      ConcatFieldsHelper helper = new ConcatFieldsHelper();
+      String formatTypeResponse = helper.formatType( type );
+      item.setText( 3, formatTypeResponse != null ? formatTypeResponse : "" );
     }
 
     for ( int i = 0; i < input.getOutputFields().length; i++ ) {

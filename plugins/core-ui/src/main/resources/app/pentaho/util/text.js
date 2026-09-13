@@ -1,18 +1,16 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara. All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 define(function() {
   "use strict";
 
@@ -26,12 +24,27 @@ define(function() {
    * @private
    */
   var text = {
+
+    /**
+     * Obtains a non-empty string representation of a given value.
+     *
+     * If `value` is {@link Nully}, `null` is returned.
+     * Otherwise, `value` is given to the {@link String} function.
+     * If the result is the empty string, `null` is returned.
+     * Otherwise the string value is returned.
+     *
+     * @param {*} value - The value to convert to a non-empty string.
+     * @return {nonEmptyString} A non-empty string or `null`.
+     */
+    nonEmptyString: function(value) {
+      return value == null ? null : (String(value) || null);
+    },
+
     /**
      * Ensures the first letter is upper case.
      *
      * @param {string} s The string to format.
      * @return {string} The formatted string.
-     * @ignore
      */
     firstUpperCase: function(s) {
       if(s) {
@@ -47,34 +60,40 @@ define(function() {
      *
      * @param {string} name The string to convert to a title.
      * @return {string} The title/label appropriate string.
-     * @ignore
      */
     titleFromName: function(name) {
       if(name) {
         return text.firstUpperCase(name).replace(/([a-z\d])([A-Z])/g, "$1 $2");
       }
+
       return name;
     },
 
     /**
      * Converts a string into a snake-like string.
      *
-     * Slashes, periods, white space and underscores are converted to an hyphen character, `-`.
+     * Slashes, periods, white space, `@` and underscores are converted to an hyphen character, `-`.
      * Camel-case strings are split and joined by an hyphen character as well.
      * Consecutive resulting hyphens are converted to a single hyphen.
      *
+     * If an hyphen would result in the first character, then an underscore is used instead.
+     *
      * @param {string} name - The string to convert to snake-case.
      * @return {string} The snake-case string.
-     * @ignore
      */
     toSnakeCase: function(name) {
       if(name) {
-        return name
+        name = name
             .replace(/([a-z\d])([A-Z])/g, "$1-$2")
-            .replace(/[\/\\_\s\.]+/g, "-")
-            .replace(/-+/g, "-")
-            .toLowerCase();
+            .replace(/[\/\\_\s\.@]+/g, "-")
+            .replace(/-+/g, "-");
+
+        // Replace a leading - with an _.
+        if(name.charAt(0) === "-") {
+          name = "_" + name.substr(1);
+        }
       }
+
       return name;
     },
 

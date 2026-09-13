@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step.jms.ui;
 
@@ -33,9 +25,11 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableItem;
-import org.pentaho.di.core.row.value.ValueMetaFactory;
+import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.di.core.row.value.ValueMetaBase;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.i18n.BaseMessages;
+import org.pentaho.di.trans.step.jms.JmsConsumerMeta;
 import org.pentaho.di.ui.core.PropsUI;
 import org.pentaho.di.ui.core.widget.ColumnInfo;
 import org.pentaho.di.ui.core.widget.TableView;
@@ -46,23 +40,30 @@ import static org.pentaho.di.trans.step.jms.JmsConstants.PKG;
 
 public class FieldsTab {
 
+  public static final String STRING_DESC = ValueMetaBase.getTypeDesc( ValueMetaInterface.TYPE_STRING );
 
   private CTabFolder wTabFolder;
   private PropsUI props;
-  private TableView fieldsTable;
+  TableView fieldsTable;
   private VariableSpace transMeta;
   private ModifyListener lsMod;
   private String message;
   private String destination;
+  private String messageId;
+  private String jmsTimestamp;
+  private String jmsRedelivered;
 
-  public FieldsTab( CTabFolder wTabFolder, PropsUI props,
-                    VariableSpace transMeta, ModifyListener lsMod, String message, String destination ) {
+  public FieldsTab(
+    CTabFolder wTabFolder, PropsUI props, VariableSpace transMeta, ModifyListener lsMod, JmsConsumerMeta jmsMeta ) {
     this.wTabFolder = wTabFolder;
     this.props = props;
     this.transMeta = transMeta;
     this.lsMod = lsMod;
-    this.message = message;
-    this.destination = destination;
+    this.message = jmsMeta.messageField;
+    this.destination = jmsMeta.destinationField;
+    this.messageId = jmsMeta.messageId;
+    this.jmsTimestamp = jmsMeta.jmsTimestamp;
+    this.jmsRedelivered = jmsMeta.jmsRedelivered;
   }
 
   public void buildFieldsTab() {
@@ -99,7 +100,7 @@ public class FieldsTab {
       parentWidget,
       SWT.BORDER | SWT.FULL_SELECTION | SWT.MULTI,
       columns,
-      2,
+      5,
       true,
       lsMod,
       props,
@@ -138,12 +139,27 @@ public class FieldsTab {
     TableItem messageItem = fieldsTable.getTable().getItem( 0 );
     messageItem.setText( 1, BaseMessages.getString( PKG, "JmsConsumerDialog.InputName.Message" ) );
     messageItem.setText( 2, message );
-    messageItem.setText( 3, "String" );
+    messageItem.setText( 3, STRING_DESC );
 
     TableItem topicItem = fieldsTable.getTable().getItem( 1 );
     topicItem.setText( 1, BaseMessages.getString( PKG, "JmsConsumerDialog.InputName.Destination" ) );
     topicItem.setText( 2, destination );
-    topicItem.setText( 3, "String" );
+    topicItem.setText( 3, STRING_DESC );
+
+    TableItem messageIdItem = fieldsTable.getTable().getItem( 2 );
+    messageIdItem.setText( 1, BaseMessages.getString( PKG, "JmsConsumerDialog.InputName.MessageId" ) );
+    messageIdItem.setText( 2, messageId );
+    messageIdItem.setText( 3, STRING_DESC );
+
+    TableItem jmsTimestampIdItem = fieldsTable.getTable().getItem( 3 );
+    jmsTimestampIdItem.setText( 1, BaseMessages.getString( PKG, "JmsConsumerDialog.InputName.JMSTimestamp" ) );
+    jmsTimestampIdItem.setText( 2, jmsTimestamp );
+    jmsTimestampIdItem.setText( 3, STRING_DESC );
+
+    TableItem jmsRedeliveredItem = fieldsTable.getTable().getItem( 4 );
+    jmsRedeliveredItem.setText( 1, BaseMessages.getString( PKG, "JmsConsumerDialog.InputName.JMSRedelivered" ) );
+    jmsRedeliveredItem.setText( 2, jmsRedelivered );
+    jmsRedeliveredItem.setText( 3, STRING_DESC );
   }
 
   private ColumnInfo[] getFieldColumns() {
@@ -158,14 +174,4 @@ public class FieldsTab {
 
     return new ColumnInfo[] { referenceName, name, type };
   }
-
-  public String[] getFieldNames() {
-    return stream( fieldsTable.getTable().getItems() ).map( row -> row.getText( 2 ) ).toArray( String[]::new );
-  }
-
-  public int[] getFieldTypes() {
-    return stream( fieldsTable.getTable().getItems() )
-      .mapToInt( row -> ValueMetaFactory.getIdForValueMeta( row.getText( 3 ) ) ).toArray();
-  }
-
 }

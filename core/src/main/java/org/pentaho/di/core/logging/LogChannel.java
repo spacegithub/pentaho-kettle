@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.logging;
 
@@ -26,6 +18,7 @@ import java.util.Date;
 import java.util.Queue;
 import java.util.Map;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.metrics.MetricsSnapshot;
@@ -34,13 +27,18 @@ import org.pentaho.di.core.metrics.MetricsSnapshotType;
 
 public class LogChannel implements LogChannelInterface {
 
-  public static LogChannelInterface GENERAL = new LogChannel( "General" );
+  public static final String GENERAL_SUBJECT = "General";
+  public static final String METADATA_SUBJECT = "Metadata";
+  public static final String GUI_SUBJECT = "GUI";
+  public static final LogChannelInterface GENERAL = new LogChannel( GENERAL_SUBJECT, false, false );
+  public static final LogChannelInterface METADATA = new LogChannel( METADATA_SUBJECT, false, false );
+  public static final LogChannelInterface UI = new LogChannel( GUI_SUBJECT, false, false );
 
-  public static LogChannelInterface METADATA = new LogChannel( "Metadata" );
+  private static final String DEFAULT_LOG_SUBJECT = "Kettle";
 
-  public static LogChannelInterface UI = new LogChannel( "GUI" );
+  private static final MetricsRegistry metricsRegistry = MetricsRegistry.getInstance();
 
-  private String logChannelId;
+  private final String logChannelId;
 
   private LogLevel logLevel;
 
@@ -50,9 +48,15 @@ public class LogChannel implements LogChannelInterface {
 
   private boolean forcingSeparateLogging;
 
-  private static MetricsRegistry metricsRegistry = MetricsRegistry.getInstance();
+  private LoggingObjectLifecycleInterface logChannelHooks;
 
   private String filter;
+
+  private LogChannelFileWriterBuffer fileWriter;
+
+  public LogChannel() {
+    this( DEFAULT_LOG_SUBJECT );
+  }
 
   public LogChannel( Object subject ) {
     logLevel = DefaultLogLevel.getLogLevel();
@@ -64,6 +68,12 @@ public class LogChannel implements LogChannelInterface {
     this.gatheringMetrics = gatheringMetrics;
   }
 
+  public LogChannel( Object subject, boolean gatheringMetrics, boolean isPurgeable ) {
+    logLevel = DefaultLogLevel.getLogLevel();
+    this.gatheringMetrics = gatheringMetrics;
+    logChannelId = LoggingRegistry.getInstance().registerLoggingSource( subject, isPurgeable );
+  }
+
   public LogChannel( Object subject, LoggingObjectInterface parentObject ) {
     if ( parentObject != null ) {
       this.logLevel = parentObject.getLogLevel();
@@ -73,6 +83,10 @@ public class LogChannel implements LogChannelInterface {
       this.containerObjectId = null;
     }
     logChannelId = LoggingRegistry.getInstance().registerLoggingSource( subject );
+    // Verify is parentObject has hooks defined
+    if ( parentObject != null ) {
+      this.setHooks( parentObject );
+    }
   }
 
   public LogChannel( Object subject, LoggingObjectInterface parentObject, boolean gatheringMetrics ) {
@@ -90,44 +104,41 @@ public class LogChannel implements LogChannelInterface {
     return logChannelId;
   }
 
-  /**
-   *
-   * @param logMessage
-   * @param channelLogLevel
-   */
   public void println( LogMessageInterface logMessage, LogLevel channelLogLevel ) {
-    String subject = null;
 
-    LogLevel logLevel = logMessage.getLevel();
+    String subject = logMessage.getSubject();
 
-    if ( !logLevel.isVisible( channelLogLevel ) ) {
+    if ( !logMessage.getLevel().isVisible( channelLogLevel ) ) {
       return; // not for our eyes.
     }
 
     if ( subject == null ) {
-      subject = "Kettle";
+      subject = DEFAULT_LOG_SUBJECT;
     }
 
     // Are the message filtered?
-    //
-    if ( !logLevel.isError() && !Utils.isEmpty( filter ) ) {
-      if ( subject.indexOf( filter ) < 0 && logMessage.toString().indexOf( filter ) < 0 ) {
-        return; // "filter" not found in row: don't show!
-      }
+    // apply filter if defined, and not Error level
+    boolean applyFilter = !logMessage.getLevel().isError() && !Utils.isEmpty( filter );
+    if ( applyFilter && !subject.contains( filter ) && !logMessage.toString().contains( filter ) ) {
+      return; // "filter" not found in row: don't show!
     }
 
-    // Let's not keep everything...
-    //
-    if ( channelLogLevel.getLevel() >= logLevel.getLevel() ) {
-      KettleLoggingEvent loggingEvent = new KettleLoggingEvent( logMessage, System.currentTimeMillis(), logLevel );
-      KettleLogStore.getAppender().addLogggingEvent( loggingEvent );
+    callBeforeLog();
 
-      // add to buffer
-      LogChannelFileWriterBuffer fileWriter = LoggingRegistry.getInstance().getLogChannelFileWriterBuffer( logChannelId );
-      if ( fileWriter != null ) {
-        fileWriter.addEvent( loggingEvent );
-      }
+    KettleLoggingEvent loggingEvent = new KettleLoggingEvent( logMessage, System.currentTimeMillis(),
+      logMessage.getLevel() );
+    KettleLogStore.getAppender().addLogggingEvent( loggingEvent );
+
+    if ( this.fileWriter == null ) {
+      this.fileWriter = LoggingRegistry.getInstance().getLogChannelFileWriterBuffer( logChannelId );
     }
+
+    // add to buffer
+    if ( this.fileWriter != null ) {
+      this.fileWriter.addEvent( loggingEvent );
+    }
+
+    callAfterLog();
   }
 
   public void println( LogMessageInterface message, Throwable e, LogLevel channelLogLevel ) {
@@ -218,7 +229,6 @@ public class LogChannel implements LogChannelInterface {
     try {
       return logLevel.isDetailed();
     } catch ( NullPointerException ex ) {
-      // System.out.println( "Oops!" );
       return false;
     }
   }
@@ -252,8 +262,7 @@ public class LogChannel implements LogChannelInterface {
   }
 
   /**
-   * @param containerObjectId
-   *          the containerObjectId to set
+   * @param containerObjectId the containerObjectId to set
    */
   @Override
   public void setContainerObjectId( String containerObjectId ) {
@@ -269,8 +278,7 @@ public class LogChannel implements LogChannelInterface {
   }
 
   /**
-   * @param gatheringMetrics
-   *          the gatheringMetrics to set
+   * @param gatheringMetrics the gatheringMetrics to set
    */
   @Override
   public void setGatheringMetrics( boolean gatheringMetrics ) {
@@ -299,9 +307,9 @@ public class LogChannel implements LogChannelInterface {
     }
 
     String key = MetricsSnapshot.getKey( metric, subject );
-    Map<String, MetricsSnapshotInterface> metricsMap = null;
-    MetricsSnapshotInterface snapshot = null;
-    Queue<MetricsSnapshotInterface> metricsList = null;
+    Map<String, MetricsSnapshotInterface> metricsMap;
+    MetricsSnapshotInterface snapshot;
+    Queue<MetricsSnapshotInterface> metricsList;
     switch ( metric.getType() ) {
       case MAX:
         // Calculate and store the maximum value for this metric
@@ -313,12 +321,12 @@ public class LogChannel implements LogChannelInterface {
         metricsMap = metricsRegistry.getSnapshotMap( logChannelId );
         snapshot = metricsMap.get( key );
         if ( snapshot != null ) {
-          if ( value[0] > snapshot.getValue() ) {
-            snapshot.setValue( value[0] );
+          if ( value[ 0 ] > snapshot.getValue() ) {
+            snapshot.setValue( value[ 0 ] );
             snapshot.setDate( new Date() );
           }
         } else {
-          snapshot = new MetricsSnapshot( MetricsSnapshotType.MAX, metric, subject, value[0], logChannelId );
+          snapshot = new MetricsSnapshot( MetricsSnapshotType.MAX, metric, subject, value[ 0 ], logChannelId );
           metricsMap.put( key, snapshot );
         }
 
@@ -333,12 +341,12 @@ public class LogChannel implements LogChannelInterface {
         metricsMap = metricsRegistry.getSnapshotMap( logChannelId );
         snapshot = metricsMap.get( key );
         if ( snapshot != null ) {
-          if ( value[0] < snapshot.getValue() ) {
-            snapshot.setValue( value[0] );
+          if ( value[ 0 ] < snapshot.getValue() ) {
+            snapshot.setValue( value[ 0 ] );
             snapshot.setDate( new Date() );
           }
         } else {
-          snapshot = new MetricsSnapshot( MetricsSnapshotType.MIN, metric, subject, value[0], logChannelId );
+          snapshot = new MetricsSnapshot( MetricsSnapshotType.MIN, metric, subject, value[ 0 ], logChannelId );
           metricsMap.put( key, snapshot );
         }
 
@@ -347,9 +355,9 @@ public class LogChannel implements LogChannelInterface {
         metricsMap = metricsRegistry.getSnapshotMap( logChannelId );
         snapshot = metricsMap.get( key );
         if ( snapshot != null ) {
-          snapshot.setValue( snapshot.getValue() + value[0] );
+          snapshot.setValue( snapshot.getValue() + value[ 0 ] );
         } else {
-          snapshot = new MetricsSnapshot( MetricsSnapshotType.SUM, metric, subject, value[0], logChannelId );
+          snapshot = new MetricsSnapshot( MetricsSnapshotType.SUM, metric, subject, value[ 0 ], logChannelId );
           metricsMap.put( key, snapshot );
         }
 
@@ -391,5 +399,40 @@ public class LogChannel implements LogChannelInterface {
   @Override
   public void setFilter( String filter ) {
     this.filter = filter;
+  }
+
+  /**
+   * The global log channels are initialized on class load with
+   * whatever the default log level is at the time.  This method
+   * allows changing that value after load.
+   */
+  static void updateGlobalLogChannels( LogLevel level ) {
+    GENERAL.setLogLevel( level );
+    UI.setLogLevel( level );
+    METADATA.setLogLevel( level );
+  }
+
+  @Override public LoggingObjectLifecycleInterface getHooks() {
+    return this.logChannelHooks;
+  }
+
+  @Override public void setHooks( LoggingObjectLifecycleInterface loggingObjectLifecycleInterface ) {
+    this.logChannelHooks = loggingObjectLifecycleInterface;
+  }
+
+  @VisibleForTesting
+  void callBeforeLog() {
+    LoggingObjectLifecycleInterface hooks = getHooks();
+    if ( hooks != null ) {
+      hooks.callBeforeLog();
+    }
+  }
+
+  @VisibleForTesting
+  void callAfterLog() {
+    LoggingObjectLifecycleInterface hooks = getHooks();
+    if ( hooks != null ) {
+      hooks.callAfterLog();
+    }
   }
 }

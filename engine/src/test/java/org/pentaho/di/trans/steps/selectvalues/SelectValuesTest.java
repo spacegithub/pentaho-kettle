@@ -1,35 +1,30 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.selectvalues;
 
+import java.math.BigDecimal;
+import java.nio.charset.Charset;
+import java.util.HashMap;
+
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.KettleEnvironment;
 import org.pentaho.di.core.RowSet;
@@ -42,6 +37,7 @@ import org.pentaho.di.core.row.value.ValueMetaBase;
 import org.pentaho.di.core.row.value.ValueMetaBigNumber;
 import org.pentaho.di.core.row.value.ValueMetaInteger;
 import org.pentaho.di.core.row.value.ValueMetaString;
+import org.pentaho.di.core.util.EnvUtil;
 import org.pentaho.di.junit.rules.RestorePDIEngineEnvironment;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
@@ -51,17 +47,18 @@ import org.pentaho.di.trans.steps.StepMockUtil;
 import org.pentaho.di.trans.steps.mock.StepMockHelper;
 import org.pentaho.di.trans.steps.selectvalues.SelectValuesMeta.SelectField;
 
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Mockito.doReturn;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-
-import java.math.BigDecimal;
 
 /**
  * @author Andrey Khayrutdinov
@@ -108,12 +105,12 @@ public class SelectValuesTest {
     // This tests that the fix for PDI-16388 doesn't get re-broken.
     //
 
-    SelectValuesHandler  step2 = null;
-    Object[] inputRow2 = null;
-    RowMeta inputRowMeta = null;
-    SelectValuesMeta stepMeta = null;
-    SelectValuesData stepData = null;
-    ValueMetaInterface vmi =  null;
+    SelectValuesHandler  step2;
+    Object[] inputRow2;
+    RowMeta inputRowMeta;
+    SelectValuesMeta stepMeta;
+    SelectValuesData stepData;
+    ValueMetaInterface vmi;
     // First, test current behavior (it's worked this way since 5.x or so)
     //
     step2 = new SelectValuesHandler( helper.stepMeta, helper.stepDataInterface, 1, helper.transMeta, helper.trans );
@@ -176,7 +173,7 @@ public class SelectValuesTest {
 
     step2 = new SelectValuesHandler( helper.stepMeta, helper.stepDataInterface, 1, helper.transMeta, helper.trans );
     step2 = spy( step2 );
-    inputRow2 = new Object[] { new Long( "589" ) }; // Starting with a Long
+    inputRow2 = new Object[] { 589L }; // Starting with a Long
     doReturn( inputRow2 ).when( step2 ).getRow();
     doNothing().when( step2 )
         .putError( any( RowMetaInterface.class ), any( Object[].class ), anyLong(), anyString(), anyString(),
@@ -268,7 +265,7 @@ public class SelectValuesTest {
     step2 = new SelectValuesHandler( helper.stepMeta, helper.stepDataInterface, 1, helper.transMeta, helper.trans );
     step2.setVariable( Const.KETTLE_COMPATIBILITY_SELECT_VALUES_TYPE_CHANGE_USES_TYPE_DEFAULTS, "Y" );
     step2 = spy( step2 );
-    inputRow2 = new Object[] { new Long( "589" ) }; // Starting with a Long
+    inputRow2 = new Object[] { 589L }; // Starting with a Long
     doReturn( inputRow2 ).when( step2 ).getRow();
     doNothing().when( step2 )
         .putError( any( RowMetaInterface.class ), any( Object[].class ), anyLong(), anyString(), anyString(),
@@ -331,8 +328,7 @@ public class SelectValuesTest {
     assertTrue( properException );
   }
 
-  public class SelectValuesHandler extends SelectValues {
-    private Object[] resultRow;
+  public static class SelectValuesHandler extends SelectValues {
     private RowMetaInterface rowMeta;
     private RowSet rowset;
 
@@ -343,7 +339,6 @@ public class SelectValuesTest {
 
     @Override
     public void putRow( RowMetaInterface rm, Object[] row ) throws KettleStepException {
-      resultRow = row;
       rowMeta = rm;
     }
 

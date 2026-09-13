@@ -1,0 +1,185 @@
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
+
+package org.pentaho.di.trans.steps.transexecutor;
+
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
+import org.junit.Before;
+import org.junit.Test;
+import org.pentaho.di.core.ObjectLocationSpecificationMethod;
+import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.logging.KettleLogStore;
+import org.pentaho.di.core.logging.LogChannelInterface;
+import org.pentaho.di.core.logging.LogChannelInterfaceFactory;
+import org.pentaho.di.core.logging.LoggingObjectInterface;
+import org.pentaho.di.core.parameters.UnknownParamException;
+import org.pentaho.di.repository.Repository;
+import org.pentaho.di.trans.TransMeta;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
+import static org.pentaho.di.trans.step.BaseStepHelper.IS_VALID_REFERENCE;
+import static org.pentaho.di.trans.step.BaseStepHelper.REFERENCE_PATH;
+import static org.pentaho.di.trans.step.StepHelperInterface.ACTION_STATUS;
+import static org.pentaho.di.trans.step.StepHelperInterface.FAILURE_METHOD_NOT_FOUND_RESPONSE;
+import static org.pentaho.di.trans.step.StepHelperInterface.FAILURE_RESPONSE;
+import static org.pentaho.di.trans.step.StepHelperInterface.SUCCESS_RESPONSE;
+
+public class TransExecutorHelperTest {
+
+  TransExecutorMeta transExecutorMeta;
+  TransMeta transMeta;
+
+  TransExecutorHelper underTest;
+
+  @Before
+  public void setUp() throws Exception {
+    transMeta = mock( TransMeta.class );
+    transExecutorMeta = mock( TransExecutorMeta.class );
+    underTest = spy( new TransExecutorHelper( transExecutorMeta ) );
+
+    LogChannelInterfaceFactory logChannelInterfaceFactory = mock( LogChannelInterfaceFactory.class );
+    LogChannelInterface logChannelInterface = mock( LogChannelInterface.class );
+    KettleLogStore.setLogChannelInterfaceFactory( logChannelInterfaceFactory );
+    when( logChannelInterfaceFactory.create( any(), any( LoggingObjectInterface.class ) ) ).thenReturn(
+      logChannelInterface );
+    when( logChannelInterfaceFactory.create( any() ) ).thenReturn( logChannelInterface );
+
+    Repository mockRepository = mock( Repository.class );
+    TransExecutorParameters parameters = mock( TransExecutorParameters.class );
+
+    when( transExecutorMeta.getParameters() ).thenReturn( parameters );
+    when( transMeta.getRepository() ).thenReturn( mockRepository );
+    when( transMeta.listVariables() ).thenReturn( new String[] { "var1", "var2" } );
+    when( transMeta.getVariable( "var1" ) ).thenReturn( "value1" );
+    when( transMeta.getVariable( "var2" ) ).thenReturn( "value2" );
+    when( transMeta.listParameters() ).thenReturn( new String[] { "param1", "param2" } );
+    when( transMeta.getParameterDescription( "param1" ) ).thenReturn( "desc1" );
+    when( transMeta.getParameterDescription( "param2" ) ).thenReturn( "desc2" );
+    when( transMeta.getParameterDefault( "param1" ) ).thenReturn( "default1" );
+    when( transMeta.getParameterDefault( "param2" ) ).thenReturn( "default2" );
+
+    doReturn( transMeta ).when( underTest ).loadExecutorTransMeta( transMeta, transExecutorMeta );
+  }
+
+  @Test
+  public void testStepAction_whenParametersMethod_thenReturnsParameters() {
+    JSONObject response = underTest.stepAction( "parameters", transMeta, null );
+
+    JSONArray parameters = (JSONArray) response.get( "parameters" );
+    assertNotNull( response );
+    assertTrue( response.containsKey( "parameters" ) );
+    assertTrue( response.get( "parameters" ) instanceof JSONArray );
+    assertEquals( 2, parameters.size() );
+    JSONObject param1 = (JSONObject) parameters.get( 0 );
+    assertEquals( "param1", param1.get( "variable" ) );
+    assertEquals( "", param1.get( "field" ) );
+    assertEquals( "default1", param1.get( "input" ) );
+  }
+
+  @Test
+  public void testStepAction_whenParametersMethodThrowsException_thenReturnsFailureResponse() throws KettleException {
+    when( transMeta.getParameterDescription( anyString() ) ).thenThrow( new UnknownParamException() );
+    JSONObject response = underTest.stepAction( "parameters", transMeta, null );
+
+    assertNotNull( response );
+    assertEquals( FAILURE_RESPONSE, response.get( ACTION_STATUS ) );
+  }
+
+  @Test
+  public void testStepAction_whenIsTransValidWithValidTransformation_thenReturnsTransPresentTrue() {
+    JSONObject response = underTest.stepAction( "isTransValid", transMeta, null );
+
+    assertNotNull( response );
+    assertTrue( response.containsKey( "transPresent" ) );
+    assertTrue( response.get( "transPresent" ) instanceof Boolean );
+  }
+
+  @Test
+  public void testStepAction_whenIsTransValidWithInvalidTransformation_thenReturnsTransPresentFalseAndErrorMessage()
+    throws Exception {
+    doThrow( new KettleException( "Invalid transformation" ) ).when( underTest )
+      .loadExecutorTransMeta( transMeta, transExecutorMeta );
+
+    JSONObject response = underTest.stepAction( "isTransValid", transMeta, null );
+
+    assertNotNull( response );
+    assertFalse( (Boolean) response.get( "transPresent" ) );
+    assertTrue( response.containsKey( "errorMessage" ) );
+  }
+
+  @Test
+  public void testStepAction_whenMethodNameIsInvalid_thenReturnsFailureMethodNotFound() {
+    JSONObject response = underTest.stepAction( "invalidMethod", transMeta, null );
+
+    assertNotNull( response );
+    assertEquals( FAILURE_METHOD_NOT_FOUND_RESPONSE, response.get( ACTION_STATUS ) );
+  }
+
+  @Test
+  public void testReferencePath() {
+    when( transExecutorMeta.getDirectoryPath() ).thenReturn( "/path" );
+    when( transExecutorMeta.getTransName() ).thenReturn( "transName" );
+    when( transExecutorMeta.getSpecificationMethod() ).thenReturn( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME );
+    when( transMeta.environmentSubstitute( anyString() ) ).thenAnswer( invocation -> invocation.getArgument( 0 ) );
+    JSONObject response = underTest.stepAction( REFERENCE_PATH, transMeta, null );
+
+    assertEquals( SUCCESS_RESPONSE, response.get( ACTION_STATUS ) );
+    assertNotNull( response );
+    assertNotNull( response.get( REFERENCE_PATH ) );
+    assertEquals( "/path/transName", response.get( REFERENCE_PATH ) );
+    assertEquals( true, response.get( IS_VALID_REFERENCE ) );
+  }
+
+  @Test
+  public void testReferencePath_withFileNameSpecification() {
+    when( transExecutorMeta.getFileName() ).thenReturn( "/path/transName" );
+    when( transExecutorMeta.getSpecificationMethod() ).thenReturn( ObjectLocationSpecificationMethod.FILENAME );
+    when( transMeta.environmentSubstitute( anyString() ) ).thenAnswer( invocation -> invocation.getArgument( 0 ) );
+    JSONObject response = underTest.stepAction( REFERENCE_PATH, transMeta, null );
+
+    assertEquals( SUCCESS_RESPONSE, response.get( ACTION_STATUS ) );
+    assertNotNull( response );
+    assertNotNull( response.get( REFERENCE_PATH ) );
+    assertEquals( "/path/transName", response.get( REFERENCE_PATH ) );
+    assertEquals( true, response.get( IS_VALID_REFERENCE ) );
+  }
+
+  @Test
+  public void testReferencePath_throwsException() throws KettleException {
+    doThrow( new KettleException( "Invalid transformation" ) ).when( underTest )
+        .loadExecutorTransMeta( transMeta, transExecutorMeta );
+    when( transExecutorMeta.getDirectoryPath() ).thenReturn( "/path" );
+    when( transExecutorMeta.getTransName() ).thenReturn( "transName" );
+    when( transExecutorMeta.getSpecificationMethod() ).thenReturn( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME );
+    when( transMeta.environmentSubstitute( anyString() ) ).thenAnswer( invocation -> invocation.getArgument( 0 ) );
+    JSONObject response = underTest.stepAction( REFERENCE_PATH, transMeta, null );
+
+    assertEquals( SUCCESS_RESPONSE, response.get( ACTION_STATUS ) );
+    assertNotNull( response );
+    assertNotNull( response.get( REFERENCE_PATH ) );
+    assertEquals( "/path/transName", response.get( REFERENCE_PATH ) );
+    assertEquals( false, response.get( IS_VALID_REFERENCE ) );
+  }
+}

@@ -1,28 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.trans;
 
-import org.apache.commons.lang.StringUtils;
+import org.pentaho.di.base.IMetaFileLoader;
+import org.pentaho.di.base.MetaFileLoaderImpl;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
@@ -31,6 +24,7 @@ import org.pentaho.di.core.Result;
 import org.pentaho.di.core.ResultFile;
 import org.pentaho.di.core.RowMetaAndData;
 import org.pentaho.di.core.SQLStatement;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleDatabaseException;
 import org.pentaho.di.core.exception.KettleException;
@@ -44,9 +38,7 @@ import org.pentaho.di.core.logging.LogLevel;
 import org.pentaho.di.core.parameters.NamedParams;
 import org.pentaho.di.core.parameters.NamedParamsDefault;
 import org.pentaho.di.core.parameters.UnknownParamException;
-import org.pentaho.di.core.util.CurrentDirectoryResolver;
 import org.pentaho.di.core.util.FileUtil;
-import org.pentaho.di.core.util.StringUtil;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.vfs.KettleVFS;
@@ -56,6 +48,7 @@ import org.pentaho.di.job.DelegationListener;
 import org.pentaho.di.job.Job;
 import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.job.entry.JobEntryBase;
+import org.pentaho.di.job.entry.JobEntryHelperInterface;
 import org.pentaho.di.job.entry.JobEntryInterface;
 import org.pentaho.di.job.entry.JobEntryRunConfigurableInterface;
 import org.pentaho.di.job.entry.validator.AndValidator;
@@ -74,17 +67,15 @@ import org.pentaho.di.resource.ResourceEntry;
 import org.pentaho.di.resource.ResourceEntry.ResourceType;
 import org.pentaho.di.resource.ResourceNamingInterface;
 import org.pentaho.di.resource.ResourceReference;
+import org.pentaho.di.trans.DefaultTransFactoryManager;
 import org.pentaho.di.trans.StepWithMappingMeta;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransExecutionConfiguration;
 import org.pentaho.di.trans.TransMeta;
-import org.pentaho.di.trans.TransSupplier;
 import org.pentaho.di.trans.cluster.TransSplitter;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.www.SlaveServerTransStatus;
 import org.pentaho.metastore.api.IMetaStore;
-import org.pentaho.platform.api.repository2.unified.RepositoryFile;
-import org.w3c.dom.Node;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -92,6 +83,8 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
+import org.apache.commons.lang3.StringUtils;
+import org.w3c.dom.Node;
 
 /**
  * This is the job entry that defines a transformation to be run.
@@ -102,7 +95,6 @@ import java.util.Map;
 public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryInterface, HasRepositoryDirectories, JobEntryRunConfigurableInterface {
   private static Class<?> PKG = JobEntryTrans.class; // for i18n purposes, needed by Translator2!!
   public static final int IS_PENTAHO = 1;
-
   private String transname;
 
   private String filename;
@@ -136,6 +128,8 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
   public boolean setLogfile;
 
   public boolean setAppendLogfile;
+
+  public boolean suppressResultData;
 
   public String logfile, logext;
 
@@ -334,6 +328,7 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
     retval.append( "      " ).append( XMLHandler.addTagValue( "create_parent_folder", createParentFolder ) );
     retval.append( "      " ).append( XMLHandler.addTagValue( "logging_remote_work", loggingRemoteWork ) );
     retval.append( "      " ).append( XMLHandler.addTagValue( "run_configuration", runConfiguration ) );
+    retval.append( "      " ).append( XMLHandler.addTagValue( "suppress_result_data", isSuppressResultData() ) );
 
     if ( arguments != null ) {
       for ( int i = 0; i < arguments.length; i++ ) {
@@ -420,6 +415,7 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
       createParentFolder = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, "create_parent_folder" ) );
       loggingRemoteWork = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, "logging_remote_work" ) );
       runConfiguration = XMLHandler.getTagValue( entrynode, "run_configuration" );
+      setSuppressResultData( "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, "suppress_result_data" ) ) );
 
       remoteSlaveServerName = XMLHandler.getTagValue( entrynode, "slave_server_name" );
 
@@ -503,6 +499,7 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
       followingAbortRemotely = rep.getJobEntryAttributeBoolean( id_jobentry, "follow_abort_remote" );
       loggingRemoteWork = rep.getJobEntryAttributeBoolean( id_jobentry, "logging_remote_work" );
       runConfiguration = rep.getJobEntryAttributeString( id_jobentry, "run_configuration" );
+      setSuppressResultData( rep.getJobEntryAttributeBoolean( id_jobentry, "suppress_result_data", false ) );
 
       // How many arguments?
       int argnr = rep.countNrJobEntryAttributes( id_jobentry, "argument" );
@@ -564,6 +561,7 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
       rep.saveJobEntryAttribute( id_job, getObjectId(), "create_parent_folder", createParentFolder );
       rep.saveJobEntryAttribute( id_job, getObjectId(), "logging_remote_work", loggingRemoteWork );
       rep.saveJobEntryAttribute( id_job, getObjectId(), "run_configuration", runConfiguration );
+      rep.saveJobEntryAttribute( id_job, getObjectId(), "suppress_result_data", isSuppressResultData() );
 
       // Save the arguments...
       if ( arguments != null ) {
@@ -614,6 +612,7 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
     waitingToFinish = true;
     followingAbortRemotely = false; // backward compatibility reasons
     createParentFolder = false;
+    setSuppressResultData( false );
     logFileLevel = LogLevel.BASIC;
   }
 
@@ -662,7 +661,8 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
       try {
         logChannelFileWriter =
           new LogChannelFileWriter(
-            this.getLogChannelId(), KettleVFS.getFileObject( realLogFilename, this ), setAppendLogfile );
+            this.getLogChannelId(), KettleVFS.getInstance( parentJobMeta.getBowl() )
+              .getFileObject( realLogFilename, this ), setAppendLogfile );
         logChannelFileWriter.startLogging();
       } catch ( KettleException e ) {
         logError( BaseMessages.getString( PKG, "JobTrans.Error.UnableOpenAppender", realLogFilename, e.toString() ) );
@@ -740,7 +740,8 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
     List<RowMetaAndData> rows = new ArrayList<RowMetaAndData>( result.getRows() );
 
     while ( ( first && !execPerRow )
-      || ( execPerRow && rows != null && iteration < rows.size() && result.getNrErrors() == 0 )
+      || ( execPerRow && !rows.isEmpty() && iteration < rows.size() && result.getNrErrors() == 0 )
+      || ( execPerRow && rows.isEmpty() && iteration <= rows.size() && shouldConsiderOldBehaviourForEveryInputRow() )
       && !parentJob.isStopped() ) {
       // Clear the result rows of the result
       // Otherwise we double the amount of rows every iteration in the simple cases.
@@ -748,7 +749,8 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
       if ( execPerRow ) {
         result.getRows().clear();
       }
-      if ( rows != null && execPerRow ) {
+
+      if ( rows != null && execPerRow && !rows.isEmpty() ) {
         resultRow = rows.get( iteration );
       } else {
         resultRow = null;
@@ -1067,7 +1069,8 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
                 // The transformation is finished, get the result...
                 //
                 //get the status with the result ( we don't do it above because of changing PDI-15781)
-                transStatus = remoteSlaveServer.getTransStatus( transMeta.getName(), carteObjectId, 0, true );
+                transStatus = remoteSlaveServer.getTransStatus( transMeta.getName(), carteObjectId, 0,
+                  !isSuppressResultData() );
                 Result remoteResult = transStatus.getResult();
                 result.clear();
                 result.add( remoteResult );
@@ -1127,11 +1130,13 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
           //
           //trans = new Trans( transMeta, this );
           final TransMeta meta = transMeta;
-          trans = new TransSupplier( transMeta, log, () -> new Trans( meta ) ).get();
-          trans.setParent( this );
+
+          trans = DefaultTransFactoryManager.getInstance().getTransFactory( executionConfiguration.getRunConfiguration() )
+                  .create( transMeta, this );
 
           // Pass the socket repository as early as possible...
           //
+          trans.setLog( log );
           trans.setSocketRepository( parentJob.getSocketRepository() );
 
           if ( parentJob.getJobMeta().isBatchIdPassed() ) {
@@ -1152,6 +1157,9 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
 
           // inject the metaStore
           trans.setMetaStore( metaStore );
+
+          // set gathering metrics state
+          trans.setGatheringMetrics( parentJob.isGatheringMetrics() );
 
           // First get the root job
           //
@@ -1199,20 +1207,12 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
               trans.stopAll();
               result.setNrErrors( 1 );
             }
-            Result newResult = trans.getResult();
-
-            result.clear(); // clear only the numbers, NOT the files or rows.
-            result.add( newResult );
-
-            // Set the result rows too, if any ...
-            if ( !Utils.isEmpty( newResult.getRows() ) ) {
-              result.setRows( newResult.getRows() );
-            }
-
+            updateResult( result );
             if ( setLogfile ) {
               ResultFile resultFile =
                 new ResultFile(
-                  ResultFile.FILE_TYPE_LOG, KettleVFS.getFileObject( realLogFilename, this ), parentJob
+                  ResultFile.FILE_TYPE_LOG, KettleVFS.getInstance( parentJobMeta.getBowl() )
+                    .getFileObject( realLogFilename, this ), parentJob
                   .getJobname(), toString()
                 );
               result.getResultFiles().put( resultFile.getFile().toString(), resultFile );
@@ -1262,6 +1262,48 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
     return result;
   }
 
+  private boolean shouldConsiderOldBehaviourForEveryInputRow() {
+    boolean showWarnings = calculateExecuteForEveryRowKettleProperty( Const.KETTLE_COMPATIBILITY_SHOW_WARNINGS_EXECUTE_EVERY_INPUT_ROW, Const.COMPATIBILITY_SHOW_WARNINGS_EXECUTE_EVERY_INPUT_ROW );
+    boolean shouldExecuteWithZeroRows = calculateExecuteForEveryRowKettleProperty( Const.KETTLE_COMPATIBILITY_TRANS_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT, Const.COMPATIBILITY_TRANS_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT );
+
+    if ( showWarnings ) {
+      if ( shouldExecuteWithZeroRows ) {
+        log.logBasic(
+          "WARN Detected \"Execute for every row\" but no rows were detected, applying desired behavior, to execute. In case this is not desired behavior, please read property KETTLE_COMPATIBILITY_TRANS_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT." );
+      } else {
+        log.logBasic(
+          "WARN Detected \"Execute for every row\" but no rows were detected, applying default behavior, not to execute. In case this is not desired behavior, please read property KETTLE_COMPATIBILITY_TRANS_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT." );
+      }
+    }
+
+    return shouldExecuteWithZeroRows;
+  }
+
+  private boolean calculateExecuteForEveryRowKettleProperty( String kettleCompatabilityProperty, String compatibilityProperty ) {
+    String kValue = System.getProperty( kettleCompatabilityProperty );
+
+    if ( !Utils.isEmpty( kValue ) ) {
+      return "Y".equalsIgnoreCase( kValue );
+    }
+
+    String cValue = System.getProperty( compatibilityProperty );
+    if ( !Utils.isEmpty( cValue ) ) {
+      log.logError( compatibilityProperty + " property is deprecated, please use " + kettleCompatabilityProperty
+        + " and remove the old one." );
+    }
+
+    return "Y".equalsIgnoreCase( cValue );
+  }
+
+  protected void updateResult( Result result ) {
+    Result newResult = trans.getResult();
+    result.clear(); // clear only the numbers, NOT the files or rows.
+    result.add( newResult );
+    if ( !Utils.isEmpty( newResult.getRows() ) || trans.isResultRowsSet() ) {
+      result.setRows( newResult.getRows() );
+    }
+  }
+
   /**
    * @deprecated use {@link #getTransMeta(Repository, IMetaStore, VariableSpace)}
    * @param rep
@@ -1274,95 +1316,34 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
     return getTransMeta( rep, null, space );
   }
 
-  private TransMeta getTransMetaFromRepository( Repository rep, CurrentDirectoryResolver r, String transPath ) throws KettleException {
-    String realTransName = "";
-    String realDirectory = "/";
-
-    if ( StringUtils.isBlank( transPath ) ) {
-      throw new KettleException( BaseMessages.getString( PKG, "JobTrans.Exception.MissingTransFileName" ) );
-    }
-
-    int index = transPath.lastIndexOf( RepositoryFile.SEPARATOR );
-    if ( index != -1 ) {
-      realTransName = transPath.substring( index + 1 );
-      realDirectory = index == 0 ? RepositoryFile.SEPARATOR : transPath.substring( 0, index );
-    }
-    realDirectory = r.normalizeSlashes( realDirectory );
-    RepositoryDirectoryInterface repositoryDirectory = rep.loadRepositoryDirectoryTree().findDirectory( realDirectory );
-    if ( repositoryDirectory == null ) {
-      throw new KettleException( "Unable to find repository directory [" + Const.NVL( realDirectory, "" ) + "]" );
-    }
-    return rep.loadTransformation( realTransName, repositoryDirectory, null, true, null );
-  }
-
   public TransMeta getTransMeta( Repository rep, IMetaStore metaStore, VariableSpace space ) throws KettleException {
     try {
-      TransMeta transMeta = null;
-      CurrentDirectoryResolver r = new CurrentDirectoryResolver();
-      VariableSpace tmpSpace = r.resolveCurrentDirectory(
-          specificationMethod, space, rep, parentJob, getFilename() );
-      switch ( specificationMethod ) {
-        case FILENAME:
-          String realFilename = tmpSpace.environmentSubstitute( getFilename() );
-
-          try {
-            transMeta = new TransMeta( realFilename, metaStore, null, true, null, null );
-          } catch ( KettleException e ) {
-            // try to load from repository, this trans may have been developed locally and later uploaded to the
-            // repository
-            transMeta = getTransMetaFromRepository( rep, r, realFilename );
-          }
-          break;
-        case REPOSITORY_BY_NAME:
-          String realDirectory = tmpSpace.environmentSubstitute( getDirectory() != null ? getDirectory() : "" );
-          String realTransName = tmpSpace.environmentSubstitute( getTransname() );
-
-          String transPath = StringUtil.trimEnd( realDirectory, '/' ) + RepositoryFile.SEPARATOR + StringUtil
-                  .trimStart( realTransName, '/' );
-
-          if ( transPath.startsWith( "file://" ) || transPath.startsWith( "zip:file://" ) || transPath.startsWith(
-                  "hdfs://" ) ) {
-            if ( !transPath.endsWith( RepositoryObjectType.TRANSFORMATION.getExtension() ) ) {
-              transPath = transPath + RepositoryObjectType.TRANSFORMATION.getExtension();
-            }
-            transMeta = new TransMeta( transPath, metaStore, null, true, this, null );
-          } else {
-            transMeta = rep == null ? new TransMeta( transPath, metaStore, null, true, this, null ) : getTransMetaFromRepository( rep, r, transPath );
-          }
-          break;
-        case REPOSITORY_BY_REFERENCE:
-          if ( transObjectId == null ) {
-            throw new KettleException( BaseMessages.getString( PKG,
-              "JobTrans.Exception.ReferencedTransformationIdIsNull" ) );
-          }
-
-          if ( rep != null ) {
-            // Load the last revision
-            //
-            transMeta = rep.loadTransformation( transObjectId, null );
-          }
-          break;
-        default:
-          throw new KettleException( "The specified object location specification method '"
-            + specificationMethod + "' is not yet supported in this job entry." );
-      }
+      IMetaFileLoader<TransMeta> metaFileLoader = new MetaFileLoaderImpl<>( this, specificationMethod );
+      TransMeta transMeta = metaFileLoader.getMetaForEntry( parentJobMeta.getBowl(), rep, metaStore, space );
 
       if ( transMeta != null ) {
-        // set Internal.Entry.Current.Directory again because it was changed
-        transMeta.setInternalKettleVariables();
+        // Pass repository and metastore references first.
+        //
+        transMeta.setRepository( rep );
+        transMeta.setMetaStore( metaStore );
+
+        // NOTE: do NOT call transMeta.setInternalKettleVariables() here.
+        // MetaFileLoaderImpl.getMetaForEntry has already seeded Internal.Entry.Current.Directory (and
+        // friends) on the loaded meta from the freshly resolved tmpSpace for *this* job-entry invocation.
+        // Calling setInternalKettleVariables() at this point would recompute those vars from the meta's
+        // own (potentially stale or context-mismatched) directory/filename fields and clobber the
+        // correct value -- this was the root cause of Internal.Entry.Current.Directory resolving to the
+        // parent directory (e.g. "/public" instead of "/public/test") when a transformation is invoked
+        // from a job entry.
+
         //  When the child parameter does exist in the parent parameters, overwrite the child parameter by the
         // parent parameter.
-
-        StepWithMappingMeta.replaceVariableValues( transMeta, space );
+        StepWithMappingMeta.replaceVariableValues( transMeta, space, "Trans" );
         if ( isPassingAllParameters() ) {
           // All other parent parameters need to get copied into the child parameters  (when the 'Inherit all
           // variables from the transformation?' option is checked)
           StepWithMappingMeta.addMissingVariables( transMeta, space );
         }
-        // Pass repository and metastore references
-        //
-        transMeta.setRepository( rep );
-        transMeta.setMetaStore( metaStore );
       }
 
       return transMeta;
@@ -1424,16 +1405,16 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
   public void check( List<CheckResultInterface> remarks, JobMeta jobMeta, VariableSpace space,
                      Repository repository, IMetaStore metaStore ) {
     if ( setLogfile ) {
-      JobEntryValidatorUtils.andValidator().validate( this, "logfile", remarks,
+      JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "logfile", remarks,
           AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
     }
     if ( !Utils.isEmpty( filename ) ) {
-      JobEntryValidatorUtils.andValidator().validate( this, "filename", remarks,
+      JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "filename", remarks,
           AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
     } else {
-      JobEntryValidatorUtils.andValidator().validate( this, "transname", remarks,
+      JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "transname", remarks,
           AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
-      JobEntryValidatorUtils.andValidator().validate( this, "directory", remarks,
+      JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "directory", remarks,
           AndValidator.putValidators( JobEntryValidatorUtils.notNullValidator() ) );
     }
   }
@@ -1470,8 +1451,9 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
    * @throws KettleException in case something goes wrong during the export
    */
   @Override
-  public String exportResources( VariableSpace space, Map<String, ResourceDefinition> definitions,
-                                 ResourceNamingInterface namingInterface, Repository repository, IMetaStore metaStore ) throws KettleException {
+  public String exportResources( Bowl executionBowl, Bowl globalManagementBowl, VariableSpace space,
+      Map<String, ResourceDefinition> definitions, ResourceNamingInterface namingInterface, Repository repository,
+      IMetaStore metaStore ) throws KettleException {
     // Try to load the transformation from repository or file.
     // Modify this recursively too...
     //
@@ -1485,7 +1467,8 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
     // Also go down into the transformation and export the files there. (mapping recursively down)
     //
     String proposedNewFilename =
-      transMeta.exportResources( transMeta, definitions, namingInterface, repository, metaStore );
+      transMeta.exportResources( executionBowl, globalManagementBowl, transMeta, definitions, namingInterface,
+        repository, metaStore );
 
     // To get a relative path to it, we inject ${Internal.Entry.Current.Directory}
     //
@@ -1671,7 +1654,8 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
    * @throws KettleException
    */
   @Override
-  public Object loadReferencedObject( int index, Repository rep, IMetaStore metaStore, VariableSpace space ) throws KettleException {
+  public Object loadReferencedObject( Bowl bowl, int index, Repository rep, IMetaStore metaStore, VariableSpace space )
+    throws KettleException {
     return getTransMeta( rep, metaStore, space );
   }
 
@@ -1695,6 +1679,14 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
       // Set fieldNameParameter only if exists and if it is not declared any staticValue( parameterValues array )
       //
       String thisValue = namedParam.getParameterValue( parameters[ idx ] );
+      // multiple executions on the same jobEntryTrans variableSpace need to be updated even for nulls or blank values.
+      // so we have to ask if that same variable had a value before and if it had - and the new value is empty -
+      // we should set it as a blank value instead of ignoring it.
+      // NOTE: we should only replace it if we have a parameterFieldNames defined -> parameterFieldNames[ idx ] ) != null
+      if ( !Utils.isEmpty( jobEntryTrans.getVariable( parameters[ idx ] ) ) && Utils.isEmpty( thisValue )
+        && idx < parameterFieldNames.length && !Utils.isEmpty( Const.trim( parameterFieldNames[ idx ] ) ) ) {
+        jobEntryTrans.setVariable( parameters[ idx ], "" );
+      }
       // Set value only if is not empty at namedParam and exists in parameterFieldNames
       if ( !Utils.isEmpty( thisValue ) && idx < parameterFieldNames.length ) {
         // If exists then ask if is not empty
@@ -1715,4 +1707,50 @@ public class JobEntryTrans extends JobEntryBase implements Cloneable, JobEntryIn
     }
   }
 
+  /*
+   * Users may define a named parameter with a name matching SUPPRESS_TRANS_RESULT_DATA_* with a value matching the name
+   * of a JobEntryTrans step.  If such a parameter is found and its value matches this step's name, then do not request
+   * the result row data of the transformation when it finishes running.  Only applies to remote slave servers.
+   */
+  public boolean isSuppressResultData() {
+    boolean returnVal = suppressResultData;
+    if ( !suppressResultData && parentJobMeta != null ) {
+      String[] params = parentJobMeta.listParameters();
+      for ( String param : params ) {
+        if ( param.startsWith( "SUPPRESS_TRANS_RESULT_DATA_" ) ) {
+          try {
+            String paramVal = parentJobMeta.getParameterValue( param );
+            if ( paramVal != null ) {
+              returnVal |= paramVal.equals( this.getName() );
+            }
+          } catch ( UnknownParamException e ) {
+            logError( BaseMessages.getString( PKG, "JobTrans.Exception.SuppressResultParam" ), e );
+          }
+        }
+      }
+    }
+    return returnVal;
+  }
+
+  public void setSuppressResultData( boolean suppressResultData ) {
+    this.suppressResultData = suppressResultData;
+  }
+
+  @Override public void callBeforeLog() {
+    if ( parentJob != null ) {
+      parentJob.callBeforeLog();
+    }
+  }
+
+  @Override
+  public void callAfterLog() {
+    if ( parentJob != null ) {
+      parentJob.callAfterLog();
+    }
+  }
+
+  @Override
+  public JobEntryHelperInterface getJobEntryHelperInterface() {
+    return new JobEntryTransHelper( this );
+  }
 }

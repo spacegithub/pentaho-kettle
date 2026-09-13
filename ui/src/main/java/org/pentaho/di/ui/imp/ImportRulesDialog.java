@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.imp;
 
@@ -50,6 +42,7 @@ import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.ToolBar;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.KettleEnvironment;
 import org.pentaho.di.core.exception.KettleException;
@@ -375,7 +368,8 @@ public class ImportRulesDialog extends Dialog implements XulEventHandler {
 
       ImportRules newRules = new ImportRules();
       try {
-        newRules.loadXML( XMLHandler.getSubNode( XMLHandler.loadXMLFile( filename ), ImportRules.XML_TAG ) );
+        newRules.loadXML( XMLHandler.getSubNode( XMLHandler.loadXMLFile( DefaultBowl.getInstance(),
+          filename ), ImportRules.XML_TAG ) );
         importRules = newRules;
 
         // Re-load the dialog.
@@ -507,7 +501,7 @@ public class ImportRulesDialog extends Dialog implements XulEventHandler {
 
     ImportRules importRules = new ImportRules();
     importRules.loadXML( XMLHandler.getSubNode(
-      XMLHandler.loadXMLFile( "bin/import-rules.xml" ), ImportRules.XML_TAG ) );
+      XMLHandler.loadXMLFile( DefaultBowl.getInstance(), "bin/import-rules.xml" ), ImportRules.XML_TAG ) );
 
     ImportRulesDialog dialog = new ImportRulesDialog( shell, importRules );
     if ( dialog.open() ) {

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.www;
 
@@ -28,9 +20,9 @@ import java.io.PrintWriter;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.owasp.encoder.Encode;
@@ -212,6 +204,9 @@ public class GetTransStatusServlet extends BaseHttpServlet implements CartePlugi
 
     String transName = request.getParameter( "name" );
     String id = request.getParameter( "id" );
+    String root = request.getRequestURI() == null ? StatusServletUtils.PENTAHO_ROOT
+      : request.getRequestURI().substring( 0, request.getRequestURI().indexOf( CONTEXT_PATH ) );
+    String prefix = isJettyMode() ? StatusServletUtils.STATIC_PATH : root + StatusServletUtils.RESOURCES_PATH;
     boolean useXML = "Y".equalsIgnoreCase( request.getParameter( "xml" ) );
     int startLineNr = Const.toInt( request.getParameter( "from" ), 0 );
 
@@ -308,7 +303,7 @@ public class GetTransStatusServlet extends BaseHttpServlet implements CartePlugi
             out.write( XML_HEADER );
             out.write( data );
             out.flush();
-            if ( finishedOrStopped && logId != null && !dontUseCache ) {
+            if ( finishedOrStopped && ( transStatus.isFinished() || transStatus.isStopped() ) && logId != null && !dontUseCache ) {
               cache.put( logId, xml, startLineNr );
             }
           }
@@ -335,7 +330,13 @@ public class GetTransStatusServlet extends BaseHttpServlet implements CartePlugi
             + URLEncoder.encode( id, "UTF-8" ) + "\">" );
         }
         out.println( "<META http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">" );
-        out.print( StatusServletUtils.getPentahoStyles() );
+
+        if ( isJettyMode() ) {
+          out.println( "<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/css/carte.css\" />" );
+        } else {
+          out.print( StatusServletUtils.getPentahoStyles( request.getSession().getServletContext(),  root ) );
+        }
+
         out.println( "</HEAD>" );
         out.println( "<BODY style=\"overflow: auto;\">" );
         out.println( "<div class=\"row\" id=\"pucHeader\">" );
@@ -348,13 +349,13 @@ public class GetTransStatusServlet extends BaseHttpServlet implements CartePlugi
           out.println( "<div class=\"row\" style=\"padding: 0px 0px 0px 30px\">" );
           out.println( "<div class=\"row\" style=\"padding-top: 30px;\">" );
           out.print( "<a href=\"" + convertContextPath( GetStatusServlet.CONTEXT_PATH ) + "\">" );
-          out.print( "<img src=\"/pentaho/content/common-ui/resources/themes/images/back.svg\" style=\"margin-right: 5px; width: 16px; height: 16px; vertical-align: middle;\">" );
+          out.print( "<img src=\"" + prefix + "/images/back.svg\" style=\"margin-right: 5px; width: 16px; height: 16px; vertical-align: middle;\">" );
           out.print( BaseMessages.getString( PKG, "CarteStatusServlet.BackToCarteStatus" ) + "</a>" );
           out.println( "</div>" );
           out.println( "<div class=\"row\" style=\"padding: 30px 0px 75px 0px; display: table;\">" );
           out.println( "<div style=\"display: table-row;\">" );
           out.println( "<div style=\"padding: 0px 30px 0px 0px; width: 60px; display: table-cell; vertical-align: top;\">" );
-          out.println( "<img src=\"/pentaho/content/common-ui/resources/themes/images/trans.svg\" style=\"width: 60px; height: 60px;\"></img>" );
+          out.println( "<img src=\"" + prefix + "/images/trans.svg\" style=\"width: 60px; height: 60px;\"></img>" );
           out.println( "</div>" );
           out.println( "<div style=\"vertical-align: top; display: table-cell;\">" );
           out.println( "<table style=\"border-collapse: collapse;\" border=\"" + tableBorder + "\">" );
@@ -366,7 +367,8 @@ public class GetTransStatusServlet extends BaseHttpServlet implements CartePlugi
           out.print( "<td style=\"padding: 8px 10px 10px 10px\" class=\"cellTableCell cellTableFirstColumn\">" + Encode.forHtml( id ) + "</td>" );
           out.print( "<td style=\"padding: 8px 10px 10px 10px\" class=\"cellTableCell\" id=\"statusColor\" style=\"font-weight: bold;\">" + Encode.forHtml( trans.getStatus() ) + "</td>" );
           String dateStr = XMLHandler.date2string( trans.getLogDate() );
-          out.print( "<td style=\"padding: 8px 10px 10px 10px\" class=\"cellTableCell cellTableLastColumn\">" + dateStr.substring( 0, dateStr.indexOf( ' ' ) ) + "</td>" );
+          dateStr = dateStr == null ? "-" : dateStr.substring( 0, dateStr.indexOf( ' ' ) );
+          out.print( "<td style=\"padding: 8px 10px 10px 10px\" class=\"cellTableCell cellTableLastColumn\">" + dateStr + "</td>" );
           out.print( "</tr>" );
           out.print( "</table>" );
           out.print( "</div>" );
@@ -375,7 +377,7 @@ public class GetTransStatusServlet extends BaseHttpServlet implements CartePlugi
           out.print( "<a target=\"_blank\" href=\""
             + convertContextPath( GetTransStatusServlet.CONTEXT_PATH ) + "?name="
             + URLEncoder.encode( transName, "UTF-8" ) + "&id=" + URLEncoder.encode( id, "UTF-8" ) + "&xml=y\">"
-            + "<img src=\"/pentaho/content/common-ui/resources/themes/images/view-as-xml.svg\" style=\"display: block; margin: auto; width: 22px; height: 22px;\"></a>" );
+            + "<img src=\"" + prefix + "/images/view-as-xml.svg\" style=\"display: block; margin: auto; width: 22px; height: 22px;\"></a>" );
           out.print( "</div>" );
           out.println( "<div style=\"text-align: center; padding-top: 12px; font-size: 12px;\">" );
           out.print( "<a target=\"_blank\" href=\""

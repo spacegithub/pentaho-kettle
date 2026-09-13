@@ -1,36 +1,25 @@
-/*
- * ! ******************************************************************************
- *  *
- *  * Pentaho Data Integration
- *  *
- *  * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
- *  *
- *  *******************************************************************************
- *  *
- *  * Licensed under the Apache License, Version 2.0 (the "License");
- *  * you may not use this file except in compliance with
- *  * the License. You may obtain a copy of the License at
- *  *
- *  *    http://www.apache.org/licenses/LICENSE-2.0
- *  *
- *  * Unless required by applicable law or agreed to in writing, software
- *  * distributed under the License is distributed on an "AS IS" BASIS,
- *  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  * See the License for the specific language governing permissions and
- *  * limitations under the License.
- *  *
- *  *****************************************************************************
- */
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.validator;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyInt;
-import static org.mockito.Matchers.anyObject;
-import static org.mockito.Matchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
@@ -56,6 +45,7 @@ import org.pentaho.di.core.row.value.ValueMetaBigNumber;
 import org.pentaho.di.core.row.value.ValueMetaInteger;
 import org.pentaho.di.core.row.value.ValueMetaNumber;
 import org.pentaho.di.core.row.value.ValueMetaString;
+import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.steps.mock.StepMockHelper;
 
@@ -67,7 +57,7 @@ public class ValidatorTest {
   @Before
   public void setUp() throws Exception {
     mockHelper =
-      new StepMockHelper<ValidatorMeta, ValidatorData>( "Validator", ValidatorMeta.class, ValidatorData.class );
+      new StepMockHelper<>( "Validator", ValidatorMeta.class, ValidatorData.class );
     when( mockHelper.logChannelInterfaceFactory.create( any(), any( LoggingObjectInterface.class ) ) ).thenReturn(
       mockHelper.logChannelInterface );
     when( mockHelper.trans.isRunning() ).thenReturn( true );
@@ -105,7 +95,7 @@ public class ValidatorTest {
 
     doReturn( new ValueMetaString( "field" ) ).when( validator ).createValueMeta( anyString(), anyInt() );
     doReturn( new ValueMetaString( "field" ) ).when( validator ).cloneValueMeta(
-      (ValueMetaInterface) anyObject(), anyInt() );
+      any(), anyInt() );
 
     validator.init( meta, data );
   }
@@ -140,8 +130,15 @@ public class ValidatorTest {
   @Test
   public void assertNumeric_String() throws Exception {
     ValueMetaString metaString = new ValueMetaString( "string" );
-    assertNotNull( "General strings are not allowed",
-      validator.assertNumeric( metaString, "qwerty", new Validation() ) );
+    Validation validation = new Validation();
+    validation.setFieldName( "string" );
+    Assert.assertEquals( ValueMetaInterface.TYPE_STRING, metaString.getType() );
+    KettleValidatorException validatorException = validator.assertNumeric( metaString, "qwerty", validation );
+    assertNotNull( "General strings are not allowed", validatorException );
+    // Since the plugin registry is not loaded with the value meta plugins for this unit test,
+    // the meta type is going to be "-" in the message instead of String
+    Assert.assertTrue( validatorException.getMessage().contains( BaseMessages.getString( Validator.class, "Validator.Exception.NonNumericDataNotAllowed",
+      "string", "-", "qwerty" ) ) );
   }
 
   @Test

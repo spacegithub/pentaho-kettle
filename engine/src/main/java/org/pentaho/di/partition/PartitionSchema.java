@@ -1,33 +1,27 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.partition;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.changed.ChangedFlag;
+import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.core.xml.XMLInterface;
@@ -39,6 +33,7 @@ import org.pentaho.di.repository.RepositoryElementInterface;
 import org.pentaho.di.repository.RepositoryObjectType;
 import org.pentaho.di.resource.ResourceHolderInterface;
 import org.pentaho.di.shared.SharedObjectInterface;
+import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
 /**
@@ -47,11 +42,13 @@ import org.w3c.dom.Node;
  *
  * @author Matt
  */
-public class PartitionSchema extends ChangedFlag implements Cloneable, SharedObjectInterface,
+public class PartitionSchema extends ChangedFlag implements Cloneable, SharedObjectInterface<PartitionSchema>,
   ResourceHolderInterface, RepositoryElementInterface, XMLInterface {
   public static final String XML_TAG = "partitionschema";
 
   public static final RepositoryObjectType REPOSITORY_ELEMENT_TYPE = RepositoryObjectType.PARTITION_SCHEMA;
+  public static final Comparator<PartitionSchema> COMPARATOR = Comparator.comparing( PartitionSchema::getName,
+                                                                                     String.CASE_INSENSITIVE_ORDER);
 
   private String name;
 
@@ -85,7 +82,6 @@ public class PartitionSchema extends ChangedFlag implements Cloneable, SharedObj
   public Object clone() {
     PartitionSchema partitionSchema = new PartitionSchema();
     partitionSchema.replaceMeta( this );
-    partitionSchema.setObjectId( null );
     return partitionSchema;
   }
 
@@ -162,6 +158,7 @@ public class PartitionSchema extends ChangedFlag implements Cloneable, SharedObj
     xml
       .append( "        " ).append(
         XMLHandler.addTagValue( "partitions_per_slave", numberOfPartitionsPerSlave ) );
+    appendObjectId( xml );
 
     xml.append( "      " ).append( XMLHandler.closeTag( XML_TAG ) ).append( Const.CR );
     return xml.toString();
@@ -174,9 +171,10 @@ public class PartitionSchema extends ChangedFlag implements Cloneable, SharedObj
     int nrIDs = XMLHandler.countNodes( partitionSchemaNode, "partition" );
     partitionIDs = new ArrayList<String>();
     for ( int i = 0; i < nrIDs; i++ ) {
-      Node partitionNode = XMLHandler.getSubNodeByNr( partitionSchemaNode, "partition", i );
+      Node partitionNode = XMLHandler.getSubNodeByNr( partitionSchemaNode, "partition", i, false );
       partitionIDs.add( XMLHandler.getTagValue( partitionNode, "id" ) );
     }
+    readObjectId( partitionSchemaNode );
 
     dynamicallyDefined = "Y".equalsIgnoreCase( XMLHandler.getTagValue( partitionSchemaNode, "dynamic" ) );
     numberOfPartitionsPerSlave = XMLHandler.getTagValue( partitionSchemaNode, "partitions_per_slave" );
@@ -332,5 +330,16 @@ public class PartitionSchema extends ChangedFlag implements Cloneable, SharedObj
    */
   public void setChangedDate( Date changedDate ) {
     this.changedDate = changedDate;
+  }
+
+  @Override
+  public PartitionSchema makeClone() {
+    return (PartitionSchema) clone();
+  }
+
+  @Override
+  public Node toNode() throws KettleException {
+    Document doc = XMLHandler.loadXMLString( getXML() );
+    return XMLHandler.getSubNode( doc, XML_TAG );
   }
 }

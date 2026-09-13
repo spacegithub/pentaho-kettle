@@ -1,19 +1,16 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.pur;
 
 import org.pentaho.di.cluster.SlaveServer;
@@ -30,27 +27,18 @@ import org.pentaho.platform.api.repository2.unified.data.node.NodeRepositoryFile
 public class SlaveDelegate extends AbstractDelegate implements ITransformer, SharedObjectAssembler<SlaveServer>,
     java.io.Serializable {
 
-  private static final long serialVersionUID = -8084266831877112729L; /* EESOURCE: UPDATE SERIALVERUID */
-
-  private static final String NODE_ROOT = "Slave"; //$NON-NLS-1$
-
-  private static final String PROP_PASSWORD = "PASSWORD"; //$NON-NLS-1$
-
-  private static final String PROP_USERNAME = "USERNAME"; //$NON-NLS-1$
-
-  private static final String PROP_PORT = "PORT"; //$NON-NLS-1$
-
-  private static final String PROP_HOST_NAME = "HOST_NAME"; //$NON-NLS-1$
-
-  private static final String PROP_PROXY_HOST_NAME = "PROXY_HOST_NAME"; //$NON-NLS-1$
-
-  private static final String PROP_PROXY_PORT = "PROXY_PORT"; //$NON-NLS-1$
-
-  private static final String PROP_WEBAPP_NAME = "WEBAPP_NAME"; //$NON-NLS-1$
-
-  private static final String PROP_NON_PROXY_HOSTS = "NON_PROXY_HOSTS"; //$NON-NLS-1$
-
-  private static final String PROP_MASTER = "MASTER"; //$NON-NLS-1$
+  static final long serialVersionUID = -8084266831877112729L; /* EESOURCE: UPDATE SERIALVERUID */
+  static final String NODE_ROOT = "Slave";
+  static final String PROP_PASSWORD = "PASSWORD";
+  static final String PROP_USERNAME = "USERNAME";
+  static final String PROP_PORT = "PORT";
+  static final String PROP_HOST_NAME = "HOST_NAME";
+  static final String PROP_PROXY_HOST_NAME = "PROXY_HOST_NAME";
+  static final String PROP_PROXY_PORT = "PROXY_PORT";
+  static final String PROP_WEBAPP_NAME = "WEBAPP_NAME";
+  static final String PROP_NON_PROXY_HOSTS = "NON_PROXY_HOSTS";
+  static final String PROP_MASTER = "MASTER";
+  static final String PROP_USE_HTTPS_PROTOCOL = "USE_HTTPS_PROTOCOL";
 
   // ~ Instance fields =================================================================================================
 
@@ -79,7 +67,8 @@ public class SlaveDelegate extends AbstractDelegate implements ITransformer, Sha
     slaveServer.setProxyPort( getString( rootNode, PROP_PROXY_PORT ) );
     slaveServer.setWebAppName( getString( rootNode, PROP_WEBAPP_NAME ) );
     slaveServer.setNonProxyHosts( getString( rootNode, PROP_NON_PROXY_HOSTS ) );
-    slaveServer.setMaster( rootNode.getProperty( PROP_MASTER ).getBoolean() );
+    slaveServer.setMaster( getBoolean( rootNode, PROP_MASTER ) );
+    slaveServer.setSslMode( getBoolean( rootNode, PROP_USE_HTTPS_PROTOCOL ) );
   }
 
   public DataNode elementToDataNode( RepositoryElementInterface element ) throws KettleException {
@@ -104,6 +93,7 @@ public class SlaveDelegate extends AbstractDelegate implements ITransformer, Sha
     rootNode.setProperty( PROP_PROXY_PORT, slaveServer.getProxyPort() );
     rootNode.setProperty( PROP_NON_PROXY_HOSTS, slaveServer.getNonProxyHosts() );
     rootNode.setProperty( PROP_MASTER, slaveServer.isMaster() );
+    rootNode.setProperty( PROP_USE_HTTPS_PROTOCOL, slaveServer.isSslMode() );
     return rootNode;
   }
 

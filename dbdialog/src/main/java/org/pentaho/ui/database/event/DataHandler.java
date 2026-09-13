@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.ui.database.event;
 
@@ -29,13 +21,15 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.Collections;
-import org.apache.commons.lang.StringUtils;
+
+import org.apache.commons.lang3.StringUtils;
 import org.eclipse.swt.widgets.Display;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.database.BaseDatabaseMeta;
@@ -47,6 +41,7 @@ import org.pentaho.di.core.database.GenericDatabaseMeta;
 import org.pentaho.di.core.database.MSSQLServerNativeDatabaseMeta;
 import org.pentaho.di.core.database.OracleDatabaseMeta;
 import org.pentaho.di.core.database.PartitionDatabaseMeta;
+import org.pentaho.di.core.encryption.Encr;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.logging.LogChannel;
 import org.pentaho.di.core.plugins.DatabasePluginType;
@@ -73,8 +68,23 @@ import org.pentaho.ui.xul.containers.XulRoot;
 import org.pentaho.ui.xul.containers.XulTree;
 import org.pentaho.ui.xul.containers.XulTreeItem;
 import org.pentaho.ui.xul.containers.XulTreeRow;
+import org.pentaho.ui.xul.containers.XulVbox;
 import org.pentaho.ui.xul.containers.XulWindow;
 import org.pentaho.ui.xul.impl.AbstractXulEventHandler;
+
+import static org.pentaho.di.core.database.AzureSqlDataBaseMeta.CLIENT_SECRET_KEY;
+import static org.pentaho.di.core.database.AzureSqlDataBaseMeta.CLIENT_ID;
+import static org.pentaho.di.core.database.AzureSqlDataBaseMeta.IS_ALWAYS_ENCRYPTION_ENABLED;
+import static org.pentaho.di.core.database.AzureSqlDataBaseMeta.SQL_AUTHENTICATION;
+import static org.pentaho.di.core.database.RedshiftDatabaseMeta.IAM_ACCESS_KEY_ID;
+import static org.pentaho.di.core.database.RedshiftDatabaseMeta.IAM_CREDENTIALS;
+import static org.pentaho.di.core.database.RedshiftDatabaseMeta.IAM_PROFILE_NAME;
+import static org.pentaho.di.core.database.RedshiftDatabaseMeta.IAM_SECRET_ACCESS_KEY;
+import static org.pentaho.di.core.database.RedshiftDatabaseMeta.IAM_SESSION_TOKEN;
+import static org.pentaho.di.core.database.RedshiftDatabaseMeta.JDBC_AUTH_METHOD;
+import static org.pentaho.di.core.database.RedshiftDatabaseMeta.PROFILE_CREDENTIALS;
+import static org.pentaho.di.core.database.RedshiftDatabaseMeta.STANDARD_CREDENTIALS;
+import static org.pentaho.di.core.database.SnowflakeHVDatabaseMeta.WAREHOUSE;
 
 /**
  * Handles all manipulation of the DatabaseMeta, data retrieval from XUL DOM and rudimentary validation.
@@ -92,10 +102,14 @@ public class DataHandler extends AbstractXulEventHandler {
 
   // Kettle thin related
   private static final String EXTRA_OPTION_WEB_APPLICATION_NAME = BaseDatabaseMeta.ATTRIBUTE_PREFIX_EXTRA_OPTION
-      + "KettleThin.webappname";
+    + "KettleThin.webappname";
   private static final String DEFAULT_WEB_APPLICATION_NAME = "pentaho";
 
+
   private List<String> databaseDialects;
+
+  /** A database-specific handler */
+  private Optional<DbInfoHandler> extraHandler = Optional.empty();
 
   // The connectionMap allows us to keep track of the connection
   // type we are working with and the correlating database interface
@@ -126,7 +140,11 @@ public class DataHandler extends AbstractXulEventHandler {
 
   protected DatabaseMeta databaseMeta = null;
 
+  protected String originalName = null;
+
   protected DatabaseMeta cache = new DatabaseMeta();
+
+  protected Launch launch = new Launch();
 
   private XulDeck dialogDeck;
 
@@ -161,7 +179,7 @@ public class DataHandler extends AbstractXulEventHandler {
   protected XulTextbox indexTablespaceBox;
 
   // MS SQL Server specific
-  private XulTextbox serverInstanceBox;
+  protected XulTextbox serverInstanceBox;
 
   // Informix specific
   private XulTextbox serverNameBox;
@@ -175,13 +193,16 @@ public class DataHandler extends AbstractXulEventHandler {
   // SAP R/3 specific
   protected XulTextbox clientBox;
 
+  // Snowflake specific
+  protected XulTextbox warehouseBox;
+
   // MS SQL Server specific
   private XulCheckbox doubleDecimalSeparatorCheck;
 
   // MySQL specific
   private XulCheckbox resultStreamingCursorCheck;
 
-  // Hitachi Vantara data services specific
+  // Pentaho data services specific
   private XulTextbox webAppName;
 
   // ==== Options Panel ==== //
@@ -238,12 +259,25 @@ public class DataHandler extends AbstractXulEventHandler {
 
   protected XulTree poolParameterTree;
 
-  protected XulMenuList databaseDialectList;
+  protected XulMenuList<String> databaseDialectList;
 
   protected XulButton acceptButton;
   private XulButton cancelButton;
   private XulButton testButton;
   private XulLabel noticeLabel;
+
+  private XulMenuList<?> jdbcAuthMethod;
+  private XulTextbox iamAccessKeyId;
+  private XulTextbox iamSecretKeyId;
+  private XulTextbox iamSessionToken;
+  private XulTextbox iamProfileName;
+  protected XulMenuList<String> namedClusterList;
+
+  //Azure SQL DB Variables
+  private XulMenuList<?> azureSqlDBJdbcAuthMethod;
+  private XulCheckbox azureSqlDBAlwaysEncryptionEnabled;
+  private XulTextbox azureSqlDBClientSecretId;
+  private XulTextbox azureSqlDBClientSecretKey;
 
   public DataHandler() {
     databaseDialects = new ArrayList<String>();
@@ -252,6 +286,17 @@ public class DataHandler extends AbstractXulEventHandler {
       databaseDialects.add( dialect.getPluginName() );
     }
     Collections.sort( databaseDialects );
+
+  }
+
+  /** Set a handler to deal with database-specific save/load. */
+  public void setExtraHandler( DbInfoHandler handler ) {
+    this.extraHandler = Optional.of( handler );
+  }
+
+  /** @see #setExtraHandler(DbInfoHandler) */
+  public void clearExtraHandler() {
+    this.extraHandler = Optional.empty();
   }
 
   public void loadConnectionData() {
@@ -372,7 +417,7 @@ public class DataHandler extends AbstractXulEventHandler {
 
     // Last resort, set first as default
     if ( accessBox.getSelectedItem() == null ) {
-      accessBox.setSelectedItem( DatabaseMeta.getAccessTypeDescLong( acc[0] ) );
+      accessBox.setSelectedItem( DatabaseMeta.getAccessTypeDescLong( acc[ 0 ] ) );
     }
 
     Map<String, String> options = null;
@@ -401,8 +446,8 @@ public class DataHandler extends AbstractXulEventHandler {
       // editing last row add a new one below
 
       Object[][] values = optionsParameterTree.getValues();
-      Object[] row = values[values.length - 1];
-      if ( row != null && ( !StringUtils.isEmpty( (String) row[0] ) || !StringUtils.isEmpty( (String) row[1] ) ) ) {
+      Object[] row = values[ values.length - 1 ];
+      if ( row != null && ( !StringUtils.isEmpty( (String) row[ 0 ] ) || !StringUtils.isEmpty( (String) row[ 1 ] ) ) ) {
         // acutally have something in current last row
         XulTreeRow newRow = optionsParameterTree.getRootChildren().addNewRow();
 
@@ -433,7 +478,7 @@ public class DataHandler extends AbstractXulEventHandler {
       return;
     }
 
-    Status status = Launch.openURL( url );
+    Status status = launch.openURL( url );
 
     if ( status.equals( Status.Failed ) ) {
       message = Messages.getString( "DataHandler.USER_UNABLE_TO_LAUNCH_BROWSER", url );
@@ -591,7 +636,7 @@ public class DataHandler extends AbstractXulEventHandler {
 
     if ( remarks.length != 0 ) {
       for ( int i = 0; i < remarks.length; i++ ) {
-        message = message.concat( "* " ).concat( remarks[i] ).concat( System.getProperty( "line.separator" ) );
+        message = message.concat( "* " ).concat( remarks[ i ] ).concat( System.getProperty( "line.separator" ) );
       }
       showMessage( message, false );
     } else {
@@ -614,7 +659,7 @@ public class DataHandler extends AbstractXulEventHandler {
 
     if ( remarks.length != 0 ) {
       for ( int i = 0; i < remarks.length; i++ ) {
-        message = message.concat( "* " ).concat( remarks[i] ).concat( System.getProperty( "line.separator" ) );
+        message = message.concat( "* " ).concat( remarks[ i ] ).concat( System.getProperty( "line.separator" ) );
       }
       showMessage( message, message.length() > 300 );
     } else {
@@ -667,8 +712,8 @@ public class DataHandler extends AbstractXulEventHandler {
       Object[][] values = optionsParameterTree.getValues();
       for ( int i = 0; i < values.length; i++ ) {
 
-        String parameter = (String) values[i][0];
-        String value = (String) values[i][1];
+        String parameter = (String) values[ i ][ 0 ];
+        String value = (String) values[ i ][ 1 ];
 
         if ( value == null ) {
           value = "";
@@ -737,23 +782,23 @@ public class DataHandler extends AbstractXulEventHandler {
       List<PartitionDatabaseMeta> pdms = new ArrayList<PartitionDatabaseMeta>();
       for ( int i = 0; i < values.length; i++ ) {
 
-        String partitionId = (String) values[i][0];
+        String partitionId = (String) values[ i ][ 0 ];
 
         if ( ( partitionId == null ) || ( partitionId.trim().length() <= 0 ) ) {
           continue;
         }
 
-        String hostname = (String) values[i][1];
-        String port = (String) values[i][2];
-        String dbName = (String) values[i][3];
-        String username = (String) values[i][4];
-        String password = (String) values[i][5];
+        String hostname = (String) values[ i ][ 1 ];
+        String port = (String) values[ i ][ 2 ];
+        String dbName = (String) values[ i ][ 3 ];
+        String username = (String) values[ i ][ 4 ];
+        String password = (String) values[ i ][ 5 ];
         PartitionDatabaseMeta pdm = new PartitionDatabaseMeta( partitionId, hostname, port, dbName );
         pdm.setUsername( username );
         pdm.setPassword( password );
         pdms.add( pdm );
       }
-      PartitionDatabaseMeta[] pdmArray = new PartitionDatabaseMeta[pdms.size()];
+      PartitionDatabaseMeta[] pdmArray = new PartitionDatabaseMeta[ pdms.size() ];
       meta.setPartitioningInformation( pdms.toArray( pdmArray ) );
     }
 
@@ -764,8 +809,7 @@ public class DataHandler extends AbstractXulEventHandler {
     if ( meta.isUsingConnectionPool() ) {
       if ( poolSizeBox != null ) {
         try {
-          int initialPoolSize = Integer.parseInt( poolSizeBox.getValue() );
-          meta.setInitialPoolSize( initialPoolSize );
+          meta.setInitialPoolSizeString( poolSizeBox.getValue() );
         } catch ( NumberFormatException e ) {
           // TODO log exception and move on ...
         }
@@ -773,8 +817,7 @@ public class DataHandler extends AbstractXulEventHandler {
 
       if ( maxPoolSizeBox != null ) {
         try {
-          int maxPoolSize = Integer.parseInt( maxPoolSizeBox.getValue() );
-          meta.setMaximumPoolSize( maxPoolSize );
+          meta.setMaximumPoolSizeString( maxPoolSizeBox.getValue() );
         } catch ( NumberFormatException e ) {
           // TODO log exception and move on ...
         }
@@ -786,18 +829,18 @@ public class DataHandler extends AbstractXulEventHandler {
         for ( int i = 0; i < values.length; i++ ) {
 
           boolean isChecked = false;
-          if ( values[i][0] instanceof Boolean ) {
-            isChecked = ( (Boolean) values[i][0] ).booleanValue();
+          if ( values[ i ][ 0 ] instanceof Boolean ) {
+            isChecked = ( (Boolean) values[ i ][ 0 ] ).booleanValue();
           } else {
-            isChecked = Boolean.valueOf( (String) values[i][0] );
+            isChecked = Boolean.valueOf( (String) values[ i ][ 0 ] );
           }
 
           if ( !isChecked ) {
             continue;
           }
 
-          String parameter = (String) values[i][1];
-          String value = (String) values[i][2];
+          String parameter = (String) values[ i ][ 1 ];
+          String value = (String) values[ i ][ 2 ];
           if ( ( parameter != null )
             && ( parameter.trim().length() > 0 ) && ( value != null ) && ( value.trim().length() > 0 ) ) {
             properties.setProperty( parameter, value );
@@ -807,7 +850,6 @@ public class DataHandler extends AbstractXulEventHandler {
         meta.setConnectionPoolingProperties( properties );
       }
     }
-
   }
 
   private void setInfo( DatabaseMeta meta ) {
@@ -815,6 +857,7 @@ public class DataHandler extends AbstractXulEventHandler {
     if ( meta == null ) {
       return;
     }
+    originalName = meta.getName();
 
     if ( meta.getAttributes().containsKey( EXTRA_OPTION_WEB_APPLICATION_NAME ) ) {
       meta.setDBName( (String) meta.getAttributes().get( EXTRA_OPTION_WEB_APPLICATION_NAME ) );
@@ -919,11 +962,11 @@ public class DataHandler extends AbstractXulEventHandler {
 
     if ( meta.isUsingConnectionPool() ) {
       if ( poolSizeBox != null ) {
-        poolSizeBox.setValue( Integer.toString( meta.getInitialPoolSize() ) );
+        poolSizeBox.setValue( meta.getInitialPoolSizeString() );
       }
 
       if ( maxPoolSizeBox != null ) {
-        maxPoolSizeBox.setValue( Integer.toString( meta.getMaximumPoolSize() ) );
+        maxPoolSizeBox.setValue( meta.getMaximumPoolSizeString() );
       }
 
       setPoolProperties( meta.getConnectionPoolingProperties() );
@@ -934,6 +977,60 @@ public class DataHandler extends AbstractXulEventHandler {
     setDeckChildIndex();
     onPoolingCheck();
     onClusterCheck();
+    enableAzureSqlDBEncryption();
+    setAzureSqlDBAuthRelatedFieldsVisible();
+  }
+
+  public void setAzureSqlDBAuthRelatedFieldsVisible() {
+    if ( passwordBox != null ) {
+      passwordBox.setDisabled( azureSqlDBJdbcAuthMethod != null &&
+        ( "Azure Active Directory - Universal With MFA".equals( azureSqlDBJdbcAuthMethod.getValue() ) ||
+          "Azure Active Directory - Integrated".equals( azureSqlDBJdbcAuthMethod.getValue() ) ) );
+    }
+    if ( userNameBox != null ) {
+      userNameBox.setDisabled( azureSqlDBJdbcAuthMethod != null && "Azure Active Directory - Integrated"
+        .equals( azureSqlDBJdbcAuthMethod.getValue() ) );
+    }
+  }
+
+  public void enableAzureSqlDBEncryption() {
+    if ( azureSqlDBAlwaysEncryptionEnabled != null ) {
+      boolean isAlwaysEncryptionEnabled = azureSqlDBAlwaysEncryptionEnabled.isChecked();
+      if ( !isAlwaysEncryptionEnabled ) {
+        azureSqlDBClientSecretId.setDisabled( true );
+        azureSqlDBClientSecretKey.setDisabled( true );
+      } else {
+        azureSqlDBClientSecretId.setDisabled( false );
+        azureSqlDBClientSecretKey.setDisabled( false );
+      }
+    }
+
+  }
+
+  @SuppressWarnings ( "unused" )
+  public void setAuthFieldsVisible() {
+    jdbcAuthMethod = (XulMenuList) document.getElementById( "redshift-auth-method-list" );
+    XulVbox standardControls = (XulVbox) document.getElementById( "auth-standard-controls" );
+    XulVbox iamControls = (XulVbox) document.getElementById( "auth-iam-controls" );
+    XulVbox profileControls = (XulVbox) document.getElementById( "auth-profile-controls" );
+    String jdbcAuthMethodValue = jdbcAuthMethod.getValue();
+    switch ( jdbcAuthMethodValue ) {
+      case IAM_CREDENTIALS:
+        standardControls.setVisible( false );
+        iamControls.setVisible( true );
+        profileControls.setVisible( false );
+        break;
+      case PROFILE_CREDENTIALS:
+        standardControls.setVisible( false );
+        iamControls.setVisible( false );
+        profileControls.setVisible( true );
+        break;
+      default:
+        standardControls.setVisible( true );
+        iamControls.setVisible( false );
+        profileControls.setVisible( false );
+        break;
+    }
   }
 
   private void traverseDomSetReadOnly( XulComponent component, boolean readonly ) {
@@ -977,18 +1074,18 @@ public class DataHandler extends AbstractXulEventHandler {
       for ( int i = 0; i < values.length; i++ ) {
 
         boolean isChecked = false;
-        if ( values[i][0] instanceof Boolean ) {
-          isChecked = ( (Boolean) values[i][0] ).booleanValue();
+        if ( values[ i ][ 0 ] instanceof Boolean ) {
+          isChecked = ( (Boolean) values[ i ][ 0 ] ).booleanValue();
         } else {
-          isChecked = Boolean.valueOf( (String) values[i][0] );
+          isChecked = Boolean.valueOf( (String) values[ i ][ 0 ] );
         }
 
         if ( !isChecked ) {
           continue;
         }
 
-        String parameter = (String) values[i][1];
-        String value = (String) values[i][2];
+        String parameter = (String) values[ i ][ 1 ];
+        String value = (String) values[ i ][ 2 ];
         if ( ( value == null ) || ( value.trim().length() <= 0 ) ) {
           returnList.add( parameter );
         }
@@ -1012,7 +1109,7 @@ public class DataHandler extends AbstractXulEventHandler {
       Object[][] values = poolParameterTree.getValues();
       for ( int i = 0; i < values.length; i++ ) {
 
-        String parameter = (String) values[i][1];
+        String parameter = (String) values[ i ][ 1 ];
         boolean isChecked = properties.containsKey( parameter );
 
         if ( !isChecked ) {
@@ -1064,7 +1161,7 @@ public class DataHandler extends AbstractXulEventHandler {
     Object[][] values = optionsParameterTree.getValues();
     for ( int i = 0; i < values.length; i++ ) {
 
-      String parameter = (String) values[i][0];
+      String parameter = (String) values[ i ][ 0 ];
 
       // See if it's defined
       Iterator<String> keys = extraOptions.keySet().iterator();
@@ -1164,7 +1261,7 @@ public class DataHandler extends AbstractXulEventHandler {
 
       for ( int i = 0; i < clusterInformation.length; i++ ) {
 
-        PartitionDatabaseMeta meta = clusterInformation[i];
+        PartitionDatabaseMeta meta = clusterInformation[ i ];
         XulTreeRow row = clusterParameterTree.getRootChildren().addNewRow();
         row.addCellText( 0, Const.NVL( meta.getPartitionId(), "" ) );
         row.addCellText( 1, Const.NVL( meta.getHostname(), "" ) );
@@ -1201,7 +1298,7 @@ public class DataHandler extends AbstractXulEventHandler {
       if ( idx < 0 ) {
         idx = 0;
       }
-      poolingDescription.setValue( BaseDatabaseMeta.poolingParameters[idx].getDescription() );
+      poolingDescription.setValue( BaseDatabaseMeta.poolingParameters[ idx ].getDescription() );
 
       XulTreeRow row = poolParameterTree.getRootChildren().getItem( idx ).getRow();
       if ( row.getSelectedColumnIndex() == 2 ) {
@@ -1211,7 +1308,7 @@ public class DataHandler extends AbstractXulEventHandler {
     }
   }
 
-  private void getConnectionSpecificInfo( DatabaseMeta meta ) {
+  protected void getConnectionSpecificInfo( DatabaseMeta meta ) {
     // Hostname:
     if ( hostNameBox != null ) {
       meta.setHostname( hostNameBox.getValue() );
@@ -1234,8 +1331,8 @@ public class DataHandler extends AbstractXulEventHandler {
 
     if ( databaseDialectList != null ) {
       DatabaseInterface databaseInterface = meta.getDatabaseInterface();
-      if ( databaseInterface instanceof  GenericDatabaseMeta ) {
-        ( (GenericDatabaseMeta) databaseInterface).setDatabaseDialect( databaseDialectList.getValue() );
+      if ( databaseInterface instanceof GenericDatabaseMeta ) {
+        ( (GenericDatabaseMeta) databaseInterface ).setDatabaseDialect( databaseDialectList.getValue() );
       }
     }
 
@@ -1296,6 +1393,11 @@ public class DataHandler extends AbstractXulEventHandler {
       meta.getAttributes().put( "SAPClient", clientBox.getValue() );
     }
 
+    // Snowflake
+    if ( warehouseBox != null ) {
+      meta.getAttributes().put( WAREHOUSE, warehouseBox.getValue() );
+    }
+
     // Generic settings...
     if ( customUrlBox != null ) {
       meta.getAttributes().put( GenericDatabaseMeta.ATRRIBUTE_CUSTOM_URL, customUrlBox.getValue() );
@@ -1318,21 +1420,74 @@ public class DataHandler extends AbstractXulEventHandler {
         MSSQLServerNativeDatabaseMeta.ATTRIBUTE_USE_INTEGRATED_SECURITY,
         useIntegratedSecurity != null ? useIntegratedSecurity.toString() : "false" );
     }
+    //Azure SQL DB
+    if ( azureSqlDBJdbcAuthMethod != null ) {
+      meta.getAttributes().put( JDBC_AUTH_METHOD, azureSqlDBJdbcAuthMethod.getValue() );
+    }
+
+    if ( azureSqlDBClientSecretId != null ) {
+      meta.getAttributes().put( CLIENT_ID, azureSqlDBClientSecretId.getValue() );
+    }
+    if ( azureSqlDBAlwaysEncryptionEnabled != null ) {
+      if ( azureSqlDBAlwaysEncryptionEnabled.isChecked() ) {
+        meta.getAttributes().put( IS_ALWAYS_ENCRYPTION_ENABLED, "true" );
+      } else {
+        meta.getAttributes().put( IS_ALWAYS_ENCRYPTION_ENABLED, "false" );
+      }
+    }
+
+    if ( azureSqlDBClientSecretKey != null ) {
+      meta.getAttributes().put( CLIENT_SECRET_KEY, azureSqlDBClientSecretKey.getValue() );
+    }
+
+    if ( jdbcAuthMethod != null ) {
+      meta.getAttributes().put( JDBC_AUTH_METHOD, jdbcAuthMethod.getValue() );
+    }
+    if ( iamAccessKeyId != null ) {
+      meta.getAttributes().put( IAM_ACCESS_KEY_ID, Encr.encryptPassword( iamAccessKeyId.getValue() ) );
+    }
+    if ( iamSecretKeyId != null ) {
+      meta.getAttributes().put( IAM_SECRET_ACCESS_KEY, Encr.encryptPassword( iamSecretKeyId.getValue() ) );
+    }
+    if ( iamSessionToken != null ) {
+      meta.getAttributes().put( IAM_SESSION_TOKEN, Encr.encryptPassword( iamSessionToken.getValue() ) );
+    }
+    if ( iamProfileName != null ) {
+      meta.getAttributes().put( IAM_PROFILE_NAME, iamProfileName.getValue() );
+    }
 
     if ( webAppName != null ) {
       meta.setDBName( webAppName.getValue() );
     }
+
+    if ( namedClusterList != null ) {
+
+      meta.getDatabaseInterface().setNamedCluster( namedClusterList.getValue() );
+    }
+
+    this.extraHandler.ifPresent( handler -> handler.saveConnectionSpecificInfo( meta ) );
   }
 
-  private void setConnectionSpecificInfo( DatabaseMeta meta ) {
+  protected void setConnectionSpecificInfo( DatabaseMeta meta ) {
 
     getControls();
 
     if ( databaseDialectList != null ) {
-      databaseDialectList.setElements( databaseDialects  );
+      databaseDialectList.setElements( databaseDialects );
       DatabaseInterface databaseInterface = meta.getDatabaseInterface();
-      if ( databaseInterface instanceof  GenericDatabaseMeta ) {
-        databaseDialectList.setSelectedItem( ( (GenericDatabaseMeta) databaseInterface).getDatabaseDialect() );
+      if ( databaseInterface instanceof GenericDatabaseMeta ) {
+        databaseDialectList.setSelectedItem( ( (GenericDatabaseMeta) databaseInterface ).getDatabaseDialect() );
+      }
+    }
+
+    if ( namedClusterList != null ) {
+      List<String> namedClusters = meta.getDatabaseInterface().getNamedClusterList();
+      if ( namedClusters != null ) {
+        namedClusterList.setElements( namedClusters );
+        if ( meta.getNamedCluster() != null ) {
+          namedClusterList.setSelectedItem( meta.getDatabaseInterface().getNamedCluster() );
+          namedClusterList.setValue( meta.getDatabaseInterface().getNamedCluster() );
+        }
       }
     }
 
@@ -1407,6 +1562,11 @@ public class DataHandler extends AbstractXulEventHandler {
       clientBox.setValue( meta.getAttributes().getProperty( "SAPClient" ) );
     }
 
+    // Snowflake
+    if ( warehouseBox != null ) {
+      warehouseBox.setValue( meta.getAttributes().getProperty( WAREHOUSE ) );
+    }
+
     // Generic settings...
     if ( customUrlBox != null ) {
       customUrlBox.setValue( meta.getAttributes().getProperty( GenericDatabaseMeta.ATRRIBUTE_CUSTOM_URL ) );
@@ -1432,6 +1592,39 @@ public class DataHandler extends AbstractXulEventHandler {
       }
     }
 
+    if ( azureSqlDBJdbcAuthMethod != null ) {
+      azureSqlDBJdbcAuthMethod.setValue( meta.getAttributes().getProperty( JDBC_AUTH_METHOD, SQL_AUTHENTICATION ) );
+    }
+
+    if ( azureSqlDBAlwaysEncryptionEnabled != null && meta.getAttributes().getProperty( IS_ALWAYS_ENCRYPTION_ENABLED ) != null ) {
+      azureSqlDBAlwaysEncryptionEnabled.setChecked( meta.getAttributes().getProperty( IS_ALWAYS_ENCRYPTION_ENABLED ).equals( "true" ) );
+    }
+
+    if ( azureSqlDBClientSecretId != null ) {
+      azureSqlDBClientSecretId.setValue( meta.getAttributes().getProperty( CLIENT_ID ) );
+    }
+
+    if ( azureSqlDBClientSecretKey != null ) {
+      azureSqlDBClientSecretKey.setValue( meta.getAttributes().getProperty( CLIENT_SECRET_KEY ) );
+    }
+
+    if ( jdbcAuthMethod != null ) {
+      jdbcAuthMethod.setValue( meta.getAttributes().getProperty( JDBC_AUTH_METHOD, STANDARD_CREDENTIALS ) );
+      setAuthFieldsVisible();
+    }
+    if ( iamAccessKeyId != null ) {
+      iamAccessKeyId.setValue( Encr.decryptPassword( meta.getAttributes().getProperty( IAM_ACCESS_KEY_ID ) ) );
+    }
+    if ( iamSecretKeyId != null ) {
+      iamSecretKeyId.setValue( Encr.decryptPassword( meta.getAttributes().getProperty( IAM_SECRET_ACCESS_KEY ) ) );
+    }
+    if ( iamSessionToken != null ) {
+      iamSessionToken.setValue( Encr.decryptPassword( meta.getAttributes().getProperty( IAM_SESSION_TOKEN ) ) );
+    }
+    if ( iamProfileName != null ) {
+      iamProfileName.setValue( meta.getAttributes().getProperty( IAM_PROFILE_NAME ) );
+    }
+
     if ( webAppName != null ) {
       // Insert default value only for new connection, allowing it to be empty in case of editing existing one
       if ( databaseMeta == null || Utils.isEmpty( databaseMeta.getDisplayName() ) ) {
@@ -1440,6 +1633,8 @@ public class DataHandler extends AbstractXulEventHandler {
         webAppName.setValue( meta.getDatabaseName() );
       }
     }
+
+    this.extraHandler.ifPresent( handler -> handler.loadConnectionSpecificInfo( meta ) );
   }
 
   protected void getControls() {
@@ -1465,6 +1660,7 @@ public class DataHandler extends AbstractXulEventHandler {
     customUrlBox = (XulTextbox) document.getElementById( "custom-url-text" );
     customDriverClassBox = (XulTextbox) document.getElementById( "custom-driver-class-text" );
     languageBox = (XulTextbox) document.getElementById( "language-text" );
+    warehouseBox = (XulTextbox) document.getElementById( "warehouse-text" );
     systemNumberBox = (XulTextbox) document.getElementById( "system-number-text" );
     clientBox = (XulTextbox) document.getElementById( "client-text" );
     doubleDecimalSeparatorCheck = (XulCheckbox) document.getElementById( "decimal-separator-check" );
@@ -1497,6 +1693,17 @@ public class DataHandler extends AbstractXulEventHandler {
     cancelButton = (XulButton) document.getElementById( "general-datasource-window_cancel" );
     testButton = (XulButton) document.getElementById( "test-button" );
     noticeLabel = (XulLabel) document.getElementById( "notice-label" );
+    jdbcAuthMethod = (XulMenuList) document.getElementById( "redshift-auth-method-list" );
+    iamAccessKeyId = (XulTextbox) document.getElementById( "iam-access-key-id" );
+    iamSecretKeyId = (XulTextbox) document.getElementById( "iam-secret-access-key" );
+    iamSessionToken = (XulTextbox) document.getElementById( "iam-session-token" );
+    iamProfileName = (XulTextbox) document.getElementById( "iam-profile-name" );
+    namedClusterList = (XulMenuList) document.getElementById( "named-cluster-list" );
+    //azure SQL DB
+    azureSqlDBJdbcAuthMethod = (XulMenuList) document.getElementById( "azure-sql-db-auth-method-list" );
+    azureSqlDBAlwaysEncryptionEnabled = (XulCheckbox) document.getElementById( "azure-sql-db-enable-always-encryption-on" );
+    azureSqlDBClientSecretId = (XulTextbox) document.getElementById( "azure-sql-db-client-id" );
+    azureSqlDBClientSecretKey = (XulTextbox) document.getElementById( "azure-sql-db-client-secret-key" );
 
     if ( portNumberBox != null && serverInstanceBox != null ) {
       if ( Boolean.parseBoolean( serverInstanceBox.getAttributeValue( "shouldDisablePortIfPopulated" ) ) ) {
@@ -1570,7 +1777,7 @@ public class DataHandler extends AbstractXulEventHandler {
       String pluginName = plugin.getName();
       try {
         DatabaseInterface databaseInterface = (DatabaseInterface) registry.loadClass( plugin );
-        databaseInterface.setPluginId( plugin.getIds()[0] );
+        databaseInterface.setPluginId( plugin.getIds()[ 0 ] );
         databaseInterface.setName( pluginName );
         databaseTypeAdded( pluginName, databaseInterface );
       } catch ( KettleException e ) {

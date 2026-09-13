@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.spoon;
 
@@ -38,6 +30,7 @@ import org.eclipse.swt.graphics.LineAttributes;
 import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.graphics.Transform;
+import org.pentaho.di.core.Const;
 import org.pentaho.di.core.SwtUniversalImage;
 import org.pentaho.di.core.gui.GCInterface;
 import org.pentaho.di.core.gui.Point;
@@ -91,7 +84,14 @@ public class SWTGC implements GCInterface {
 
   public SWTGC( Device device, Point area, int iconsize ) {
     this.image = new Image( device, area.x, area.y );
-    this.gc = new GC( image );
+    GC gc = new GC( image );
+    init( gc, area, iconsize );
+  }
+  public SWTGC( GC gc, Point area, int iconsize ) {
+    init( gc, area, iconsize );
+  }
+  private void init( GC gc, Point area, int iconsize ) {
+    this.gc = gc;
     this.images = GUIResource.getInstance().getImagesSteps();
     this.iconsize = iconsize;
     this.area = area;
@@ -119,7 +119,9 @@ public class SWTGC implements GCInterface {
   }
 
   public void dispose() {
-    gc.dispose();
+    if ( !Const.isRunningOnWebspoonMode() ) {
+      gc.dispose();
+    }
     if ( transform != null && transform.isDisposed() == false ) {
       transform.dispose();
     }

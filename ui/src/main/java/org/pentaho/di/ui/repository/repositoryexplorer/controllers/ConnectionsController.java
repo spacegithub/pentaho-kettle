@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.repository.repositoryexplorer.controllers;
 
@@ -260,7 +252,6 @@ public class ConnectionsController extends LazilyInitializedController implement
               PKG, "ConnectionsController.Message.CreatingDatabase", getDatabaseDialog()
                 .getDatabaseMeta().getName() ) );
             repository.save( getDatabaseDialog().getDatabaseMeta(), Const.VERSION_COMMENT_INITIAL_VERSION, null );
-            reloadLoadedJobsAndTransformations();
           } else {
             showAlreadyExistsMessage();
           }
@@ -285,14 +276,6 @@ public class ConnectionsController extends LazilyInitializedController implement
     }
   }
 
-  private boolean reloadLoadedJobsAndTransformations() {
-    if ( mainController != null && mainController.getSharedObjectSyncUtil() != null ) {
-      mainController.getSharedObjectSyncUtil().reloadJobRepositoryObjects( false );
-      mainController.getSharedObjectSyncUtil().reloadTransformationRepositoryObjects( false );
-      return true;
-    }
-    return false;
-  }
 
   // package-local visibility for testing purposes
   void showAlreadyExistsMessage() {
@@ -389,7 +372,6 @@ public class ConnectionsController extends LazilyInitializedController implement
                 repository.insertLogEntry( BaseMessages.getString(
                   PKG, "ConnectionsController.Message.UpdatingDatabase", databaseMeta.getName() ) );
                 repository.save( databaseMeta, Const.VERSION_COMMENT_EDIT_VERSION, null );
-                reloadLoadedJobsAndTransformations();
               } else {
                 // trying to rename to an existing name - show error dialog
                 showAlreadyExistsMessage();
@@ -448,7 +430,6 @@ public class ConnectionsController extends LazilyInitializedController implement
               mb.open();
             } else {
               repository.deleteDatabaseMeta( databaseMeta.getName() );
-              reloadLoadedJobsAndTransformations();
             }
           }
         }

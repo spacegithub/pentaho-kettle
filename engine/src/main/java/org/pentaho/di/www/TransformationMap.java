@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.www;
 
@@ -88,9 +80,10 @@ public class TransformationMap {
    * @return the first transformation with the specified name
    */
   public Trans getTransformation( String transformationName ) {
-    for ( CarteObjectEntry entry : transMap.keySet() ) {
-      if ( entry.getName().equals( transformationName ) ) {
-        return transMap.get( entry ).getTrans();
+    for ( Map.Entry<CarteObjectEntry, TransData> entry : transMap.entrySet() ) {
+      CarteObjectEntry carteEntry = entry.getKey();
+      if ( carteEntry.getName().equals( transformationName ) ) {
+        return entry.getValue().getTrans();
       }
     }
     return null;
@@ -110,9 +103,10 @@ public class TransformationMap {
    * @return The first transformation configuration with the specified name
    */
   public TransConfiguration getConfiguration( String transformationName ) {
-    for ( CarteObjectEntry entry : transMap.keySet() ) {
-      if ( entry.getName().equals( transformationName ) ) {
-        return transMap.get( entry ).getConfiguration();
+    for ( Map.Entry<CarteObjectEntry, TransData> entry : transMap.entrySet() ) {
+      CarteObjectEntry carteEntry = entry.getKey();
+      if ( carteEntry.getName().equals( transformationName ) ) {
+        return entry.getValue().getConfiguration();
       }
     }
     return null;
@@ -294,8 +288,7 @@ public class TransformationMap {
    *          the carte object ID to reference
    */
   public void deallocateServerSocketPorts( String transName, String carteObjectId ) {
-    for ( String hostname : hostServerSocketPortsMap.keySet() ) {
-      List<SocketPortAllocation> spas = hostServerSocketPortsMap.get( hostname );
+    for ( List<SocketPortAllocation> spas : hostServerSocketPortsMap.values() ) {
       for ( SocketPortAllocation spa : spas ) {
         synchronized ( spa ) {
           if ( spa.getTransformationName().equalsIgnoreCase( transName )
@@ -314,9 +307,8 @@ public class TransformationMap {
    *          the transformation object entry name to release the sockets for
    */
   public void deallocateServerSocketPorts( CarteObjectEntry entry ) {
-    for ( String hostname : hostServerSocketPortsMap.keySet() ) {
-      List<SocketPortAllocation> serverSocketPorts = hostServerSocketPortsMap.get( hostname );
-      for ( SocketPortAllocation spa : hostServerSocketPortsMap.get( hostname ) ) {
+    for ( List<SocketPortAllocation> serverSocketPorts : hostServerSocketPortsMap.values() ) {
+      for ( SocketPortAllocation spa : serverSocketPorts ) {
         synchronized ( spa ) {
           if ( spa.getTransformationName().equalsIgnoreCase( entry.getName() ) ) {
             spa.setAllocated( false );

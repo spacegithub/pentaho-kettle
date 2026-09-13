@@ -1,29 +1,18 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.job.entries.checkdbconnection;
 
-import org.apache.commons.vfs2.FileObject;
-import org.apache.commons.vfs2.FileSystemException;
-import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -31,32 +20,16 @@ import org.pentaho.di.core.KettleEnvironment;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
-import org.pentaho.di.core.exception.KettleFileException;
 import org.pentaho.di.core.logging.LogLevel;
-import org.pentaho.di.core.util.Assert;
-import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.job.Job;
 
-public class JobEntryCheckDbConnectionsIT {
+import static org.junit.Assert.assertTrue;
 
-  private static final String H2_DATABASE = "myDb";
+public class JobEntryCheckDbConnectionsIT {
 
   @BeforeClass
   public static void setUpBeforeClass() throws KettleException {
     KettleEnvironment.init( false );
-  }
-
-  @After
-  public void cleanup() {
-    try {
-      FileObject dbFile = KettleVFS.getFileObject( H2_DATABASE + ".h2.db" );
-      if ( dbFile.exists() ) {
-        System.out.println( "deleting file" );
-        dbFile.delete();
-      }
-    } catch ( KettleFileException | FileSystemException ignored ) {
-      // Ignore, we tried cleaning up
-    }
   }
 
   /**
@@ -72,12 +45,12 @@ public class JobEntryCheckDbConnectionsIT {
     meta.setParentJob( mockedJob );
     meta.setLogLevel( LogLevel.BASIC );
 
-    DatabaseMeta db = new DatabaseMeta( "InMemory H2", "H2", null, null, H2_DATABASE, "-1", null, null );
-    meta.setConnections( new DatabaseMeta[]{ db } );
-    meta.setWaittimes( new int[]{ JobEntryCheckDbConnections.UNIT_TIME_MILLI_SECOND } );
-    meta.setWaitfors( new String[]{ String.valueOf( waitMilliseconds ) } );
+    DatabaseMeta db = new DatabaseMeta( "testPreparedStatements", "H2", "JDBC", null, "mem:test", null, "SA", "" );
+    meta.setConnections( new DatabaseMeta[] { db } );
+    meta.setWaittimes( new int[] { JobEntryCheckDbConnections.UNIT_TIME_MILLI_SECOND } );
+    meta.setWaitfors( new String[] { String.valueOf( waitMilliseconds ) } );
     Result result = meta.execute( new Result(), 0 );
-    Assert.assertTrue( result.getResult() );
+    assertTrue( result.getResult() );
   }
 
   @Test( timeout = 5000 )
@@ -90,14 +63,14 @@ public class JobEntryCheckDbConnectionsIT {
     meta.setParentJob( mockedJob );
     meta.setLogLevel( LogLevel.DETAILED );
 
-    DatabaseMeta db = new DatabaseMeta( "InMemory H2", "H2", null, null, H2_DATABASE, "-1", null, null );
-    meta.setConnections( new DatabaseMeta[]{ db } );
-    meta.setWaittimes( new int[]{ JobEntryCheckDbConnections.UNIT_TIME_SECOND } );
-    meta.setWaitfors( new String[]{ String.valueOf( waitTimes ) } );
+    DatabaseMeta db = new DatabaseMeta( "testPreparedStatements", "H2", "JDBC", null, "mem:test", null, "SA", "" );
+    meta.setConnections( new DatabaseMeta[] { db } );
+    meta.setWaittimes( new int[] { JobEntryCheckDbConnections.UNIT_TIME_SECOND } );
+    meta.setWaitfors( new String[] { String.valueOf( waitTimes ) } );
 
     Result result = meta.execute( new Result(), 0 );
 
-    Assert.assertTrue( meta.getNow() - meta.getTimeStart() >= waitTimes * 1000 );
-    Assert.assertTrue( result.getResult() );
+    assertTrue( meta.getNow() - meta.getTimeStart() >= waitTimes * 1000 );
+    assertTrue( result.getResult() );
   }
 }

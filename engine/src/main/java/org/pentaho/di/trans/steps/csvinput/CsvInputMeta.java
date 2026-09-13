@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.csvinput;
 
@@ -27,14 +19,14 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.vfs2.FileObject;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.exception.KettleFileException;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.KettleAttributeInterface;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.exception.KettleFileException;
 import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.core.exception.KettleXMLException;
 import org.pentaho.di.core.row.RowMetaInterface;
@@ -42,6 +34,7 @@ import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaFactory;
 import org.pentaho.di.core.row.value.ValueMetaInteger;
 import org.pentaho.di.core.row.value.ValueMetaString;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.core.xml.XMLHandler;
@@ -57,6 +50,7 @@ import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.BaseStepMeta;
 import org.pentaho.di.trans.step.StepDataInterface;
+import org.pentaho.di.trans.step.StepHelperInterface;
 import org.pentaho.di.trans.step.StepInjectionMetaEntry;
 import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.step.StepMeta;
@@ -102,6 +96,8 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
 
   private boolean runningInParallel;
 
+  private String fileFormat;
+
   private String encoding;
 
   private boolean newlinePossibleInFields;
@@ -134,6 +130,7 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
     lazyConversionActive = true;
     isaddresult = false;
     bufferSize = "50000";
+    fileFormat = "mixed";
   }
 
   private void readData( Node stepnode ) throws KettleXMLException {
@@ -161,6 +158,7 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
       } else {
         newlinePossibleInFields = "Y".equalsIgnoreCase( nlp );
       }
+      fileFormat = XMLHandler.getTagValue( stepnode, getXmlCode( "FORMAT" ) );
       encoding = XMLHandler.getTagValue( stepnode, getXmlCode( "ENCODING" ) );
 
       Node fields = XMLHandler.getSubNode( stepnode, getXmlCode( "FIELDS" ) );
@@ -214,6 +212,7 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
     retval.append( "    " ).append( XMLHandler.addTagValue( getXmlCode( "PARALLEL" ), runningInParallel ) );
     retval.append( "    " ).append(
       XMLHandler.addTagValue( getXmlCode( "NEWLINE_POSSIBLE" ), newlinePossibleInFields ) );
+    retval.append( "    " ).append( XMLHandler.addTagValue( getXmlCode( "FORMAT" ), fileFormat ) );
     retval.append( "    " ).append( XMLHandler.addTagValue( getXmlCode( "ENCODING" ), encoding ) );
 
     retval.append( "    " ).append( XMLHandler.openTag( getXmlCode( "FIELDS" ) ) ).append( Const.CR );
@@ -262,6 +261,7 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
       runningInParallel = rep.getStepAttributeBoolean( id_step, getRepCode( "PARALLEL" ) );
       newlinePossibleInFields =
         rep.getStepAttributeBoolean( id_step, 0, getRepCode( "NEWLINE_POSSIBLE" ), !runningInParallel );
+      fileFormat = rep.getStepAttributeString( id_step, getRepCode( "FORMAT" ) );
       encoding = rep.getStepAttributeString( id_step, getRepCode( "ENCODING" ) );
 
       int nrfields = rep.countNrStepAttributes( id_step, getRepCode( "FIELD_NAME" ) );
@@ -307,6 +307,7 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
       rep
         .saveStepAttribute(
           id_transformation, id_step, getRepCode( "NEWLINE_POSSIBLE" ), newlinePossibleInFields );
+      rep.saveStepAttribute( id_transformation, id_step, getRepCode( "FORMAT" ), fileFormat );
       rep.saveStepAttribute( id_transformation, id_step, getRepCode( "ENCODING" ), encoding );
 
       for ( int i = 0; i < inputFields.length; i++ ) {
@@ -332,8 +333,24 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
     }
   }
 
+  /**
+   * Sets the input fields for the CSV input step.
+   *
+   * @param fieldNames an array of field names to be set as input fields
+   */
+  @SuppressWarnings( "java:S1874" )// CsvInput uses deprecated class TextFileInputField to store field information
+  public void setFields( String[] fieldNames ) {
+    inputFields = new TextFileInputField[ fieldNames.length ];
+    for ( int i = 0; i < fieldNames.length; i++ ) {
+      @SuppressWarnings( "java:S1874" )// CsvInput uses deprecated class TextFileInputField to store field information
+      TextFileInputField field = new TextFileInputField();
+      field.setName( fieldNames[ i ] );
+      inputFields[ i ] = field;
+    }
+  }
+
   @Override
-  public void getFields( RowMetaInterface rowMeta, String origin, RowMetaInterface[] info, StepMeta nextStep,
+  public void getFields( Bowl bowl, RowMetaInterface rowMeta, String origin, RowMetaInterface[] info, StepMeta nextStep,
     VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
     try {
       rowMeta.clear(); // Start with a clean slate, eats the input
@@ -562,7 +579,14 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
 
   @Override
   public int getFileFormatTypeNr() {
-    return TextFileInputMeta.FILE_FORMAT_MIXED; // TODO: check this
+
+    if ( getFileFormat().equalsIgnoreCase( "DOS" ) ) {
+      return TextFileInputMeta.FILE_FORMAT_DOS;
+    } else if ( getFileFormat().equalsIgnoreCase( "UNIX" ) ) {
+      return TextFileInputMeta.FILE_FORMAT_UNIX;
+    } else {
+      return TextFileInputMeta.FILE_FORMAT_MIXED;
+    }
   }
 
   @Override
@@ -706,6 +730,21 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
   }
 
   /**
+   * @return Returns the fileFormat
+   */
+  public String getFileFormat() {
+    return fileFormat;
+  }
+
+  /**
+   * @param fileFormat
+   *          the fileFormat to set
+   */
+  public void setFileFormat( String fileFormat ) {
+    this.fileFormat = fileFormat;
+  }
+
+  /**
    * @return the encoding
    */
   public String getEncoding() {
@@ -721,6 +760,11 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
   }
 
   /**
+   * @param executionBowl
+   *          For file access
+   * @param globalManagementBowl
+   *          if needed for access to the current "global" (System or Repository) level config for export. If null, no
+   *          global config will be exported.
    * @param space
    *          the variable space to use
    * @param definitions
@@ -733,8 +777,9 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
    * @return the filename of the exported resource
    */
   @Override
-  public String exportResources( VariableSpace space, Map<String, ResourceDefinition> definitions,
-    ResourceNamingInterface resourceNamingInterface, Repository repository, IMetaStore metaStore ) throws KettleException {
+  public String exportResources( Bowl executionBowl, Bowl globalManagementBowl, VariableSpace space,
+      Map<String, ResourceDefinition> definitions, ResourceNamingInterface namingInterface,
+      Repository repository, IMetaStore metaStore ) throws KettleException {
     try {
       // The object that we're modifying here is a copy of the original!
       // So let's change the filename from relative to absolute by grabbing the file object...
@@ -744,14 +789,15 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
         // From : ${Internal.Transformation.Filename.Directory}/../foo/bar.csv
         // To : /home/matt/test/files/foo/bar.csv
         //
-        FileObject fileObject = KettleVFS.getFileObject( space.environmentSubstitute( filename ), space );
+        FileObject fileObject = KettleVFS.getInstance( executionBowl )
+          .getFileObject( space.environmentSubstitute( filename ), space );
 
         // If the file doesn't exist, forget about this effort too!
         //
         if ( fileObject.exists() ) {
           // Convert to an absolute path...
           //
-          filename = resourceNamingInterface.nameResource( fileObject, space, true );
+          filename = namingInterface.nameResource( fileObject, space, true );
 
           return filename;
         }
@@ -803,6 +849,8 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
           newlinePossibleInFields = (Boolean) entry.getValue();
         } else if ( attr.getKey().equals( "ADD_FILENAME_RESULT" ) ) {
           isaddresult = (Boolean) entry.getValue();
+        } else if ( attr.getKey().equals( "FORMAT" ) ) {
+          fileFormat = (String) entry.getValue();
         } else if ( attr.getKey().equals( "ENCODING" ) ) {
           encoding = (String) entry.getValue();
         } else {
@@ -891,10 +939,15 @@ public class CsvInputMeta extends BaseStepMeta implements StepMetaInterface, Inp
   public FileObject getHeaderFileObject( final TransMeta transMeta ) {
     final String filename = transMeta.environmentSubstitute( getFilename() );
     try {
-      return KettleVFS.getFileObject( filename );
+      return KettleVFS.getInstance( transMeta.getBowl() ).getFileObject( filename );
     } catch ( final KettleFileException e ) {
       return null;
     }
+  }
+
+  @Override
+  public StepHelperInterface getStepHelperInterface() {
+    return new CsvInputHelper( this );
   }
 
 }

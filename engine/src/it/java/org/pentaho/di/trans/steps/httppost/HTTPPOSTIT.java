@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.httppost;
 
@@ -56,13 +48,17 @@ import org.pentaho.di.trans.steps.mock.StepMockHelper;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * User: Dzmitry Stsiapanau Date: 12/2/13 Time: 4:35 PM
@@ -139,8 +135,6 @@ public class HTTPPOSTIT {
   }
 
   public static final String host = "localhost";
-  public static final int port = 9998;
-  public static final String HTTP_LOCALHOST_9998 = "http://localhost:9998/";
 
   @InjectMocks
   private StepMockHelper<HTTPPOSTMeta, HTTPPOSTData> stepMockHelper;
@@ -164,8 +158,16 @@ public class HTTPPOSTIT {
 
   @After
   public void tearDown() throws Exception {
-    httpServer.stop( 5 );
+    if ( httpServer != null ) {
+      httpServer.stop( 5 );
+    }
 
+  }
+
+  private String getHttpLocalhostUrl() {
+    String boundHost = httpServer.getAddress().getAddress().getHostAddress();
+    return "http://" + ( boundHost.contains( ":" ) ? "[" + boundHost + "]" : boundHost )
+      + ":" + httpServer.getAddress().getPort() + "/";
   }
 
   @Test
@@ -182,7 +184,7 @@ public class HTTPPOSTIT {
     RowMetaInterface inputRowMeta = mock( RowMetaInterface.class );
     HTTPPOST.setInputRowMeta( inputRowMeta );
     when( inputRowMeta.clone() ).thenReturn( inputRowMeta );
-    when( stepMockHelper.processRowsStepMetaInterface.getUrl() ).thenReturn( HTTP_LOCALHOST_9998 );
+    when( stepMockHelper.processRowsStepMetaInterface.getUrl() ).thenReturn( getHttpLocalhostUrl() );
     when( stepMockHelper.processRowsStepMetaInterface.getQueryField() ).thenReturn( new String[] {} );
     when( stepMockHelper.processRowsStepMetaInterface.getArgumentField() ).thenReturn( new String[] {} );
     when( stepMockHelper.processRowsStepMetaInterface.getResultCodeFieldName() ).thenReturn( "ResultCodeFieldName" );
@@ -210,7 +212,7 @@ public class HTTPPOSTIT {
     RowMetaInterface inputRowMeta = mock( RowMetaInterface.class );
     HTTPPOST.setInputRowMeta( inputRowMeta );
     when( inputRowMeta.clone() ).thenReturn( inputRowMeta );
-    when( stepMockHelper.processRowsStepMetaInterface.getUrl() ).thenReturn( HTTP_LOCALHOST_9998 );
+    when( stepMockHelper.processRowsStepMetaInterface.getUrl() ).thenReturn( getHttpLocalhostUrl() );
     when( stepMockHelper.processRowsStepMetaInterface.getQueryField() ).thenReturn( new String[] {} );
     when( stepMockHelper.processRowsStepMetaInterface.getArgumentField() ).thenReturn( new String[] {} );
     when( stepMockHelper.processRowsStepMetaInterface.getResultCodeFieldName() ).thenReturn( "ResultCodeFieldName" );
@@ -237,7 +239,7 @@ public class HTTPPOSTIT {
     RowMetaInterface inputRowMeta = mock( RowMetaInterface.class );
     HTTPPOST.setInputRowMeta( inputRowMeta );
     when( inputRowMeta.clone() ).thenReturn( inputRowMeta );
-    when( stepMockHelper.processRowsStepMetaInterface.getUrl() ).thenReturn( HTTP_LOCALHOST_9998 );
+    when( stepMockHelper.processRowsStepMetaInterface.getUrl() ).thenReturn( getHttpLocalhostUrl() );
     when( stepMockHelper.processRowsStepMetaInterface.getQueryField() ).thenReturn( new String[] {} );
     when( stepMockHelper.processRowsStepMetaInterface.getArgumentField() ).thenReturn( new String[] {} );
     when( stepMockHelper.processRowsStepMetaInterface.getEncoding() ).thenReturn( "UTF-8" );
@@ -287,7 +289,7 @@ public class HTTPPOSTIT {
     httpPost.row = new Object[] { testString };
     when( inputRowMeta.clone() ).thenReturn( inputRowMeta );
     when( inputRowMeta.getString( httpPost.row, 0 ) ).thenReturn( testString );
-    when( stepMockHelper.processRowsStepMetaInterface.getUrl() ).thenReturn( HTTP_LOCALHOST_9998 );
+    when( stepMockHelper.processRowsStepMetaInterface.getUrl() ).thenReturn( getHttpLocalhostUrl() );
     when( stepMockHelper.processRowsStepMetaInterface.getQueryField() ).thenReturn( new String[] {} );
     when( stepMockHelper.processRowsStepMetaInterface.getArgumentField() )
       .thenReturn( new String[] { "testBodyField" } );
@@ -303,7 +305,7 @@ public class HTTPPOSTIT {
 
 
   private void startHttpServer( HttpHandler httpHandler ) throws IOException {
-    httpServer = HttpServer.create( new InetSocketAddress( HTTPPOSTIT.host, HTTPPOSTIT.port ), 10 );
+    httpServer = HttpServer.create( new InetSocketAddress( InetAddress.getLoopbackAddress(), 0 ), 10 );
     httpServer.createContext( "/", httpHandler );
     httpServer.start();
   }

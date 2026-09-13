@@ -1,34 +1,29 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.database;
 
 import java.sql.ResultSet;
+import java.util.Map;
 
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.exception.KettleDatabaseException;
 import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.variables.VariableSpace;
+
+import static org.pentaho.di.core.util.Utils.setBooleanValueFromMap;
 
 /**
  * Contains Oracle specific information through static final members
@@ -44,7 +39,7 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
   @Override
   public int[] getAccessTypeList() {
     return new int[] {
-      DatabaseMeta.TYPE_ACCESS_NATIVE, DatabaseMeta.TYPE_ACCESS_ODBC, DatabaseMeta.TYPE_ACCESS_OCI,
+      DatabaseMeta.TYPE_ACCESS_NATIVE, DatabaseMeta.TYPE_ACCESS_OCI,
       DatabaseMeta.TYPE_ACCESS_JNDI };
   }
 
@@ -105,18 +100,12 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
 
   @Override
   public String getDriverClass() {
-    if ( getAccessType() == DatabaseMeta.TYPE_ACCESS_ODBC ) {
-      return "sun.jdbc.odbc.JdbcOdbcDriver";
-    } else {
-      return "oracle.jdbc.driver.OracleDriver";
-    }
+    return "oracle.jdbc.driver.OracleDriver";
   }
 
   @Override
   public String getURL( String hostname, String port, String databaseName ) throws KettleDatabaseException {
-    if ( getAccessType() == DatabaseMeta.TYPE_ACCESS_ODBC ) {
-      return "jdbc:odbc:" + databaseName;
-    } else if ( getAccessType() == DatabaseMeta.TYPE_ACCESS_NATIVE ) {
+    if ( getAccessType() == DatabaseMeta.TYPE_ACCESS_NATIVE ) {
       // the database name can be a SID (starting with :) or a Service (starting with /)
       // <host>:<port>/<service>
       // <host>:<port>:<SID>
@@ -256,7 +245,7 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
    *          The column defined as a value
    * @param tk
    *          the name of the technical key field
-   * @param use_autoinc
+   * @param useAutoinc
    *          whether or not this field uses auto increment
    * @param pk
    *          the name of the primary key field
@@ -265,10 +254,10 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
    * @return the SQL statement to add a column to the specified table
    */
   @Override
-  public String getAddColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  public String getAddColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
     String pk, boolean semicolon ) {
     return "ALTER TABLE "
-      + tablename + " ADD ( " + getFieldDefinition( v, tk, pk, use_autoinc, true, false ) + " ) ";
+      + tablename + " ADD ( " + getFieldDefinition( v, tk, pk, useAutoinc, true, false ) + " ) ";
   }
 
   /**
@@ -280,7 +269,7 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
    *          The column defined as a value
    * @param tk
    *          the name of the technical key field
-   * @param use_autoinc
+   * @param useAutoinc
    *          whether or not this field uses auto increment
    * @param pk
    *          the name of the primary key field
@@ -289,7 +278,7 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
    * @return the SQL statement to drop a column from the specified table
    */
   @Override
-  public String getDropColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  public String getDropColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
     String pk, boolean semicolon ) {
     return "ALTER TABLE " + tablename + " DROP ( " + v.getName() + " ) " + Const.CR;
   }
@@ -303,7 +292,7 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
    *          The column defined as a value
    * @param tk
    *          the name of the technical key field
-   * @param use_autoinc
+   * @param useAutoinc
    *          whether or not this field uses auto increment
    * @param pk
    *          the name of the primary key field
@@ -312,7 +301,7 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
    * @return the SQL statement to modify a column in the specified table
    */
   @Override
-  public String getModifyColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  public String getModifyColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
     String pk, boolean semicolon ) {
     ValueMetaInterface tmpColumn = v.clone();
     String tmpName = v.getName();
@@ -340,32 +329,32 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
     String sql = "";
 
     // Create a new tmp column
-    sql += getAddColumnStatement( tablename, tmpColumn, tk, use_autoinc, pk, semicolon ) + ";" + Const.CR;
+    sql += getAddColumnStatement( tablename, tmpColumn, tk, useAutoinc, pk, semicolon ) + ";" + Const.CR;
     // copy the old data over to the tmp column
     sql += "UPDATE " + tablename + " SET " + tmpColumn.getName() + "=" + v.getName() + ";" + Const.CR;
     // drop the old column
-    sql += getDropColumnStatement( tablename, v, tk, use_autoinc, pk, semicolon ) + ";" + Const.CR;
+    sql += getDropColumnStatement( tablename, v, tk, useAutoinc, pk, semicolon ) + ";" + Const.CR;
     // create the wanted column
-    sql += getAddColumnStatement( tablename, v, tk, use_autoinc, pk, semicolon ) + ";" + Const.CR;
+    sql += getAddColumnStatement( tablename, v, tk, useAutoinc, pk, semicolon ) + ";" + Const.CR;
     // copy the data from the tmp column to the wanted column (again)
     // All this to avoid the rename clause as this is not supported on all Oracle versions
     sql += "UPDATE " + tablename + " SET " + v.getName() + "=" + tmpColumn.getName() + ";" + Const.CR;
     // drop the temp column
-    sql += getDropColumnStatement( tablename, tmpColumn, tk, use_autoinc, pk, semicolon );
+    sql += getDropColumnStatement( tablename, tmpColumn, tk, useAutoinc, pk, semicolon );
 
     return sql;
   }
 
   @Override
-  public String getFieldDefinition( ValueMetaInterface v, String tk, String pk, boolean use_autoinc,
-    boolean add_fieldname, boolean add_cr ) {
+  public String getFieldDefinition( ValueMetaInterface v, String tk, String pk, boolean useAutoinc,
+                                    boolean addFieldName, boolean addCr ) {
     StringBuilder retval = new StringBuilder( 128 );
 
     String fieldname = v.getName();
     int length = v.getLength();
     int precision = v.getPrecision();
 
-    if ( add_fieldname ) {
+    if ( addFieldName ) {
       retval.append( fieldname ).append( ' ' );
     }
 
@@ -423,7 +412,7 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
         break;
     }
 
-    if ( add_cr ) {
+    if ( addCr ) {
       retval.append( Const.CR );
     }
 
@@ -495,16 +484,16 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
    *          a connected database
    * @param schemaName
    * @param tableName
-   * @param idx_fields
+   * @param idxFields
    * @return true if the index exists, false if it doesn't.
    * @throws KettleDatabaseException
    */
   @Override
-  public boolean checkIndexExists( Database database, String schemaName, String tableName, String[] idx_fields ) throws KettleDatabaseException {
+  public boolean checkIndexExists( Database database, String schemaName, String tableName, String[] idxFields ) throws KettleDatabaseException {
 
     String tablename = database.getDatabaseMeta().getQuotedSchemaTableCombination( schemaName, tableName );
 
-    boolean[] exists = new boolean[idx_fields.length];
+    boolean[] exists = new boolean[ idxFields.length];
     for ( int i = 0; i < exists.length; i++ ) {
       exists[i] = false;
     }
@@ -521,7 +510,7 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
           Object[] row = database.getRow( res );
           while ( row != null ) {
             String column = database.getReturnRowMeta().getString( row, "COLUMN_NAME", "" );
-            int idx = Const.indexOfString( column, idx_fields );
+            int idx = Const.indexOfString( column, idxFields );
             if ( idx >= 0 ) {
               exists[idx] = true;
             }
@@ -555,17 +544,6 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
   @Override
   public boolean requiresCreateTablePrimaryKeyAppend() {
     return true;
-  }
-
-  /**
-   * Most databases allow you to retrieve result metadata by preparing a SELECT statement.
-   *
-   * @return true if the database supports retrieval of query metadata from a prepared statement. False if the query
-   *         needs to be executed first.
-   */
-  @Override
-  public boolean supportsPreparedStatementMetadataRetrieval() {
-    return false;
   }
 
   /**
@@ -677,5 +655,10 @@ public class OracleDatabaseMeta extends BaseDatabaseMeta implements DatabaseInte
    */
   public void setStrictBigNumberInterpretation( boolean strictBigNumberInterpretation ) {
     getAttributes().setProperty( STRICT_BIGNUMBER_INTERPRETATION, strictBigNumberInterpretation ? "Y" : "N" );
+  }
+
+  @Override
+  public void setConnectionSpecificInfoFromAttributes( Map<String, String> attributes ) {
+    this.setStrictBigNumberInterpretation( setBooleanValueFromMap( attributes, STRICT_BIGNUMBER_INTERPRETATION ) );
   }
 }

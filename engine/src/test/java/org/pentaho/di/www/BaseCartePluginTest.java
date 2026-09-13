@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.www;
 
@@ -28,8 +20,8 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.pentaho.di.core.logging.LogChannelInterface;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Arrays;
@@ -39,7 +31,7 @@ import java.util.Map;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
@@ -53,7 +45,7 @@ public class BaseCartePluginTest {
   CarteRequestHandler.WriterResponse writerResponse = mock( CarteRequestHandler.WriterResponse.class );
   CarteRequestHandler.OutputStreamResponse outputStreamResponse = mock( CarteRequestHandler.OutputStreamResponse.class );
   PrintWriter printWriter = mock( PrintWriter.class );
-  javax.servlet.ServletOutputStream outputStream = mock( javax.servlet.ServletOutputStream.class );
+  jakarta.servlet.ServletOutputStream outputStream = mock( jakarta.servlet.ServletOutputStream.class );
 
   ArgumentCaptor<CarteRequestHandler.CarteRequest> carteReqCaptor = ArgumentCaptor.forClass( CarteRequestHandler.CarteRequest.class );
 
@@ -63,7 +55,7 @@ public class BaseCartePluginTest {
   public void before() {
     baseCartePlugin = spy( new BaseCartePlugin() {
       @Override
-      public void handleRequest( CarteRequest request ) throws IOException {
+      public void handleRequest( CarteRequest request ) {
       }
 
       @Override
@@ -151,7 +143,7 @@ public class BaseCartePluginTest {
   }
 
   @Test
-  public void testGetService() throws Exception {
+  public void testGetService() {
     when( baseCartePlugin.getContextPath() )
       .thenReturn( "/Path" );
     assertThat( baseCartePlugin.getService().startsWith( "/Path" ), is( true ) );

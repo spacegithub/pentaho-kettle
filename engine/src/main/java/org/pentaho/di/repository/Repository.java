@@ -1,44 +1,39 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
 
-package org.pentaho.di.repository;
 
-import java.util.Calendar;
-import java.util.List;
+
+package org.pentaho.di.repository;
 
 import org.pentaho.di.cluster.ClusterSchema;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.Condition;
 import org.pentaho.di.core.ProgressMonitorListener;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleSecurityException;
 import org.pentaho.di.core.logging.LogChannelInterface;
+import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.partition.PartitionSchema;
-import org.pentaho.di.shared.SharedObjects;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.metastore.api.IMetaStore;
 import org.pentaho.platform.api.repository2.unified.IUnifiedRepository;
+
+import java.net.URI;
+import java.util.Calendar;
+import java.util.List;
+import java.util.Optional;
 
 public interface Repository {
 
@@ -100,6 +95,13 @@ public interface Repository {
   public void disconnect();
 
   public boolean isConnected();
+
+  /**
+   * Returns the URI of the repository location, if defined by the implementation
+   */
+  default Optional<URI> getUri() {
+    return Optional.empty();
+  }
 
   /**
    * Initialize the repository with the repository metadata and user information.
@@ -193,6 +195,29 @@ public interface Repository {
     ProgressMonitorListener monitor, boolean setInternalVariables, String revision ) throws KettleException;
 
   /**
+   * Load a transformation with a name from a folder in the repository
+   *
+   * @param transname
+   *          the name of the transformation to load
+   * @param The
+   *          folder to load it from
+   * @param monitor
+   *          the progress monitor to use (UI feedback)
+   * @param setInternalVariables
+   *          set to true if you want to automatically set the internal variables of the loaded transformation. (true is
+   *          the default with very few exceptions!)
+   * @param revision
+   *          the revision to load. Specify null to load the last version.
+   * @param parent
+   *          The parent VariableSpace. Used in the initial load of the Transformation
+   */
+  default TransMeta loadTransformation( Bowl bowl, String transname, RepositoryDirectoryInterface repdir,
+    ProgressMonitorListener monitor, boolean setInternalVariables, String revision, VariableSpace parent )
+    throws KettleException {
+    return loadTransformation( transname, repdir, monitor, setInternalVariables, revision );
+  }
+
+  /**
    * Load a transformation by id
    *
    * @param id_transformation
@@ -202,7 +227,23 @@ public interface Repository {
    */
   public TransMeta loadTransformation( ObjectId id_transformation, String versionLabel ) throws KettleException;
 
-  public SharedObjects readTransSharedObjects( TransMeta transMeta ) throws KettleException;
+  /**
+   * Load a transformation by id
+   *
+   * @param id_transformation
+   *          the id of the transformation to load
+   * @param versionLabel
+   *          version to load. Specify null to load the last version.
+   * @param parent
+   *          The parent VariableSpace. Used in the initial load of the Transformation
+   */
+  default TransMeta loadTransformation( ObjectId id_transformation, String versionLabel, VariableSpace parent )
+      throws KettleException {
+    return loadTransformation( id_transformation, versionLabel );
+  }
+
+  @Deprecated( since = "11.0" )
+  public void readTransSharedObjects( TransMeta transMeta ) throws KettleException;
 
   /**
    * Move / rename a transformation
@@ -268,6 +309,25 @@ public interface Repository {
     String revision ) throws KettleException;
 
   /**
+   * Load a job from the repository
+   *
+   * @param jobname
+   *          the name
+   * @param repdir
+   *          the directory
+   * @param monitor
+   *          the progress monitor or null
+   * @param revision
+   *          the revision to load. Specify null to load the last version.
+   * @param parent
+   *          The parent VariableSpace. Used in the initial load of the Transformation
+   */
+  default JobMeta loadJob( String jobname, RepositoryDirectoryInterface repdir, ProgressMonitorListener monitor,
+    String revision, VariableSpace parent ) throws KettleException {
+    return loadJob( jobname, repdir, monitor, revision );
+  }
+
+  /**
    * Load a job from the repository by id
    *
    * @param id_job
@@ -277,7 +337,22 @@ public interface Repository {
    */
   public JobMeta loadJob( ObjectId id_job, String versionLabel ) throws KettleException;
 
-  public SharedObjects readJobMetaSharedObjects( JobMeta jobMeta ) throws KettleException;
+  /**
+   * Load a job from the repository by id
+   *
+   * @param id_job
+   *          the id of the job
+   * @param versionLabel
+   *          version to load. Specify null to load the last version.
+   * @param parent
+   *          The parent VariableSpace. Used in the initial load of the Transformation
+   */
+  default JobMeta loadJob( ObjectId id_job, String versionLabel, VariableSpace parent ) throws KettleException {
+    return loadJob( id_job, versionLabel );
+  }
+
+  @Deprecated( since = "11.0" )
+  public void readJobMetaSharedObjects( JobMeta jobMeta ) throws KettleException;
 
   /**
    * Move / rename a job
@@ -397,8 +472,6 @@ public interface Repository {
 
   public ObjectId[] getPartitionSchemaIDs( boolean includeDeleted ) throws KettleException;
 
-  // public ObjectId[] getPartitionIDs(ObjectId id_partition_schema) throws KettleException;
-
   public String[] getPartitionSchemaNames( boolean includeDeleted ) throws KettleException;
 
   public ObjectId getPartitionSchemaID( String name ) throws KettleException;
@@ -440,7 +513,7 @@ public interface Repository {
    * @param parentDirectory
    *          the parent directory
    * @param directoryPath
-   *          The path to the new Repository Directory, to be created.
+   *          The partial path to the new Repository Directory, to be created.
    * @return The created sub-directory
    * @throws KettleException
    *           In case something goes wrong
@@ -750,12 +823,21 @@ public interface Repository {
 
   /**
    * @return the Metastore that is implemented in this Repository. Return null if this repository doesn't implement a
-   *         Metastore.
+   *         Metastore. This should only be used when you want a specific repository instance
+   *         (see RepositoryMetastoreProvider), for all generic metastore usage use MetaStoreConst.getDefaultMetastore()
    */
-  public IMetaStore getMetaStore();
+  public IMetaStore getRepositoryMetaStore();
 
   /**
    * @return repository for connect to server
    */
   public IUnifiedRepository getUnderlyingRepository();
+
+  /**
+   * Get a Bowl that represents context for the repository. Metastore and SharedObjects will come from the repository.
+   *
+   *
+   * @return Bowl
+   */
+  Bowl getBowl();
 }

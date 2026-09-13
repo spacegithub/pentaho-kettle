@@ -1,25 +1,23 @@
-/*!
- * Copyright 2010 - 2018 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.pur;
 
-import com.sun.jersey.api.client.Client;
-import com.sun.jersey.api.client.WebResource;
-import com.sun.jersey.api.client.filter.HTTPBasicAuthFilter;
-import org.apache.commons.lang.StringUtils;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.client.ClientBuilder;
+import jakarta.ws.rs.client.Invocation;
+import org.glassfish.jersey.client.authentication.HttpAuthenticationFeature;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -29,6 +27,8 @@ import org.pentaho.di.repository.IUser;
 import org.pentaho.di.repository.pur.model.IEEUser;
 import org.pentaho.di.repository.pur.model.IRole;
 import org.pentaho.di.ui.repository.pur.services.IRoleSupportSecurityManager;
+import org.pentaho.di.ui.spoon.session.AuthenticationContext;
+import org.pentaho.di.ui.spoon.session.SpoonSessionManager;
 import org.pentaho.platform.api.engine.security.userroledao.UserRoleInfo;
 import org.pentaho.platform.security.userrole.ws.IUserRoleListWebService;
 import org.pentaho.platform.security.userroledao.ws.IUserRoleWebService;
@@ -37,7 +37,7 @@ import org.pentaho.platform.security.userroledao.ws.ProxyPentahoUser;
 import org.pentaho.platform.security.userroledao.ws.UserRoleException;
 import org.pentaho.platform.security.userroledao.ws.UserRoleSecurityInfo;
 
-import javax.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.MediaType;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -99,11 +99,35 @@ public class UserRoleDelegate implements java.io.Serializable {
   private void initManaged( PurRepositoryMeta repositoryMeta, IUser userInfo ) throws JSONException {
     String baseUrl = repositoryMeta.getRepositoryLocation().getUrl();
     String webService = baseUrl + ( baseUrl.endsWith( "/" ) ? "" : "/" ) + "api/system/authentication-provider";
-    HTTPBasicAuthFilter authFilter = new HTTPBasicAuthFilter( userInfo.getLogin(), userInfo.getPassword() );
-    Client client = new Client();
-    client.addFilter( authFilter );
+    Client client = ClientBuilder.newClient();
 
-    WebResource.Builder resource = client.resource( webService ).accept( MediaType.APPLICATION_JSON_TYPE );
+    // Check if session-based authentication is available and valid
+    boolean useSessionAuth = false;
+    String sessionId = null;
+    try {
+      AuthenticationContext authContext =
+        SpoonSessionManager.getInstance().getAuthenticationContext( baseUrl );
+
+      if ( authContext != null && authContext.isAuthenticated() && authContext.validateAndClearIfExpired() ) {
+        sessionId = authContext.getJSessionId();
+        useSessionAuth = ( sessionId != null && !sessionId.trim().isEmpty() );
+      }
+    } catch ( Exception e ) {
+      // Session auth not available (e.g., running in headless mode), continue with basic auth
+      logger.debug( "Session auth not available, using basic authentication: " + e.getMessage() );
+    }
+
+    if ( useSessionAuth ) {
+      final String finalSessionId = sessionId;
+      client.register( (jakarta.ws.rs.client.ClientRequestFilter) requestContext ->
+        requestContext.getHeaders().add( "Cookie", "JSESSIONID=" + finalSessionId )
+      );
+    } else {
+      HttpAuthenticationFeature authFeature = HttpAuthenticationFeature.basic( userInfo.getLogin(), userInfo.getPassword() );
+      client.register( authFeature );
+    }
+
+    Invocation.Builder target = client.target( webService ).request( MediaType.APPLICATION_JSON_TYPE );
     /**
      * if set, _trust_user_ needs to be considered. See other places in pur-plugin's:
      *
@@ -111,9 +135,10 @@ public class UserRoleDelegate implements java.io.Serializable {
      * @link https://github.com/pentaho/pentaho-kettle/blob/8.0.0.0-R/plugins/pur/core/src/main/java/org/pentaho/di/repository/pur/WebServiceManager.java#L130-L133
      */
     if ( StringUtils.isNotBlank( System.getProperty( "pentaho.repository.client.attemptTrust" ) ) ) {
-      resource = resource.header( TRUST_USER, userInfo.getLogin() );
+      target = target.header( TRUST_USER, userInfo.getLogin() );
     }
-    String response = resource.get( String.class );
+    String response = target.get( String.class );
+
     String provider = new JSONObject( response ).getString( "authenticationType" );
     managed = "jackrabbit".equals( provider );
   }

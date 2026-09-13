@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.repository.kdr;
 
@@ -93,7 +85,6 @@ import org.pentaho.di.repository.kdr.delegates.KettleDatabaseRepositoryTransDele
 import org.pentaho.di.repository.kdr.delegates.KettleDatabaseRepositoryUserDelegate;
 import org.pentaho.di.repository.kdr.delegates.KettleDatabaseRepositoryValueDelegate;
 import org.pentaho.di.repository.kdr.delegates.metastore.KettleDatabaseRepositoryMetaStore;
-import org.pentaho.di.shared.SharedObjects;
 import org.pentaho.di.trans.TransMeta;
 
 /**
@@ -227,10 +218,6 @@ public class KettleDatabaseRepository extends KettleDatabaseRepositoryBase {
 
   @Override public void create() {
     if ( repositoryMeta.getConnection() != null ) {
-      if ( repositoryMeta.getConnection().getAccessType() == DatabaseMeta.TYPE_ACCESS_ODBC ) {
-        // This will change in a future story
-        log.logDebug( "ODBC type is not advised for repository use" );
-      }
 
       try {
         if ( !getDatabaseMeta().getDatabaseInterface().supportsRepository() ) {
@@ -355,9 +342,10 @@ public class KettleDatabaseRepository extends KettleDatabaseRepositoryBase {
     }
   }
 
-  public SharedObjects readTransSharedObjects( TransMeta transMeta ) throws KettleException {
+  @Override
+  public void readTransSharedObjects( TransMeta transMeta ) throws KettleException {
     try {
-      return transDelegate.readTransSharedObjects( transMeta );
+      transDelegate.readTransSharedObjects( transMeta );
     } finally {
       connectionDelegate.closeReadTransaction();
     }
@@ -403,9 +391,10 @@ public class KettleDatabaseRepository extends KettleDatabaseRepositoryBase {
     }
   }
 
-  public SharedObjects readJobMetaSharedObjects( JobMeta jobMeta ) throws KettleException {
+  @Override
+  public void readJobMetaSharedObjects( JobMeta jobMeta ) throws KettleException {
     try {
-      return jobDelegate.readSharedObjects( jobMeta );
+      jobDelegate.readSharedObjects( jobMeta );
     } finally {
       connectionDelegate.closeReadTransaction();
     }
@@ -2069,7 +2058,7 @@ public class KettleDatabaseRepository extends KettleDatabaseRepositoryBase {
     return new RepositoryImporter( this );
   }
 
-  public KettleDatabaseRepositoryMetaStore getMetaStore() {
+  public KettleDatabaseRepositoryMetaStore getRepositoryMetaStore() {
     return metaStore;
   }
 }

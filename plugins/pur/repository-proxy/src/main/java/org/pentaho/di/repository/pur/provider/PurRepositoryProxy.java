@@ -1,23 +1,21 @@
-/*!
- * Copyright 2018 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.pur.provider;
 
 import org.pentaho.di.cluster.ClusterSchema;
 import org.pentaho.di.cluster.SlaveServer;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.Condition;
 import org.pentaho.di.core.ProgressMonitorListener;
 import org.pentaho.di.core.database.DatabaseMeta;
@@ -44,7 +42,6 @@ import org.pentaho.di.repository.RepositoryObject;
 import org.pentaho.di.repository.RepositoryObjectType;
 import org.pentaho.di.repository.RepositorySecurityManager;
 import org.pentaho.di.repository.RepositorySecurityProvider;
-import org.pentaho.di.shared.SharedObjects;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.metastore.api.IMetaStore;
 import org.pentaho.platform.api.repository2.unified.IUnifiedRepository;
@@ -182,6 +179,11 @@ public class PurRepositoryProxy implements Repository {
   }
 
   @Override
+  public Bowl getBowl() {
+    return getDelegate().getBowl();
+  }
+
+  @Override
   public boolean exists( String s, RepositoryDirectoryInterface repositoryDirectoryInterface, RepositoryObjectType repositoryObjectType ) throws KettleException {
     return getDelegate().exists( s, repositoryDirectoryInterface, repositoryObjectType );
   }
@@ -237,8 +239,9 @@ public class PurRepositoryProxy implements Repository {
   }
 
   @Override
-  public SharedObjects readTransSharedObjects( TransMeta transMeta ) throws KettleException {
-    return getDelegate().readTransSharedObjects( transMeta );
+  @Deprecated
+  public void readTransSharedObjects( TransMeta transMeta ) throws KettleException {
+    getDelegate().readTransSharedObjects( transMeta );
   }
 
   @Override
@@ -267,8 +270,8 @@ public class PurRepositoryProxy implements Repository {
   }
 
   @Override
-  public SharedObjects readJobMetaSharedObjects( JobMeta jobMeta ) throws KettleException {
-    return getDelegate().readJobMetaSharedObjects( jobMeta );
+  public void readJobMetaSharedObjects( JobMeta jobMeta ) throws KettleException {
+    getDelegate().readJobMetaSharedObjects( jobMeta );
   }
 
   @Override
@@ -717,8 +720,8 @@ public class PurRepositoryProxy implements Repository {
   }
 
   @Override
-  public IMetaStore getMetaStore() {
-    return getDelegate().getMetaStore();
+  public IMetaStore getRepositoryMetaStore() {
+    return getDelegate().getRepositoryMetaStore();
   }
 
   @Override

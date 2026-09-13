@@ -1,33 +1,25 @@
 // CHECKSTYLE:FileLength:OFF
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.database;
 
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.RowMetaAndData;
 import org.pentaho.di.core.encryption.Encr;
 import org.pentaho.di.core.exception.KettleDatabaseException;
+import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettlePluginException;
 import org.pentaho.di.core.exception.KettleValueException;
 import org.pentaho.di.core.exception.KettleXMLException;
@@ -41,6 +33,7 @@ import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaBase;
 import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.core.util.ExecutorUtil;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.variables.Variables;
 import org.pentaho.di.core.xml.XMLHandler;
@@ -54,9 +47,12 @@ import org.pentaho.di.repository.RepositoryElementInterface;
 import org.pentaho.di.repository.RepositoryObjectType;
 import org.pentaho.di.shared.SharedObjectBase;
 import org.pentaho.di.shared.SharedObjectInterface;
+import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -78,23 +74,33 @@ import java.util.concurrent.Future;
  * @since 18-05-2003
  *
  */
-public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInterface, SharedObjectInterface,
+public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInterface, SharedObjectInterface<DatabaseMeta>,
   VariableSpace, RepositoryElementInterface {
   private static Class<?> PKG = Database.class; // for i18n purposes, needed by Translator2!!
 
   public static final String XML_TAG = "connection";
+
+  /**
+   * Attribute key for the dynamically loaded JDBC driver JAR.
+   * Stored in {@link #getAttributes()} so it is serialised to/from KTR XML automatically.
+   * The value can be either an absolute path on the server (e.g. {@code /opt/drivers/ojdbc11.jar})
+   * or just the JAR file name (e.g. {@code ojdbc11.jar}). When only a file name is provided,
+   * {@code JdbcDriverResolver} will locate the JAR by searching configured directories
+   * (environment variable, kettle.properties, Pentaho solution path) or downloading it
+   * from the connection-management service.
+   */
+  public static final String ATTRIBUTE_DYNAMIC_DRIVER_JAR = "dynamicDriverJar";
+
+  public static final String ATTRIBUTE_DYNAMIC_DRIVER_ID = "dynamicDriverId";
+  public static final String ATTRIBUTE_DYNAMIC_DRIVER_EXTRA_JAR_IDS = "dynamicDriverExtraJarIds";
 
   public static final RepositoryObjectType REPOSITORY_ELEMENT_TYPE = RepositoryObjectType.DATABASE;
 
   private static final String DROP_TABLE_STATEMENT = "DROP TABLE IF EXISTS ";
 
   // Comparator for sorting databases alphabetically by name
-  public static final Comparator<DatabaseMeta> comparator = new Comparator<DatabaseMeta>() {
-    @Override
-    public int compare( DatabaseMeta dbm1, DatabaseMeta dbm2 ) {
-      return dbm1.getName().compareToIgnoreCase( dbm2.getName() );
-    }
-  };
+  public static final Comparator<DatabaseMeta> comparator = Comparator.comparing( DatabaseMeta::getName,
+                                                                                  String.CASE_INSENSITIVE_ORDER);
 
   private DatabaseInterface databaseInterface;
 
@@ -128,6 +134,8 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
 
   private boolean readOnly = false;
 
+  private boolean needUpdate = false;
+
   /**
    * Indicates that the connections doesn't point to a type of database yet.
    *
@@ -159,14 +167,6 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
    */
   @Deprecated
   public static final int TYPE_DATABASE_AS400 = 3;
-
-  /**
-   * Connection to an Microsoft Access database
-   *
-   * @deprecated
-   */
-  @Deprecated
-  public static final int TYPE_DATABASE_ACCESS = 4;
 
   /**
    * Connection to a Microsoft SQL Server database
@@ -223,14 +223,6 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
    */
   @Deprecated
   public static final int TYPE_DATABASE_GUPTA = 11;
-
-  /**
-   * Connection to a DBase III/IV/V database through JDBC
-   *
-   * @deprecated
-   */
-  @Deprecated
-  public static final int TYPE_DATABASE_DBASE = 12;
 
   /**
    * Connection to a FireBird database
@@ -345,14 +337,6 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
   public static final int TYPE_DATABASE_SQLITE = 26;
 
   /**
-   * Connection to an Apache Derby database
-   *
-   * @deprecated
-   */
-  @Deprecated
-  public static final int TYPE_DATABASE_DERBY = 27;
-
-  /**
    * Connection to a BMC Remedy Action Request System
    *
    * @deprecated
@@ -439,6 +423,7 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
 
   /**
    * Connect to the database using ODBC.
+   * @deprecated
    */
   public static final int TYPE_ACCESS_ODBC = 1;
 
@@ -460,13 +445,13 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
   /**
    * Short description of the access type, used in XML and the repository.
    */
-  public static final String[] dbAccessTypeCode = { "Native", "ODBC", "OCI", "Plugin", "JNDI", ",", };
+  public static final String[] dbAccessTypeCode = { "Native", "ODBC (deprecated)", "OCI", "Plugin", "JNDI", ",", };
 
   /**
    * Longer description for user interactions.
    */
   public static final String[] dbAccessTypeDesc = {
-    "Native (JDBC)", "ODBC", "OCI", "Plugin specific access method", "JNDI", "Custom", };
+    "Native (JDBC)", "ODBC (deprecated)", "OCI", "Plugin specific access method", "JNDI", "Custom", };
 
   /**
    * Use this length in a String value to indicate that you want to use a CLOB in stead of a normal text field.
@@ -609,13 +594,16 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
 
   @Override
   public Object clone() {
+    return deepClone( false );
+  }
+
+  public Object deepClone( boolean cloneUpdateFlag ) {
     DatabaseMeta databaseMeta = new DatabaseMeta();
-    databaseMeta.replaceMeta( this );
-    databaseMeta.setObjectId( null );
+    databaseMeta.replaceMeta( this, cloneUpdateFlag );
     return databaseMeta;
   }
 
-  public void replaceMeta( DatabaseMeta databaseMeta ) {
+  public void replaceMeta( DatabaseMeta databaseMeta, boolean cloneUpdateFlag ) {
     this.setValues(
       databaseMeta.getName(), databaseMeta.getPluginId(), databaseMeta.getAccessTypeDesc(), databaseMeta
         .getHostname(), databaseMeta.getDatabaseName(), databaseMeta.getDatabasePortNumberString(),
@@ -623,11 +611,19 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
     this.setServername( databaseMeta.getServername() );
     this.setDataTablespace( databaseMeta.getDataTablespace() );
     this.setIndexTablespace( databaseMeta.getIndexTablespace() );
+    this.setConnectionId( databaseMeta.getConnectionId() );
 
     this.databaseInterface = (DatabaseInterface) databaseMeta.databaseInterface.clone();
 
     this.setObjectId( databaseMeta.getObjectId() );
-    this.setChanged();
+    setChanged( true );
+    if ( cloneUpdateFlag ) {
+      setNeedUpdate( databaseMeta.isNeedUpdate() );
+    }
+  }
+
+  public void replaceMeta( DatabaseMeta databaseMeta ) {
+    replaceMeta( databaseMeta, false );
   }
 
   public void setValues( String name, String type, String access, String host, String db, String port,
@@ -674,6 +670,25 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
 
   public void setValues( DatabaseMeta info ) {
     databaseInterface = (DatabaseInterface) info.databaseInterface.clone();
+  }
+
+  /**
+   * Sets the Id of the database connection from the connection management service.
+   *
+   * @param connectionId
+   *          The Id of the database connection.
+   */
+  public void setConnectionId( String connectionId ) {
+    databaseInterface.setConnectionId( connectionId );
+  }
+
+  /**
+   * Returns the Id of the database connection from the connection management service.
+   *
+   * @return The Id of the database connection.
+   */
+  public String getConnectionId() {
+    return databaseInterface.getConnectionId();
   }
 
   /**
@@ -743,8 +758,6 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
    * Return the type of database access. One of
    * <p>
    * TYPE_ACCESS_NATIVE
-   * <p>
-   * TYPE_ACCESS_ODBC
    * <p>
    * TYPE_ACCESS_OCI
    * <p>
@@ -911,8 +924,17 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
     databaseInterface.setIndexTablespace( index_tablespace );
   }
 
+  public boolean isNeedUpdate() {
+    return needUpdate;
+  }
+
+  public void setNeedUpdate( boolean needUpdate ) {
+    this.needUpdate = needUpdate;
+  }
+
   public void setChanged() {
     setChanged( true );
+    setNeedUpdate( true );
   }
 
   public void setChanged( boolean ch ) {
@@ -980,8 +1002,14 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
       } catch ( KettleDatabaseException kde ) {
         throw new KettleXMLException( "Unable to create new database interface", kde );
       }
+      
+      setDefaultAttributesValues();
 
-      setName( XMLHandler.getTagValue( con, "name" ) );
+      String name = XMLHandler.getTagValue( con, "name" );
+      if ( name == null ) {
+        name = "";
+      }
+      setName( name );
       setDisplayName( getName() );
       setHostname( XMLHandler.getTagValue( con, "server" ) );
       String acc = XMLHandler.getTagValue( con, "access" );
@@ -1000,6 +1028,8 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
 
       setReadOnly( Boolean.valueOf( XMLHandler.getTagValue( con, "read_only" ) ) );
 
+      readObjectId( con );
+
       // Also, read the database attributes...
       Node attrsnode = XMLHandler.getSubNode( con, "attributes" );
       if ( attrsnode != null ) {
@@ -1008,7 +1038,7 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
           String code = XMLHandler.getTagValue( attrnode, "code" );
           String attribute = XMLHandler.getTagValue( attrnode, "attribute" );
           if ( code != null && attribute != null ) {
-            getAttributes().put( code, attribute );
+            databaseInterface.addAttribute( code, attribute );
           }
           getDatabasePortNumberString();
         }
@@ -1018,11 +1048,28 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
     }
   }
 
+  /**
+   * Initialize every attribute
+   */
+  private void setDefaultAttributesValues() {
+    setConnectSQL( "" );
+    setInitialPoolSizeString( "" );
+    setMaximumPoolSizeString( "" );
+    setUsingConnectionPool( false );
+    setForcingIdentifiersToLowerCase( false );
+    setForcingIdentifiersToUpperCase( false );
+    setQuoteAllFields( false );
+    setUsingDoubleDecimalAsSchemaTableSeparator( false );
+    setSupportsBooleanDataType( false );
+    setSupportsTimestampDataType( false );
+  }
+
   @Override
   public String getXML() {
     StringBuilder retval = new StringBuilder( 250 );
 
     retval.append( "  <" ).append( XML_TAG ).append( '>' ).append( Const.CR );
+    retval.append( "    " ).append( XMLHandler.addTagValue( "connection_id", getConnectionId() ) );
     retval.append( "    " ).append( XMLHandler.addTagValue( "name", getName() ) );
     retval.append( "    " ).append( XMLHandler.addTagValue( "server", getHostname() ) );
     retval.append( "    " ).append( XMLHandler.addTagValue( "type", getPluginId() ) );
@@ -1035,6 +1082,7 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
     retval.append( "    " ).append( XMLHandler.addTagValue( "servername", getServername() ) );
     retval.append( "    " ).append( XMLHandler.addTagValue( "data_tablespace", getDataTablespace() ) );
     retval.append( "    " ).append( XMLHandler.addTagValue( "index_tablespace", getIndexTablespace() ) );
+    appendObjectId( retval );
 
     // only write the tag out if it is set to true
     if ( isReadOnly() ) {
@@ -1108,7 +1156,9 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
     String url =  environmentSubstitute( baseUrl );
 
     if ( databaseInterface.supportsOptionsInURL() ) {
-      url = appendExtraOptions( url, getExtraOptions() );
+      Map<String, String> extraOptions = getExtraOptions();
+      databaseInterface.putOptionalOptions( extraOptions );
+      url = appendExtraOptions( url, extraOptions );
     }
     // else {
     // We need to put all these options in a Properties file later (Oracle & Co.)
@@ -1261,8 +1311,9 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
     final Map<String, String> extraOptions = getExtraOptions();
 
     final Map<String, String> defaultOptions = databaseInterface.getDefaultOptions();
-    for ( String option : defaultOptions.keySet() ) {
-      String value = defaultOptions.get( option );
+    for ( Map.Entry<String, String> entry : defaultOptions.entrySet() ) {
+      String option = entry.getKey();
+      String value = entry.getValue();
       String[] split = option.split( "[.]", 2 );
       if ( !extraOptions.containsKey( option ) && split.length == 2 ) {
         addExtraOption( split[0], split[1], value );
@@ -2438,7 +2489,15 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
    * @return the maximum pool size
    */
   public int getMaximumPoolSize() {
-    return databaseInterface.getMaximumPoolSize();
+    return Const.toInt(
+      environmentSubstitute( getMaximumPoolSizeString() ), ConnectionPoolUtil.defaultMaximumNrOfConnections );
+  }
+
+  /**
+   * @return the maximum pool size variable name
+   */
+  public String getMaximumPoolSizeString() {
+    return databaseInterface.getMaximumPoolSizeString();
   }
 
   /**
@@ -2450,10 +2509,26 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
   }
 
   /**
+   * @param maximumPoolSize
+   *          the maximum pool size variable name
+   */
+  public void setMaximumPoolSizeString( String maximumPoolSize ) {
+    databaseInterface.setMaximumPoolSizeString( maximumPoolSize );
+  }
+
+  /**
    * @return the initial pool size
    */
   public int getInitialPoolSize() {
-    return databaseInterface.getInitialPoolSize();
+    return Const.toInt(
+      environmentSubstitute( getInitialPoolSizeString() ), ConnectionPoolUtil.defaultInitialNrOfConnections );
+  }
+
+  /**
+   * @return the initial pool size variable name
+   */
+  public String getInitialPoolSizeString() {
+    return databaseInterface.getInitialPoolSizeString();
   }
 
   /**
@@ -2462,6 +2537,14 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
    */
   public void setInitialPoolSize( int initalPoolSize ) {
     databaseInterface.setInitialPoolSize( initalPoolSize );
+  }
+
+  /**
+    * @param initalPoolSize
+   *          the initial pool size variable name
+   */
+  public void setInitialPoolSizeString( String initalPoolSize ) {
+    databaseInterface.setInitialPoolSizeString( initalPoolSize );
   }
 
   /**
@@ -2918,7 +3001,7 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
   }
 
   public String getSQLListOfSchemas() {
-    return databaseInterface.getSQLListOfSchemas();
+    return databaseInterface.getSQLListOfSchemas( this );
   }
 
   public int getMaxColumnsInIndex() {
@@ -3051,5 +3134,33 @@ public class DatabaseMeta extends SharedObjectBase implements Cloneable, XMLInte
    */
   protected DatabaseInterface getDbInterface( String typeCode ) throws KettleDatabaseException {
     return getDatabaseInterface( typeCode );
+  }
+
+  public ResultSet getTables( DatabaseMetaData databaseMetaData, String schema, String table,
+                              String[] tableTypesToGet ) throws SQLException {
+    return databaseInterface.getTables( databaseMetaData, this, schema, table, tableTypesToGet );
+  }
+
+  public ResultSet getSchemas( DatabaseMetaData databaseMetaData ) throws SQLException {
+    return databaseInterface.getSchemas( databaseMetaData, this );
+  }
+
+  public String getNamedCluster() {
+    return databaseInterface.getNamedCluster();
+  }
+
+  public void setNamedCluster( String namedCluster ) {
+    databaseInterface.setNamedCluster( namedCluster );
+  }
+
+  @Override
+  public DatabaseMeta makeClone() {
+    return (DatabaseMeta) clone();
+  }
+
+  @Override
+  public Node toNode() throws KettleException {
+    Document doc = XMLHandler.loadXMLString( getXML() );
+    return XMLHandler.getSubNode( doc, XML_TAG );
   }
 }

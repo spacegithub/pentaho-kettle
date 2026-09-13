@@ -1,54 +1,24 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.job;
 
-import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.doCallRealMethod;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.doReturn;
-import static org.powermock.api.mockito.PowerMockito.verifyNew;
-import static org.powermock.api.mockito.PowerMockito.whenNew;
-
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Map;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.ObjectLocationSpecificationMethod;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.util.CurrentDirectoryResolver;
 import org.pentaho.di.core.variables.VariableSpace;
@@ -59,13 +29,38 @@ import org.pentaho.di.repository.Repository;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
 import org.pentaho.di.repository.StringObjectId;
 import org.pentaho.di.resource.ResourceNamingInterface;
+import org.pentaho.di.trans.steps.named.cluster.NamedClusterEmbedManager;
 import org.pentaho.metastore.api.IMetaStore;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.junit4.PowerMockRunner;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.MockedConstruction;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.w3c.dom.Node;
 
-@RunWith( PowerMockRunner.class )
-@PrepareForTest( JobEntryJob.class )
+import static org.junit.Assert.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockConstruction;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@RunWith( MockitoJUnitRunner.class )
 public class JobEntryJobTest {
 
   private final String JOB_ENTRY_JOB_NAME = "My Job";
@@ -83,6 +78,7 @@ public class JobEntryJobTest {
   private CurrentDirectoryResolver resolver = mock( CurrentDirectoryResolver.class );
   private RepositoryDirectoryInterface rdi = mock( RepositoryDirectoryInterface.class );
   private RepositoryDirectoryInterface directory = mock( RepositoryDirectoryInterface.class );
+  private NamedClusterEmbedManager namedClusterEmbedManager = mock( NamedClusterEmbedManager.class );
 
   @Before
   public void setUp() throws Exception {
@@ -102,13 +98,6 @@ public class JobEntryJobTest {
     doReturn( "/home/admin/folder/" ).when( space ).environmentSubstitute( "${repositorypath}" );
     doReturn( "job.kjb" ).when( space ).environmentSubstitute( "${jobname}" );
     doReturn( "job" ).when( space ).environmentSubstitute( "job" );
-
-    doCallRealMethod().when( resolver ).normalizeSlashes( anyString() );
-    doReturn( space ).when( resolver ).resolveCurrentDirectory(
-      any( ObjectLocationSpecificationMethod.class ), any( VariableSpace.class ), any( Repository.class ), any( Job.class ), anyString() );
-
-    whenNew( CurrentDirectoryResolver.class ).withNoArguments().thenReturn( resolver );
-    whenNew( JobMeta.class ).withAnyArguments().thenReturn( mock( JobMeta.class ) );
   }
 
   /**
@@ -117,10 +106,20 @@ public class JobEntryJobTest {
    */
   @Test
   public void testNotConnectedLoad_NoInfo() throws Exception {
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.loadXML( getNode( jej ), databases, servers, null, store );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ), any( VariableSpace.class ),
+                nullable( Repository.class ), nullable( Job.class ), anyString() );
+            } ) ) {
+      JobEntryJob jej = getJej();
+      jej.loadXML( getNode( jej ), databases, servers, null, store );
 
-    assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
+      assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
+    }
   }
 
   /**
@@ -130,14 +129,38 @@ public class JobEntryJobTest {
    */
   @Test
   public void testNotConnectedLoad_RepByRef() throws Exception {
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.setSpecificationMethod( ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE );
-    jej.setJobObjectId( JOB_ENTRY_JOB_OBJECT_ID );
-    jej.loadXML( getNode( jej ), databases, servers, null, store );
-    jej.getJobMeta( null, store, space );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction =
+            mockConstruction( JobMeta.class,
+              ( mock, context ) -> {
+                if ( context.getCount() > 1 ) {
+                  assertEquals( context.arguments().get( 0 ), DefaultBowl.getInstance() );
+                  assertEquals( context.arguments().get( 1 ), space );
+                  assertEquals( context.arguments().get( 2 ), null );
+                  assertEquals( context.arguments().get( 3 ), null );
+                  assertEquals( context.arguments().get( 4 ), store );
+                  assertEquals( context.arguments().get( 5 ), null );
+                } else {
+                  assertEquals( 0, context.arguments().size() );
+                }
+              } );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ), any( VariableSpace.class ),
+                nullable( Repository.class ), nullable( Job.class ), nullable( String.class ) );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ), any( VariableSpace.class ),
+                nullable( RepositoryDirectoryInterface.class ), nullable( String.class ) );
+            } ) ) {
+      JobEntryJob jej = getJej();
+      jej.setSpecificationMethod( ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE );
+      jej.setJobObjectId( JOB_ENTRY_JOB_OBJECT_ID );
+      jej.loadXML( getNode( jej ), databases, servers, null, store );
+      jej.getJobMeta( null, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
-    verifyNew( JobMeta.class ).withArguments( space, null, null, store, null );
+      assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
+    }
   }
 
   /**
@@ -147,15 +170,39 @@ public class JobEntryJobTest {
    */
   @Test
   public void testNotConnectedLoad_RepByName() throws Exception {
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.setSpecificationMethod( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME );
-    jej.setJobName( JOB_ENTRY_FILE_NAME );
-    jej.setDirectory( JOB_ENTRY_FILE_DIRECTORY );
-    jej.loadXML( getNode( jej ), databases, servers, null, store );
-    jej.getJobMeta( null, store, space );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction =
+            mockConstruction( JobMeta.class,
+              ( mock, context ) -> {
+                if ( context.getCount() > 1 ) {
+                  assertEquals( context.arguments().get( 0 ), DefaultBowl.getInstance() );
+                  assertEquals( context.arguments().get( 1 ), space );
+                  assertEquals( context.arguments().get( 2 ), null );
+                  assertEquals( context.arguments().get( 3 ), null );
+                  assertEquals( context.arguments().get( 4 ), store );
+                  assertEquals( context.arguments().get( 5 ), null );
+                } else {
+                  assertEquals( 0, context.arguments().size() );
+                }
+              } );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ), any( VariableSpace.class ),
+                nullable( Repository.class ), nullable( Job.class ), nullable( String.class ) );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ), any( VariableSpace.class ),
+                nullable( RepositoryDirectoryInterface.class ), nullable( String.class ) );
+            } ) ) {
+      JobEntryJob jej = getJej();
+      jej.setSpecificationMethod( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME );
+      jej.setJobName( JOB_ENTRY_FILE_NAME );
+      jej.setDirectory( JOB_ENTRY_FILE_DIRECTORY );
+      jej.loadXML( getNode( jej ), databases, servers, null, store );
+      jej.getJobMeta( null, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
-    verifyNew( JobMeta.class ).withArguments( space, null, null, store, null );
+      assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
+    }
   }
 
   /**
@@ -164,14 +211,38 @@ public class JobEntryJobTest {
    */
   @Test
   public void testNotConnectedLoad_Filename() throws Exception {
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.setSpecificationMethod( ObjectLocationSpecificationMethod.FILENAME );
-    jej.setFileName( JOB_ENTRY_FILE_PATH );
-    jej.loadXML( getNode( jej ), databases, servers, null, store );
-    jej.getJobMeta( null, store, space );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction =
+            mockConstruction( JobMeta.class,
+              ( mock, context ) -> {
+                if ( context.getCount() > 1 ) {
+                  assertEquals( context.arguments().get( 0 ), DefaultBowl.getInstance() );
+                  assertEquals( context.arguments().get( 1 ), space );
+                  assertEquals( context.arguments().get( 2 ), JOB_ENTRY_FILE_PATH );
+                  assertEquals( context.arguments().get( 3 ), null );
+                  assertEquals( context.arguments().get( 4 ), store );
+                  assertEquals( context.arguments().get( 5 ), null );
+                } else {
+                  assertEquals( 0, context.arguments().size() );
+                }
+              } );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ), any( VariableSpace.class ),
+                nullable( Repository.class ), nullable( Job.class ), nullable( String.class ) );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ), any( VariableSpace.class ),
+                nullable( RepositoryDirectoryInterface.class ), nullable( String.class ) );
+            } ) ) {
+      JobEntryJob jej = getJej();
+      jej.setSpecificationMethod( ObjectLocationSpecificationMethod.FILENAME );
+      jej.setFileName( JOB_ENTRY_FILE_PATH );
+      jej.loadXML( getNode( jej ), databases, servers, null, store );
+      jej.getJobMeta( null, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
-    verifyNew( JobMeta.class ).withArguments( space, JOB_ENTRY_FILE_PATH, null, store, null );
+      assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
+    }
   }
 
   /**
@@ -180,10 +251,20 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedImport_NoInfo() throws Exception {
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.loadXML( getNode( jej ), databases, servers, repository, store );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), any( Repository.class ), any( Job.class ), anyString() );
+            } ) ) {
+      JobEntryJob jej = getJej();
+      jej.loadXML( getNode( jej ), databases, servers, repository, store );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
+    }
   }
 
   /**
@@ -193,14 +274,24 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedImport_RepByRef() throws Exception {
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.setSpecificationMethod( ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE );
-    jej.setJobObjectId( JOB_ENTRY_JOB_OBJECT_ID );
-    jej.loadXML( getNode( jej ), databases, servers, repository, store );
-    jej.getJobMeta( repository, store, space );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), any( Repository.class ), any( Job.class ), anyString() );
+            } ) ) {
+      JobEntryJob jej = getJej();
+      jej.setSpecificationMethod( ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE );
+      jej.setJobObjectId( JOB_ENTRY_JOB_OBJECT_ID );
+      jej.loadXML( getNode( jej ), databases, servers, repository, store );
+      jej.getJobMeta( repository, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE, jej.getSpecificationMethod() );
-    verify( repository, times( 1 ) ).loadJob( JOB_ENTRY_JOB_OBJECT_ID, null );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE, jej.getSpecificationMethod() );
+      verify( repository, times( 1 ) ).loadJob( JOB_ENTRY_JOB_OBJECT_ID, null );
+    }
   }
 
   /**
@@ -210,15 +301,26 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedImport_RepByName() throws Exception {
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.setSpecificationMethod( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME );
-    jej.setJobName( JOB_ENTRY_FILE_NAME );
-    jej.setDirectory( JOB_ENTRY_FILE_DIRECTORY );
-    jej.loadXML( getNode( jej ), databases, servers, repository, store );
-    jej.getJobMeta( repository, store, space );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), nullable( Repository.class ), nullable( Job.class ),
+                nullable( String.class ) );
+            } ) ) {
+      JobEntryJob jej = getJej();
+      jej.setSpecificationMethod( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME );
+      jej.setJobName( JOB_ENTRY_FILE_NAME );
+      jej.setDirectory( JOB_ENTRY_FILE_DIRECTORY );
+      jej.loadXML( getNode( jej ), databases, servers, repository, store );
+      jej.getJobMeta( repository, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
-    verify( repository, times( 1 ) ).loadJob( JOB_ENTRY_FILE_NAME, directory, null, null );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
+      verify( repository, times( 1 ) ).loadJob( eq( JOB_ENTRY_FILE_NAME ), eq( directory ), eq( null ), eq( null ), any( VariableSpace.class ) );
+    }
   }
 
   /**
@@ -228,14 +330,38 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedImport_Filename() throws Exception {
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.setSpecificationMethod( ObjectLocationSpecificationMethod.FILENAME );
-    jej.setFileName( JOB_ENTRY_FILE_PATH );
-    jej.loadXML( getNode( jej ), databases, servers, repository, store );
-    jej.getJobMeta( repository, store, space );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction =
+            mockConstruction( JobMeta.class,
+              ( mock, context ) -> {
+                if ( context.getCount() > 1 ) {
+                  assertEquals( context.arguments().get( 0 ), DefaultBowl.getInstance() );
+                  assertEquals( context.arguments().get( 1 ), space );
+                  assertEquals( context.arguments().get( 2 ), JOB_ENTRY_FILE_PATH );
+                  assertEquals( context.arguments().get( 3 ), repository );
+                  assertEquals( context.arguments().get( 4 ), store );
+                  assertEquals( context.arguments().get( 5 ), null );
+                } else {
+                  assertEquals( 0, context.arguments().size() );
+                }
+              } );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ), any( VariableSpace.class ),
+                nullable( Repository.class ), nullable( Job.class ), nullable( String.class ) );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ), any( VariableSpace.class ),
+                nullable( RepositoryDirectoryInterface.class ), nullable( String.class ) );
+            } ) ) {
+      JobEntryJob jej = getJej();
+      jej.setSpecificationMethod( ObjectLocationSpecificationMethod.FILENAME );
+      jej.setFileName( JOB_ENTRY_FILE_PATH );
+      jej.loadXML( getNode( jej ), databases, servers, repository, store );
+      jej.getJobMeta( repository, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
-    verifyNew( JobMeta.class ).withArguments( space, JOB_ENTRY_FILE_PATH, repository, store, null );
+      assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
+    }
   }
 
   /**
@@ -245,13 +371,23 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedImport_RepByRef_Guess() throws Exception {
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.setJobObjectId( JOB_ENTRY_JOB_OBJECT_ID );
-    jej.loadXML( getNode( jej ), databases, servers, repository, store );
-    jej.getJobMeta( repository, store, space );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), any( Repository.class ), any( Job.class ), anyString() );
+            } ) ) {
+      JobEntryJob jej = getJej();
+      jej.setJobObjectId( JOB_ENTRY_JOB_OBJECT_ID );
+      jej.loadXML( getNode( jej ), databases, servers, repository, store );
+      jej.getJobMeta( repository, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE, jej.getSpecificationMethod() );
-    verify( repository, times( 1 ) ).loadJob( JOB_ENTRY_JOB_OBJECT_ID, null );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE, jej.getSpecificationMethod() );
+      verify( repository, times( 1 ) ).loadJob( JOB_ENTRY_JOB_OBJECT_ID, null );
+    }
   }
 
   /**
@@ -261,14 +397,25 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedImport_RepByName_Guess() throws Exception {
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.setJobName( JOB_ENTRY_FILE_NAME );
-    jej.setDirectory( JOB_ENTRY_FILE_DIRECTORY );
-    jej.loadXML( getNode( jej ), databases, servers, repository, store );
-    jej.getJobMeta( repository, store, space );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), nullable( Repository.class ), nullable( Job.class ),
+                nullable( String.class ) );
+            } ) ) {
+      JobEntryJob jej = getJej();
+      jej.setJobName( JOB_ENTRY_FILE_NAME );
+      jej.setDirectory( JOB_ENTRY_FILE_DIRECTORY );
+      jej.loadXML( getNode( jej ), databases, servers, repository, store );
+      jej.getJobMeta( repository, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
-    verify( repository, times( 1 ) ).loadJob( JOB_ENTRY_FILE_NAME, directory, null, null );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
+      verify( repository, times( 1 ) ).loadJob( eq( JOB_ENTRY_FILE_NAME ), eq( directory ), eq( null ), eq( null ), any( VariableSpace.class ) );
+    }
   }
 
   /**
@@ -278,13 +425,37 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedImport_Filename_Guess() throws Exception {
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.setFileName( JOB_ENTRY_FILE_PATH );
-    jej.loadXML( getNode( jej ), databases, servers, repository, store );
-    jej.getJobMeta( repository, store, space );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction =
+            mockConstruction( JobMeta.class,
+              ( mock, context ) -> {
+                if ( context.getCount() > 1 ) {
+                  assertEquals( context.arguments().get( 0 ), DefaultBowl.getInstance() );
+                  assertEquals( context.arguments().get( 1 ), space );
+                  assertEquals( context.arguments().get( 2 ), JOB_ENTRY_FILE_PATH );
+                  assertEquals( context.arguments().get( 3 ), repository );
+                  assertEquals( context.arguments().get( 4 ), store );
+                  assertEquals( context.arguments().get( 5 ), null );
+                } else {
+                  assertEquals( 0, context.arguments().size() );
+                }
+              } );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ), any( VariableSpace.class ),
+                nullable( Repository.class ), nullable( Job.class ), nullable( String.class ) );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ), any( VariableSpace.class ),
+                nullable( RepositoryDirectoryInterface.class ), nullable( String.class ) );
+            } ) ) {
+      JobEntryJob jej = getJej();
+      jej.setFileName( JOB_ENTRY_FILE_PATH );
+      jej.loadXML( getNode( jej ), databases, servers, repository, store );
+      jej.getJobMeta( repository, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
-    verifyNew( JobMeta.class ).withArguments( space, JOB_ENTRY_FILE_PATH, repository, store, null );
+      assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
+    }
   }
 
   /**
@@ -293,10 +464,20 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedLoad_NoInfo() throws Exception {
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.loadRep( repository, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), any( Repository.class ), any( Job.class ), anyString() );
+            } ) ) {
+      JobEntryJob jej = getJej();
+      jej.loadRep( repository, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
+    }
   }
 
   /**
@@ -306,18 +487,29 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedLoad_RepByRef() throws Exception {
-    Repository myrepo = mock( Repository.class );
-    doReturn( true ).when( myrepo ).isConnected();
-    doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
-    doReturn( "rep_ref" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
-    doReturn( JOB_ENTRY_JOB_OBJECT_ID.toString() ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "job_object_id" );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), any( Repository.class ), any( Job.class ), anyString() );
+            } ) ) {
+      Repository myrepo = mock( Repository.class );
+      doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
+      doReturn( "rep_ref" ).when( myrepo )
+        .getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
+      doReturn( JOB_ENTRY_JOB_OBJECT_ID.toString() ).when( myrepo )
+        .getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "job_object_id" );
 
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
-    jej.getJobMeta( myrepo, store, space );
+      JobEntryJob jej = getJej();
+      jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
+      jej.getJobMeta( myrepo, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE, jej.getSpecificationMethod() );
-    verify( myrepo, times( 1 ) ).loadJob( JOB_ENTRY_JOB_OBJECT_ID, null );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE, jej.getSpecificationMethod() );
+      verify( myrepo, times( 1 ) ).loadJob( JOB_ENTRY_JOB_OBJECT_ID, null );
+    }
   }
 
   /**
@@ -327,20 +519,32 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedLoad_RepByName() throws Exception {
-    Repository myrepo = mock( Repository.class );
-    doReturn( true ).when( myrepo ).isConnected();
-    doReturn( rdi ).when( myrepo ).loadRepositoryDirectoryTree();
-    doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
-    doReturn( "rep_name" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
-    doReturn( JOB_ENTRY_FILE_NAME ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "name" );
-    doReturn( JOB_ENTRY_FILE_DIRECTORY ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "dir_path" );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), nullable( Repository.class ), nullable( Job.class ),
+                nullable( String.class ) );
+            } ) ) {
+      Repository myrepo = mock( Repository.class );
+      doReturn( rdi ).when( myrepo ).loadRepositoryDirectoryTree();
+      doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
+      doReturn( "rep_name" ).when( myrepo )
+        .getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
+      doReturn( JOB_ENTRY_FILE_NAME ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "name" );
+      doReturn( JOB_ENTRY_FILE_DIRECTORY ).when( myrepo )
+        .getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "dir_path" );
 
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
-    jej.getJobMeta( myrepo, store, space );
+      JobEntryJob jej = getJej();
+      jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
+      jej.getJobMeta( myrepo, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
-    verify( myrepo, times( 1 ) ).loadJob( JOB_ENTRY_FILE_NAME, directory, null, null );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
+      verify( myrepo, times( 1 ) ).loadJob( eq( JOB_ENTRY_FILE_NAME ), eq( directory ), eq( null ), eq( null ), any( VariableSpace.class ) );
+    }
   }
 
   /**
@@ -351,17 +555,42 @@ public class JobEntryJobTest {
   @Test
   public void testConnectedLoad_Filename() throws Exception {
     Repository myrepo = mock( Repository.class );
-    doReturn( true ).when( myrepo ).isConnected();
-    doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
-    doReturn( "filename" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
-    doReturn( JOB_ENTRY_FILE_PATH ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "file_name" );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction =
+            mockConstruction( JobMeta.class,
+              ( mock, context ) -> {
+                if ( context.getCount() > 1 ) {
+                  assertEquals( context.arguments().get( 0 ), DefaultBowl.getInstance() );
+                  assertEquals( context.arguments().get( 1 ), space );
+                  assertEquals( context.arguments().get( 2 ), JOB_ENTRY_FILE_PATH );
+                  assertEquals( context.arguments().get( 3 ), myrepo );
+                  assertEquals( context.arguments().get( 4 ), store );
+                  assertEquals( context.arguments().get( 5 ), null );
+                } else {
+                  assertEquals( 0, context.arguments().size() );
+                }
+              } );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ), any( VariableSpace.class ),
+                nullable( Repository.class ), nullable( Job.class ), nullable( String.class ) );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ), any( VariableSpace.class ),
+                nullable( RepositoryDirectoryInterface.class ), nullable( String.class ) );
+            } ) ) {
 
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
-    jej.getJobMeta( myrepo, store, space );
+      doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
+      doReturn( "filename" ).when( myrepo )
+        .getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
+      doReturn( JOB_ENTRY_FILE_PATH ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "file_name" );
 
-    assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
-    verifyNew( JobMeta.class ).withArguments( space, JOB_ENTRY_FILE_PATH, myrepo, store, null );
+      JobEntryJob jej = getJej();
+      jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
+      jej.getJobMeta( myrepo, store, space );
+
+      assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
+    }
   }
 
   /**
@@ -372,18 +601,42 @@ public class JobEntryJobTest {
   @Test
   public void testConnectedLoad_RepByName_HDFS() throws Exception {
     Repository myrepo = mock( Repository.class );
-    doReturn( true ).when( myrepo ).isConnected();
-    doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
-    doReturn( "rep_name" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
-    doReturn( "job" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "name" );
-    doReturn( "${hdfs}" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "dir_path" );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction =
+            mockConstruction( JobMeta.class,
+              ( mock, context ) -> {
+                if ( context.getCount() > 1 ) {
+                  assertEquals( context.arguments().get( 0 ), DefaultBowl.getInstance() );
+                  assertEquals( context.arguments().get( 1 ), space );
+                  assertEquals( context.arguments().get( 2 ), "hdfs://server/path/job.kjb" );
+                  assertEquals( context.arguments().get( 3 ), myrepo );
+                  assertEquals( context.arguments().get( 4 ), store );
+                  assertEquals( context.arguments().get( 5 ), null );
+                } else {
+                  assertEquals( 0, context.arguments().size() );
+                }
+              } );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ), any( VariableSpace.class ),
+                nullable( Repository.class ), nullable( Job.class ), nullable( String.class ) );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ), any( VariableSpace.class ),
+                nullable( RepositoryDirectoryInterface.class ), nullable( String.class ) );
+            } ) ) {
+      doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
+      doReturn( "rep_name" ).when( myrepo )
+        .getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
+      doReturn( "job" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "name" );
+      doReturn( "${hdfs}" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "dir_path" );
 
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
-    jej.getJobMeta( myrepo, store, space );
+      JobEntryJob jej = getJej();
+      jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
+      jej.getJobMeta( myrepo, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
-    verifyNew( JobMeta.class ).withArguments( space, "hdfs://server/path/job.kjb", myrepo, store, null );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
+    }
   }
 
   /**
@@ -393,19 +646,31 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedLoad_RepByName_SingleParameter() throws Exception {
-    Repository myrepo = mock( Repository.class );
-    doReturn( true ).when( myrepo ).isConnected();
-    doReturn( rdi ).when( myrepo ).loadRepositoryDirectoryTree();
-    doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
-    doReturn( "rep_name" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
-    doReturn( "${repositoryfullfilepath}" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "name" );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), nullable( Repository.class ), nullable( Job.class ),
+                nullable( String.class ) );
+            } ) ) {
+      Repository myrepo = mock( Repository.class );
+      doReturn( rdi ).when( myrepo ).loadRepositoryDirectoryTree();
+      doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
+      doReturn( "rep_name" ).when( myrepo )
+        .getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
+      doReturn( "${repositoryfullfilepath}" ).when( myrepo )
+        .getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "name" );
 
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
-    jej.getJobMeta( myrepo, store, space );
+      JobEntryJob jej = getJej();
+      jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
+      jej.getJobMeta( myrepo, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
-    verify( myrepo, times( 1 ) ).loadJob( "job.kjb", directory, null, null );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
+      verify( myrepo, times( 1 ) ).loadJob( eq( "job.kjb" ), eq( directory ), eq( null ), eq( null ), any( VariableSpace.class ) );
+    }
   }
 
   /**
@@ -415,20 +680,31 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedLoad_RepByName_MultipleParameters() throws Exception {
-    Repository myrepo = mock( Repository.class );
-    doReturn( true ).when( myrepo ).isConnected();
-    doReturn( rdi ).when( myrepo ).loadRepositoryDirectoryTree();
-    doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
-    doReturn( "rep_name" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
-    doReturn( "${jobname}" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "name" );
-    doReturn( "${repositorypath}" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "dir_path" );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), nullable( Repository.class ), nullable( Job.class ),
+                nullable( String.class ) );
+            } ) ) {
+      Repository myrepo = mock( Repository.class );
+      doReturn( rdi ).when( myrepo ).loadRepositoryDirectoryTree();
+      doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
+      doReturn( "rep_name" ).when( myrepo )
+        .getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
+      doReturn( "${jobname}" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "name" );
+      doReturn( "${repositorypath}" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "dir_path" );
 
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
-    jej.getJobMeta( myrepo, store, space );
+      JobEntryJob jej = getJej();
+      jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
+      jej.getJobMeta( myrepo, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
-    verify( myrepo, times( 1 ) ).loadJob( "job.kjb", directory, null, null );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
+      verify( myrepo, times( 1 ) ).loadJob( eq( "job.kjb" ), eq( directory ), eq( null ), eq( null ), any( VariableSpace.class ) );
+    }
   }
 
   /**
@@ -438,17 +714,27 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedLoad_RepByRef_Guess() throws Exception {
-    Repository myrepo = mock( Repository.class );
-    doReturn( true ).when( myrepo ).isConnected();
-    doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
-    doReturn( JOB_ENTRY_JOB_OBJECT_ID.toString() ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "job_object_id" );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), any( Repository.class ), any( Job.class ), anyString() );
+            } ) ) {
+      Repository myrepo = mock( Repository.class );
+      doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
+      doReturn( JOB_ENTRY_JOB_OBJECT_ID.toString() ).when( myrepo )
+        .getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "job_object_id" );
 
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
-    jej.getJobMeta( myrepo, store, space );
+      JobEntryJob jej = getJej();
+      jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
+      jej.getJobMeta( myrepo, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE, jej.getSpecificationMethod() );
-    verify( myrepo, times( 1 ) ).loadJob( JOB_ENTRY_JOB_OBJECT_ID, null );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE, jej.getSpecificationMethod() );
+      verify( myrepo, times( 1 ) ).loadJob( JOB_ENTRY_JOB_OBJECT_ID, null );
+    }
   }
 
   /**
@@ -458,19 +744,30 @@ public class JobEntryJobTest {
    */
   @Test
   public void testConnectedLoad_RepByName_Guess() throws Exception {
-    Repository myrepo = mock( Repository.class );
-    doReturn( true ).when( myrepo ).isConnected();
-    doReturn( rdi ).when( myrepo ).loadRepositoryDirectoryTree();
-    doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
-    doReturn( JOB_ENTRY_FILE_NAME ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "name" );
-    doReturn( JOB_ENTRY_FILE_DIRECTORY ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "dir_path" );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), nullable( Repository.class ), nullable( Job.class ),
+                nullable( String.class ) );
+            } ) ) {
+      Repository myrepo = mock( Repository.class );
+      doReturn( rdi ).when( myrepo ).loadRepositoryDirectoryTree();
+      doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
+      doReturn( JOB_ENTRY_FILE_NAME ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "name" );
+      doReturn( JOB_ENTRY_FILE_DIRECTORY ).when( myrepo )
+        .getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "dir_path" );
 
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
-    jej.getJobMeta( myrepo, store, space );
+      JobEntryJob jej = getJej();
+      jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
+      jej.getJobMeta( myrepo, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
-    verify( myrepo, times( 1 ) ).loadJob( JOB_ENTRY_FILE_NAME, directory, null, null );
+      assertEquals( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME, jej.getSpecificationMethod() );
+      verify( myrepo, times( 1 ) ).loadJob( eq( JOB_ENTRY_FILE_NAME ), eq( directory ), eq( null ), eq( null ), any( VariableSpace.class ) );
+    }
   }
 
   /**
@@ -481,16 +778,39 @@ public class JobEntryJobTest {
   @Test
   public void testConnectedLoad_Filename_Guess() throws Exception {
     Repository myrepo = mock( Repository.class );
-    doReturn( true ).when( myrepo ).isConnected();
-    doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
-    doReturn( JOB_ENTRY_FILE_PATH ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "file_name" );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction =
+            mockConstruction( JobMeta.class,
+              ( mock, context ) -> {
+                if ( context.getCount() > 1 ) {
+                  assertEquals( context.arguments().get( 0 ), DefaultBowl.getInstance() );
+                  assertEquals( context.arguments().get( 1 ), space );
+                  assertEquals( context.arguments().get( 2 ), JOB_ENTRY_FILE_PATH );
+                  assertEquals( context.arguments().get( 3 ), myrepo );
+                  assertEquals( context.arguments().get( 4 ), store );
+                  assertEquals( context.arguments().get( 5 ), null );
+                } else {
+                  assertEquals( 0, context.arguments().size() );
+                }
+              } );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ), any( VariableSpace.class ),
+                nullable( Repository.class ), nullable( Job.class ), nullable( String.class ) );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ), any( VariableSpace.class ),
+                nullable( RepositoryDirectoryInterface.class ), nullable( String.class ) );
+            } ) ) {
+      doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
+      doReturn( JOB_ENTRY_FILE_PATH ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "file_name" );
 
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
-    jej.getJobMeta( myrepo, store, space );
+      JobEntryJob jej = getJej();
+      jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
+      jej.getJobMeta( myrepo, store, space );
 
-    assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
-    verifyNew( JobMeta.class ).withArguments( space, JOB_ENTRY_FILE_PATH, myrepo, store, null );
+      assertEquals( ObjectLocationSpecificationMethod.FILENAME, jej.getSpecificationMethod() );
+    }
   }
 
   private Node getNode( JobEntryJob jej ) throws Exception {
@@ -502,30 +822,89 @@ public class JobEntryJobTest {
 
   @Test
   public void testCurrDirListener() throws Exception {
-    JobMeta meta = mock( JobMeta.class );
-    JobEntryJob jej = new JobEntryJob( JOB_ENTRY_JOB_NAME );
-    jej.setParentJobMeta( null );
-    jej.setParentJobMeta( meta );
-    jej.setParentJobMeta( null );
-    verify( meta, times( 1 ) ).addCurrentDirectoryChangedListener( any() );
-    verify( meta, times( 1 ) ).removeCurrentDirectoryChangedListener( any() );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), nullable( Repository.class ), nullable( Job.class ), anyString() );
+            } ) ) {
+      JobMeta meta = mock( JobMeta.class );
+      JobEntryJob jej = getJej();
+      jej.setParentJobMeta( null );
+      jej.setParentJobMeta( meta );
+      jej.setParentJobMeta( null );
+      verify( meta, times( 1 ) ).addCurrentDirectoryChangedListener( any() );
+      verify( meta, times( 1 ) ).removeCurrentDirectoryChangedListener( any() );
+    }
   }
 
   @Test
   public void testExportResources() throws Exception {
-    JobMeta meta = mock( JobMeta.class );
-    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
-    jej.setDescription( JOB_ENTRY_DESCRIPTION );
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), nullable( Repository.class ), nullable( Job.class ), anyString() );
+            } ) ) {
+      JobMeta meta = mock( JobMeta.class );
+      JobEntryJob jej = getJej();
+      jej.setDescription( JOB_ENTRY_DESCRIPTION );
 
-    doReturn( meta ).when( jej ).getJobMeta(
-      any( Repository.class ), any( IMetaStore.class ), any( VariableSpace.class ) );
-    doReturn( JOB_ENTRY_JOB_NAME ).when( meta ).exportResources(
-      any( JobMeta.class ), any( Map.class ), any( ResourceNamingInterface.class ),
-      any( Repository.class ), any( IMetaStore.class ) );
+      doReturn( meta ).when( jej ).getJobMeta(
+        nullable( Repository.class ), nullable( IMetaStore.class ), nullable( VariableSpace.class ) );
+      doReturn( JOB_ENTRY_JOB_NAME ).when( meta ).exportResources( nullable( Bowl.class ), nullable( Bowl.class ),
+        nullable( JobMeta.class ), nullable( Map.class ), nullable( ResourceNamingInterface.class ),
+        nullable( Repository.class ), nullable( IMetaStore.class ) );
 
-    jej.exportResources( null, null, null, null, null );
+      jej.exportResources( null, null, null, null, null, null, null );
 
-    verify( meta ).setFilename( "${" + Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY + "}/" + JOB_ENTRY_JOB_NAME );
-    verify( jej ).setSpecificationMethod( ObjectLocationSpecificationMethod.FILENAME );
+      verify( meta ).setFilename( "${" + Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY + "}/" + JOB_ENTRY_JOB_NAME );
+      verify( jej ).setSpecificationMethod( ObjectLocationSpecificationMethod.FILENAME );
+    }
   }
+
+  @Test
+  public void testJobMetaInitializeVariablesFrom() throws Exception {
+    try ( MockedConstruction<JobMeta> jobMetaMockedConstruction = mockConstruction( JobMeta.class );
+          MockedConstruction<CurrentDirectoryResolver> currentDirectoryResolverMockedConstruction = mockConstruction(
+            CurrentDirectoryResolver.class, ( mock, context ) ->
+            {
+              doCallRealMethod().when( mock ).normalizeSlashes( anyString() );
+              doReturn( space ).when( mock ).resolveCurrentDirectory( any( Bowl.class ),
+                any( ObjectLocationSpecificationMethod.class ),
+                any( VariableSpace.class ), nullable( Repository.class ), nullable( Job.class ), anyString() );
+            } ) ) {
+      Repository myrepo = mock( Repository.class );
+      JobMeta jobMeta = new JobMeta();
+      doReturn( directory ).when( rdi ).findDirectory( nullable( String.class ) );
+      doReturn( jobMeta ).when( myrepo ).loadJob( any(), any(), any(), any() );
+      doReturn( rdi ).when( myrepo ).loadRepositoryDirectoryTree();
+      doReturn( null ).when( myrepo ).getJobEntryAttributeString( any( ObjectId.class ), anyString() );
+      doReturn( "rep_name" ).when( myrepo )
+        .getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "specification_method" );
+      doReturn( "${jobname}" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "name" );
+      doReturn( "${repositorypath}" ).when( myrepo ).getJobEntryAttributeString( JOB_ENTRY_JOB_OBJECT_ID, "dir_path" );
+
+      JobEntryJob jej = new JobEntryJob( JOB_ENTRY_JOB_NAME );
+      jej.loadRep( myrepo, store, JOB_ENTRY_JOB_OBJECT_ID, databases, servers );
+      jej.getJobMetaFromRepository( myrepo, resolver, "", space );
+
+      verify( jobMeta, times( 1 ) ).initializeVariablesFrom( any() );
+    }
+  }
+
+  private JobEntryJob getJej() {
+    JobEntryJob jej = spy( new JobEntryJob( JOB_ENTRY_JOB_NAME ) );
+    jej.setParentJobMeta( new JobMeta() );
+    when( jej.getParentJobMeta().getNamedClusterEmbedManager() ).thenReturn( namedClusterEmbedManager );
+    when( jej.getParentJobMeta().getBowl() ).thenReturn( DefaultBowl.getInstance() );
+    return jej;
+  }
+
 }

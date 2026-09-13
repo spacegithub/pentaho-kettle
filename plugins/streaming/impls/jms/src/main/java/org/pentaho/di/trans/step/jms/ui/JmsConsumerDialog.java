@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step.jms.ui;
 
@@ -34,6 +26,7 @@ import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.jms.JmsConsumerMeta;
 import org.pentaho.di.trans.step.jms.JmsDelegate;
 import org.pentaho.di.trans.streaming.common.BaseStreamStepMeta;
+import org.pentaho.di.ui.core.widget.TableView;
 import org.pentaho.di.ui.core.widget.TextVar;
 import org.pentaho.di.ui.trans.step.BaseStreamingDialog;
 
@@ -69,6 +62,7 @@ public class JmsConsumerDialog extends BaseStreamingDialog {
     setupLayout.marginHeight = 15;
     setupLayout.marginWidth = 15;
     wSetupComp.setLayout( setupLayout );
+
     jmsDialogSecurityLayout = new JmsDialogSecurityLayout(
       props, wTabFolder, lsMod, transMeta, jmsDelegate.sslEnabled, jmsDelegate );
     jmsDialogSecurityLayout.buildSecurityTab();
@@ -76,6 +70,8 @@ public class JmsConsumerDialog extends BaseStreamingDialog {
     connectionForm = new ConnectionForm( wSetupComp, props, transMeta, lsMod, jmsMeta.jmsDelegate,
       jmsDialogSecurityLayout );
     Group group = connectionForm.layoutForm();
+
+    jmsDialogSecurityLayout.setConnectionForm( connectionForm );
 
     destinationForm =
       new DestinationForm( wSetupComp, group, props, transMeta, lsMod, jmsDelegate.destinationType,
@@ -98,14 +94,12 @@ public class JmsConsumerDialog extends BaseStreamingDialog {
     fdReceiveTimeout.width = 140;
     wReceiverTimeout.setLayoutData( fdReceiveTimeout );
     wReceiverTimeout.addModifyListener( lsMod );
-    wReceiverTimeout.setText( jmsDelegate.receiveTimeout );
+    wReceiverTimeout.setText( jmsMeta.receiveTimeout );
 
   }
 
   @Override protected void createAdditionalTabs() {
-    fieldsTab = new FieldsTab(
-      wTabFolder, props, transMeta, lsMod, jmsDelegate.messageField, jmsDelegate.destinationField );
-
+    fieldsTab = new FieldsTab( wTabFolder, props, transMeta, lsMod, jmsMeta );
     fieldsTab.buildFieldsTab();
   }
 
@@ -120,9 +114,12 @@ public class JmsConsumerDialog extends BaseStreamingDialog {
 
     jmsDelegate.destinationType = destinationForm.getDestinationType();
     jmsDelegate.destinationName = destinationForm.getDestinationName();
-    jmsDelegate.messageField = fieldsTab.getFieldNames()[ 0 ];
-    jmsDelegate.destinationField = fieldsTab.getFieldNames()[ 1 ];
-    jmsDelegate.receiveTimeout = wReceiverTimeout.getText();
+    jmsMeta.messageField = getFieldNames()[ 0 ];
+    jmsMeta.destinationField = getFieldNames()[ 1 ];
+    jmsMeta.messageId = getFieldNames()[ 2 ];
+    jmsMeta.jmsTimestamp = getFieldNames()[ 3 ];
+    jmsMeta.jmsRedelivered = getFieldNames()[ 4 ];
+    jmsMeta.receiveTimeout = wReceiverTimeout.getText();
 
     jmsDialogSecurityLayout.saveAuthentication();
     jmsDialogSecurityLayout.saveTableValues();
@@ -135,11 +132,7 @@ public class JmsConsumerDialog extends BaseStreamingDialog {
     shell.setSize(  SHELL_MIN_WIDTH, SHELL_MIN_HEIGHT   ); // force initial size
   }
 
-  @Override protected int[] getFieldTypes() {
-    return fieldsTab.getFieldTypes();
-  }
-
-  @Override protected String[] getFieldNames() {
-    return fieldsTab.getFieldNames();
+  @Override protected TableView getFieldsTable() {
+    return fieldsTab.fieldsTable;
   }
 }

@@ -1,33 +1,26 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
 
 package org.pentaho.di.job;
 
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.ClassRule;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.NotePadMeta;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.exception.IdNotFoundException;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleXMLException;
@@ -36,12 +29,16 @@ import org.pentaho.di.core.gui.OverwritePrompter;
 import org.pentaho.di.core.gui.Point;
 import org.pentaho.di.core.listeners.ContentChangedListener;
 import org.pentaho.di.core.listeners.CurrentDirectoryChangedListener;
+import org.pentaho.di.core.variables.VariableSpace;
+import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.job.entries.empty.JobEntryEmpty;
 import org.pentaho.di.job.entries.trans.JobEntryTrans;
 import org.pentaho.di.job.entry.JobEntryCopy;
 import org.pentaho.di.job.entry.JobEntryInterface;
+import org.pentaho.di.junit.rules.RestorePDIEngineEnvironment;
 import org.pentaho.di.repository.ObjectRevision;
 import org.pentaho.di.repository.Repository;
+import org.pentaho.di.repository.RepositoryBowl;
 import org.pentaho.di.repository.RepositoryDirectory;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
 import org.pentaho.di.resource.ResourceDefinition;
@@ -50,15 +47,20 @@ import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -69,6 +71,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 public class JobMetaTest {
+  @ClassRule public static RestorePDIEngineEnvironment env = new RestorePDIEngineEnvironment();
 
   private static final String JOB_META_NAME = "jobName";
 
@@ -90,6 +93,19 @@ public class JobMetaTest {
     jobMeta.setRepositoryDirectory( directoryJob );
     jobMeta.setName( JOB_META_NAME );
     jobMeta.setObjectRevision( objectRevision );
+  }
+
+  /**
+   * PDI-18655 - Variables.initializeVariablesFrom susceptible to NullPointerException
+   *
+   * @throws KettleException
+   */
+  @Test
+  public void testJobMetaInitialization() throws KettleException {
+    System.getProperties().put( "custom_property_boolean", true );
+    System.getProperties().put( "custom_property_string", "string" );
+    JobMeta jobMeta = new JobMeta();
+    assertNotNull( jobMeta );
   }
 
   @Test
@@ -199,8 +215,8 @@ public class JobMetaTest {
     };
     jobMeta.setRepositoryDirectory( directoryJob );
     jobMeta.setName( JOB_META_NAME );
-    jobMeta.exportResources( null, new HashMap<String, ResourceDefinition>( 4 ), mock( ResourceNamingInterface.class ),
-        null, null );
+    jobMeta.exportResources( DefaultBowl.getInstance(), null, null, new HashMap<String, ResourceDefinition>( 4 ),
+      mock( ResourceNamingInterface.class ), null, null );
 
     // assert
     verify( jobMetaSpy ).setRepositoryDirectory( directoryJob );
@@ -339,6 +355,7 @@ public class JobMetaTest {
     RepositoryDirectory repDirectory =
       new RepositoryDirectory( new RepositoryDirectory( new RepositoryDirectory(), "home" ), "admin" );
     Mockito.when( rep.findDirectory( Mockito.eq( directory ) ) ).thenReturn( repDirectory );
+    Mockito.when( rep.getBowl() ).thenReturn( new RepositoryBowl( rep ) );
     JobMeta meta = new JobMeta();
 
     meta.loadXML( jobNode, null, rep, Mockito.mock( IMetaStore.class ), false,
@@ -347,6 +364,71 @@ public class JobMetaTest {
     job.setInternalKettleVariables( null );
 
     Assert.assertEquals( repDirectory.getPath(), job.getVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY ) );
+  }
+
+  @Test
+  public void testLoadXml_whenVfsFileIsPassedAndConnectedToRepository() throws KettleException {
+    String filePath = "pvfs://LocalVFS/samples/test-job.kjb";
+    JobMeta inputJobMeta = new JobMeta( DefaultBowl.getInstance(),
+      getClass().getResource( "one-step-job.kjb" ).getPath(), null );
+    String xml = inputJobMeta.getXML();
+    InputStream inputStream = new ByteArrayInputStream( xml.getBytes( StandardCharsets.UTF_8 ) );
+
+    Repository rep = Mockito.mock( Repository.class );
+    Mockito.when( rep.getBowl() ).thenReturn( new RepositoryBowl( rep ) );
+    VariableSpace variableSpace = Mockito.mock( VariableSpace.class );
+    Mockito.when( variableSpace.listVariables() ).thenReturn( new String[ 0 ] );
+
+    JobMeta meta = new JobMeta( inputStream, filePath, rep, null );
+
+    assertEquals( "pvfs://LocalVFS/samples",
+      meta.getVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY ) );
+    assertEquals( "pvfs://LocalVFS/samples",
+      meta.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+  }
+
+  @Test
+  public void testLoadXml_whenVfsFileIsPassedAndNotConnectedToRepository() throws KettleException {
+    String filePath = "pvfs://LocalVFS/samples/test-job.kjb";
+    JobMeta inputJobMeta = new JobMeta( DefaultBowl.getInstance(),
+      getClass().getResource( "one-step-job.kjb" ).getPath(), null );
+    String xml = inputJobMeta.getXML();
+    InputStream inputStream = new ByteArrayInputStream( xml.getBytes( StandardCharsets.UTF_8 ) );
+
+    VariableSpace variableSpace = Mockito.mock( VariableSpace.class );
+    Mockito.when( variableSpace.listVariables() ).thenReturn( new String[ 0 ] );
+
+    JobMeta meta = new JobMeta( inputStream, filePath, null, null );
+
+    assertEquals( "pvfs://LocalVFS/samples",
+      meta.getVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY ) );
+    assertEquals( "pvfs://LocalVFS/samples",
+      meta.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+  }
+
+  @Test
+  public void testLoadXml_whenRepoFileIsPassedAndConnectedToRepository() throws KettleException {
+    String directory = "/home/admin";
+    JobMeta inputJobMeta = new JobMeta( DefaultBowl.getInstance(),
+      getClass().getResource( "one-step-job.kjb" ).getPath(), null );
+    String xml = inputJobMeta.getXML();
+    xml = xml.replaceAll( "<directory>/</directory>", "<directory>/home/admin</directory>" );
+    InputStream inputStream = new ByteArrayInputStream( xml.getBytes( StandardCharsets.UTF_8 ) );
+
+    Repository rep = Mockito.mock( Repository.class );
+    Mockito.when( rep.getBowl() ).thenReturn( new RepositoryBowl( rep ) );
+    RepositoryDirectory repDirectory =
+      new RepositoryDirectory( new RepositoryDirectory( new RepositoryDirectory(), "home" ), "admin" );
+    Mockito.when( rep.findDirectory( directory ) ).thenReturn( repDirectory );
+    VariableSpace variableSpace = Mockito.mock( VariableSpace.class );
+    Mockito.when( variableSpace.listVariables() ).thenReturn( new String[ 0 ] );
+
+    JobMeta meta = new JobMeta( inputStream, null, rep, null );
+
+    assertEquals( repDirectory.getPath(),
+      meta.getVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY ) );
+    assertEquals( repDirectory.getPath(),
+      meta.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
   }
 
   @Test
@@ -366,7 +448,9 @@ public class JobMetaTest {
     RepositoryDirectoryInterface repoDir = mock( RepositoryDirectoryInterface.class );
     when( repoDir.getPath() ).thenReturn( pathAfter );
 
-    jobMeta.setRepository( mock( Repository.class ) );
+    Repository rep = mock( Repository.class );
+    Mockito.when( rep.getBowl() ).thenReturn( new RepositoryBowl( rep ) );
+    jobMeta.setRepository( rep );
     jobMeta.setRepositoryDirectory( repoDirOrig );
 
     CurrentDirectoryChangedListener listener = mock( CurrentDirectoryChangedListener.class );
@@ -419,4 +503,258 @@ public class JobMetaTest {
     jobEntryCopy.setNr( 0 );
     return jobEntryCopy;
   }
+
+  @Test
+  public void testSetInternalEntryCurrentDirectoryWithFilename( ) {
+    JobMeta jobMetaTest = new JobMeta(  );
+    jobMetaTest.setFilename( "hasFilename" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "Original value defined at run execution" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_JOB_FILENAME_DIRECTORY, "file:///C:/SomeFilenameDirectory" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY, "/SomeRepDirectory" );
+    jobMetaTest.setInternalEntryCurrentDirectory();
+
+    assertEquals( "file:///C:/SomeFilenameDirectory", jobMetaTest.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+
+  }
+
+  @Test
+  public void testSetInternalEntryCurrentDirectoryWithRepository( ) {
+    JobMeta jobMetaTest = new JobMeta(  );
+    RepositoryDirectoryInterface path = mock( RepositoryDirectoryInterface.class );
+
+    when( path.getPath() ).thenReturn( "aPath" );
+    Repository rep = mock( Repository.class );
+    Mockito.when( rep.getBowl() ).thenReturn( new RepositoryBowl( rep ) );
+    jobMetaTest.setRepository( rep );
+    jobMetaTest.setRepositoryDirectory( path );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "Original value defined at run execution" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_JOB_FILENAME_DIRECTORY, "file:///C:/SomeFilenameDirectory" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY, "/SomeRepDirectory" );
+    jobMetaTest.setInternalEntryCurrentDirectory();
+
+    assertEquals( "/SomeRepDirectory", jobMetaTest.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+  }
+
+  @Test
+  public void testSetInternalEntryCurrentDirectoryWithoutFilenameOrRepository( ) {
+    JobMeta jobMetaTest = new JobMeta(  );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "Original value defined at run execution" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_JOB_FILENAME_DIRECTORY, "file:///C:/SomeFilenameDirectory" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY, "/SomeRepDirectory" );
+    jobMetaTest.setInternalEntryCurrentDirectory();
+
+    assertEquals( "Original value defined at run execution", jobMetaTest.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY )  );
+  }
+
+  @Test
+  public void testUpdateCurrentDirWithFilename( ) {
+    JobMeta jobMetaTest = new JobMeta(  );
+    jobMetaTest.setFilename( "hasFilename" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "Original value defined at run execution" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_JOB_FILENAME_DIRECTORY, "file:///C:/SomeFilenameDirectory" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY, "/SomeRepDirectory" );
+    jobMetaTest.updateCurrentDir();
+
+    assertEquals( "file:///C:/SomeFilenameDirectory", jobMetaTest.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+
+  }
+
+  @Test
+  public void testUpdateCurrentDirWithRepository( ) {
+    JobMeta jobMetaTest = new JobMeta(  );
+    RepositoryDirectoryInterface path = mock( RepositoryDirectoryInterface.class );
+
+    when( path.getPath() ).thenReturn( "aPath" );
+    Repository rep = mock( Repository.class );
+    Mockito.when( rep.getBowl() ).thenReturn( new RepositoryBowl( rep ) );
+    jobMetaTest.setRepository( rep );
+    jobMetaTest.setRepositoryDirectory( path );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "Original value defined at run execution" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_JOB_FILENAME_DIRECTORY, "file:///C:/SomeFilenameDirectory" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY, "/SomeRepDirectory" );
+    jobMetaTest.updateCurrentDir();
+
+    assertEquals( "/SomeRepDirectory", jobMetaTest.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+  }
+
+  @Test
+  public void testUpdateCurrentDirWithoutFilenameOrRepository( ) {
+    JobMeta jobMetaTest = new JobMeta(  );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "Original value defined at run execution" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_JOB_FILENAME_DIRECTORY, "file:///C:/SomeFilenameDirectory" );
+    jobMetaTest.setVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY, "/SomeRepDirectory" );
+    jobMetaTest.updateCurrentDir();
+
+    assertEquals( "Original value defined at run execution", jobMetaTest.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY )  );
+  }
+
+  @Test
+  public void isGatheringMetricsTest() {
+    JobMeta jobMetaTest = new JobMeta();
+    jobMetaTest.setGatheringMetrics( true );
+    assertTrue( jobMetaTest.isGatheringMetrics() );
+    jobMetaTest.setGatheringMetrics( false );
+    assertFalse( jobMetaTest.isGatheringMetrics() );
+  }
+
+  /**
+   * Tests that the filename is preserved during XML serialization and deserialization.
+   * This is critical for Carte remote execution where JobMeta is serialized to XML,
+   * sent to a slave server, and deserialized. The filename must be preserved so that
+   * lineage tracking and other features can identify the source job file.
+   */
+  @Test
+  public void testFilenamePreservedInXmlSerialization() throws Exception {
+    // Create a JobMeta with a filename set
+    JobMeta originalJobMeta = new JobMeta();
+    originalJobMeta.setName( "TestJob" );
+    String testFilename = "/path/to/test/job.kjb";
+    originalJobMeta.setFilename( testFilename );
+
+    // Serialize to XML
+    String xml = originalJobMeta.getXML();
+
+    // Verify the filename is in the XML
+    assertTrue( "Filename should be included in XML", xml.contains( "<filename>" + testFilename + "</filename>" ) );
+
+    // Deserialize from XML (simulating Carte receiving the job)
+    org.w3c.dom.Document doc = XMLHandler.loadXMLString( "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + xml );
+    Node jobNode = XMLHandler.getSubNode( doc, JobMeta.XML_TAG );
+
+    JobMeta deserializedJobMeta = new JobMeta();
+    deserializedJobMeta.loadXML( jobNode, null, null );
+
+    // Verify the filename is preserved after deserialization
+    assertEquals( "Filename should be preserved after XML deserialization", testFilename, deserializedJobMeta.getFilename() );
+  }
+
+  /**
+   * Tests that when loadXML is called, the filename is loaded from the XML.
+   * This is the expected behavior when JobMeta is deserialized on a Carte server.
+   */
+  @Test
+  public void testFilenameLoadedFromXmlOnLoadXML() throws Exception {
+    // Create a JobMeta with a filename set via XML
+    JobMeta sourceJobMeta = new JobMeta();
+    sourceJobMeta.setName( "TestJob" );
+    String originalFilename = "/original/path/job.kjb";
+    sourceJobMeta.setFilename( originalFilename );
+
+    // Serialize to XML
+    String xml = sourceJobMeta.getXML();
+    org.w3c.dom.Document doc = XMLHandler.loadXMLString( "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + xml );
+    Node jobNode = XMLHandler.getSubNode( doc, JobMeta.XML_TAG );
+
+    // Create a new JobMeta and load the XML (simulating Carte receiving the job)
+    JobMeta targetJobMeta = new JobMeta();
+
+    // Load XML into the JobMeta - this should load the filename from XML
+    targetJobMeta.loadXML( jobNode, null, null );
+
+    // The filename from XML should be loaded
+    assertEquals( "Filename should be loaded from XML", originalFilename, targetJobMeta.getFilename() );
+  }
+
+  /**
+   * PDI - getUsedDatabaseConnectionNames throws NullPointerException when a job entry returns a null DatabaseMeta
+   * in its getUsedDatabaseConnections array.
+   */
+  @Test
+  public void testGetUsedDatabaseConnectionNamesNullDbInEntry() {
+    // Arrange: a job entry whose getUsedDatabaseConnections returns an array containing a null element
+    JobEntryInterface entry = mock( JobEntryInterface.class );
+    when( entry.getUsedDatabaseConnections() ).thenReturn( new org.pentaho.di.core.database.DatabaseMeta[] { null } );
+
+    JobEntryCopy copy = mock( JobEntryCopy.class );
+    when( copy.getEntry() ).thenReturn( entry );
+
+    jobMeta.addJobEntry( copy );
+
+    // Act & Assert: must not throw NullPointerException
+    java.util.Set<String> names = jobMeta.getUsedDatabaseConnectionNames();
+    assertNotNull( names );
+  }
+
+  /**
+   * Tests that null filename doesn't cause issues in XML serialization.
+   */
+  @Test
+  public void testNullFilenameInXmlSerialization() throws Exception {
+    JobMeta jobMetaWithNullFilename = new JobMeta();
+    jobMetaWithNullFilename.setName( "TestJob" );
+    // Filename is null by default
+    assertNull( jobMetaWithNullFilename.getFilename() );
+
+    // Serialize to XML - should not throw exception
+    String xml = jobMetaWithNullFilename.getXML();
+
+    // Should have empty filename tag
+    assertTrue( "XML should contain filename tag even when null", xml.contains( "<filename/>" ) || xml.contains( "<filename></filename>" ) );
+
+    // Deserialize and verify
+    org.w3c.dom.Document doc = XMLHandler.loadXMLString( "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + xml );
+    Node jobNode = XMLHandler.getSubNode( doc, JobMeta.XML_TAG );
+
+    JobMeta deserializedJobMeta = new JobMeta();
+    deserializedJobMeta.loadXML( jobNode, null, null );
+
+    // Filename should still be null/empty after deserialization
+    assertTrue( "Null filename should result in null or empty after deserialization",
+        deserializedJobMeta.getFilename() == null || deserializedJobMeta.getFilename().isEmpty() );
+  }
+
+  /**
+   * databasesUpdated must not throw when getUsedDatabaseConnections returns an array with a null element.
+   */
+  @Test
+  public void testDatabasesUpdatedNullDbInArray() {
+    JobEntryInterface entry = mock( JobEntryInterface.class );
+    when( entry.getUsedDatabaseConnections() ).thenReturn(
+        new org.pentaho.di.core.database.DatabaseMeta[] { null } );
+
+    JobEntryCopy copy = mock( JobEntryCopy.class );
+    when( copy.getEntry() ).thenReturn( entry );
+    jobMeta.addJobEntry( copy );
+
+    // Should not throw NullPointerException
+    jobMeta.databasesUpdated( "someConnection", java.util.Optional.empty() );
+    assertTrue( true );
+  }
+
+  /**
+   * allDatabasesUpdated must not throw when getUsedDatabaseConnections returns an array with a null element.
+   */
+  @Test
+  public void testAllDatabasesUpdatedNullDbInArray() {
+    JobEntryInterface entry = mock( JobEntryInterface.class );
+    when( entry.getUsedDatabaseConnections() ).thenReturn(
+        new org.pentaho.di.core.database.DatabaseMeta[] { null } );
+
+    JobEntryCopy copy = mock( JobEntryCopy.class );
+    when( copy.getEntry() ).thenReturn( entry );
+    jobMeta.addJobEntry( copy );
+
+    // Should not throw NullPointerException
+    jobMeta.allDatabasesUpdated();
+    assertTrue( true );
+  }
+
+  /**
+   * isDatabaseConnectionUsed (via getUsedDatabaseMetas) must not throw when getUsedDatabaseConnections
+   * returns an array with a null element.
+   */
+  @Test
+  public void testIsDatabaseConnectionUsedNullDbInArray() {
+    JobEntryInterface entry = mock( JobEntryInterface.class );
+    when( entry.getUsedDatabaseConnections() ).thenReturn(
+        new org.pentaho.di.core.database.DatabaseMeta[] { null } );
+
+    JobEntryCopy copy = mock( JobEntryCopy.class );
+    when( copy.getEntry() ).thenReturn( entry );
+    jobMeta.addJobEntry( copy );
+
+    org.pentaho.di.core.database.DatabaseMeta target = mock( org.pentaho.di.core.database.DatabaseMeta.class );
+    assertFalse( jobMeta.isDatabaseConnectionUsed( target ) );
+  }
+
 }

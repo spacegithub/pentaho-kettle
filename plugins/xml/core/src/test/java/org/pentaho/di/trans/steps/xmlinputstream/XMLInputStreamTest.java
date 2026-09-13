@@ -1,39 +1,19 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.trans.steps.xmlinputstream;
 
-import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.when;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.Writer;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
-
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -47,6 +27,18 @@ import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.trans.step.RowAdapter;
 import org.pentaho.di.trans.steps.mock.StepMockHelper;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.Writer;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 /**
  * @author Tatsiana_Kasiankova
@@ -239,6 +231,19 @@ public class XMLInputStreamTest {
     assertEquals( INCORRECT_XML_DATA_NAME_MESSAGE, "ProductGroup", rl.getWritten().get( expectedRowNum )[dataNamePos] );
   }
 
+  @Test
+  public void multiLineDataReadAsMultipleElements() throws KettleException, IOException {
+    xmlInputStreamMeta.setFilename( createTestFile( getMultiLineDataXml() ) );
+    xmlInputStreamMeta.setEnableNamespaces( true );
+
+    doTest();
+
+    assertEquals( "CHARACTERS", rl.getWritten().get( 2 )[0] );
+    assertEquals( "some data", rl.getWritten().get( 2 )[3] );
+    assertEquals( "CHARACTERS", rl.getWritten().get( 3 )[0] );
+    assertEquals( "other data", rl.getWritten().get( 3 )[3] );
+  }
+
   private void doTest() throws IOException, KettleException {
     XMLInputStream xmlInputStream =
         new XMLInputStream( stepMockHelper.stepMeta, stepMockHelper.stepDataInterface, 0, stepMockHelper.transMeta,
@@ -389,6 +394,12 @@ public class XMLInputStreamTest {
 
   private String getGroupWithoutPrefix() {
     return "<ProductGroup attribute1=\"" + ATTRIBUTE_1 + "\" attribute2=\"" + ATTRIBUTE_2 + "\">G</ProductGroup>";
+  }
+
+  private String getMultiLineDataXml() {
+    return "<tag>"
+      + "some data\n"
+      + "<![CDATA[other data]]></tag>";
   }
 
   private class TestRowListener extends RowAdapter {

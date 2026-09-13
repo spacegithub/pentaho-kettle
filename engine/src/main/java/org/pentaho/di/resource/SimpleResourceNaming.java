@@ -1,30 +1,23 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.resource;
 
 import java.util.HashMap;
 import java.util.Map;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
 import org.pentaho.di.core.variables.VariableSpace;
@@ -43,18 +36,22 @@ public class SimpleResourceNaming implements ResourceNamingInterface {
   private boolean useOriginalPathInTargetName;
 
   private Map<String, String> directoryMap;
-  private int parameterNr;
+  private static int parameterNr = 0;
 
   public SimpleResourceNaming() {
     super();
 
     directoryMap = new HashMap<String, String>();
-    parameterNr = 0;
   }
 
   public SimpleResourceNaming( String fileSystemPrefix ) {
     super();
     this.fileSystemPrefix = fileSystemPrefix;
+  }
+
+  @VisibleForTesting
+  public static int getParameterNr() {
+    return parameterNr;
   }
 
   public String nameResource( FileObject fileObject, VariableSpace space, boolean includeFileName ) throws FileSystemException {
@@ -155,7 +152,7 @@ public class SimpleResourceNaming implements ResourceNamingInterface {
     String parameter = directoryMap.get( originalFilePath );
     if ( parameter == null ) {
 
-      parameter = createNewParameterName( originalFilePath );
+      parameter = createNewParameterName();
 
       // Add it to the map...
       //
@@ -168,10 +165,9 @@ public class SimpleResourceNaming implements ResourceNamingInterface {
   /**
    * Create a parameter name from an path TODO: actually use the original path
    *
-   * @param originalFilePath
    * @return the new parameter name
    */
-  private String createNewParameterName( String originalFilePath ) {
+  private static String createNewParameterName() {
     parameterNr++;
     return "DATA_PATH_" + parameterNr;
   }

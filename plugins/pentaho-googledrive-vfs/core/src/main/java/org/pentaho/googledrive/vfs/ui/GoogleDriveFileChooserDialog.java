@@ -1,21 +1,22 @@
-/*!
-* Copyright (C) 2010-2017 by Hitachi Vantara : http://www.pentaho.com
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-* http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.googledrive.vfs.ui;
 
-import org.apache.commons.vfs2.*;
+import org.apache.commons.vfs2.FileObject;
+import org.apache.commons.vfs2.FileSystemException;
+import org.apache.commons.vfs2.FileSystemOptions;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.exception.KettleFileException;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.variables.Variables;
@@ -49,7 +50,7 @@ public class GoogleDriveFileChooserDialog extends CustomVfsUiPanel {
 
   public FileObject resolveFile( String fileUri ) throws FileSystemException {
     try {
-      return KettleVFS.getFileObject( fileUri, getVariableSpace(), getFileSystemOptions() );
+      return KettleVFS.getInstance( getBowl() ).getFileObject( fileUri, getVariableSpace(), getFileSystemOptions() );
     } catch ( KettleFileException e ) {
       throw new FileSystemException( e );
     }
@@ -69,4 +70,15 @@ public class GoogleDriveFileChooserDialog extends CustomVfsUiPanel {
       return new Variables();
     }
   }
+
+  private Bowl getBowl() {
+    if ( Spoon.getInstance().getActiveTransformation() != null ) {
+      return Spoon.getInstance().getActiveTransformation().getBowl();
+    } else if ( Spoon.getInstance().getActiveJob() != null ) {
+      return Spoon.getInstance().getActiveJob().getBowl();
+    } else {
+      return Spoon.getInstance().getExecutionBowl();
+    }
+  }
 }
+

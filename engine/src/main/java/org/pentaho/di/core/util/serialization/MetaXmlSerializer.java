@@ -1,51 +1,47 @@
-/*
- * Pentaho Data Integration
+/*! ******************************************************************************
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Pentaho
  *
- * **************************************************************************
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 
 package org.pentaho.di.core.util.serialization;
 
 import org.pentaho.di.core.xml.XMLHandler;
+import org.pentaho.di.core.xml.XMLParserFactoryProducer;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
 import javax.xml.XMLConstants;
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Marshaller;
-import javax.xml.bind.Unmarshaller;
+import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.JAXBException;
+import jakarta.xml.bind.Marshaller;
+import jakarta.xml.bind.Unmarshaller;
 import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static java.nio.charset.Charset.defaultCharset;
 import static org.pentaho.di.core.util.serialization.StepMetaProps.STEP_TAG;
 
 /**
  * Converts StepMetaProps to/from an XML string using JAXB.
  */
+@SuppressWarnings( "squid:S00112" )
 public class MetaXmlSerializer {
+  private MetaXmlSerializer() { }
 
   public static String serialize( StepMetaProps stepMetaProps ) {
     try ( ByteArrayOutputStream baos = new ByteArrayOutputStream() ) {
@@ -53,14 +49,14 @@ public class MetaXmlSerializer {
       marshalObj.setProperty( Marshaller.JAXB_FORMATTED_OUTPUT, true );
       marshalObj.setProperty( Marshaller.JAXB_FRAGMENT, true );
       marshalObj.marshal( stepMetaProps, baos );
-      return baos.toString( defaultCharset().name() );
+      return baos.toString( StandardCharsets.UTF_8.name() );
     } catch ( JAXBException | IOException e ) {
       throw new RuntimeException( e );
     }
   }
 
   public static StepMetaProps deserialize( String ser ) {
-    try ( ByteArrayInputStream bais = new ByteArrayInputStream( ser.getBytes( defaultCharset() ) ) ) {
+    try ( ByteArrayInputStream bais = new ByteArrayInputStream( ser.getBytes( StandardCharsets.UTF_8 ) ) ) {
       Unmarshaller unmarshaller = JAXBContext.newInstance( StepMetaProps.class ).createUnmarshaller();
       return (StepMetaProps) unmarshaller.unmarshal( bais );
     } catch ( IOException | JAXBException e ) {
@@ -90,7 +86,7 @@ public class MetaXmlSerializer {
       ( (Element) node )
         .setAttributeNS( XMLConstants.XMLNS_ATTRIBUTE_NS_URI,
           "xmlns:xs", "http://www.w3.org/2001/XMLSchema" );
-      TransformerFactory.newInstance()
+      XMLParserFactoryProducer.createSecureTransformerFactory()
         .newTransformer()
         .transform( new DOMSource( node ), new StreamResult( sw ) );
     } catch ( TransformerException te ) {

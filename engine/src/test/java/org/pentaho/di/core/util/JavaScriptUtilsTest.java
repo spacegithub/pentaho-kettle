@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.util;
 
@@ -38,6 +30,7 @@ import java.util.Date;
 
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.CoreMatchers.is;
+import static org.mockito.Mockito.mock;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -53,6 +46,19 @@ public class JavaScriptUtilsTest {
   private static final String UNDEFINED = Undefined.class.getName();
   private static final String JAVA_OBJECT = NativeJavaObject.class.getName();
   private static final String NATIVE_NUMBER = "org.mozilla.javascript.NativeNumber";
+
+  private static final BigDecimal BIG_DECIMAL_ONE_DOT_ZERO = BigDecimal.valueOf( 1.0 );
+  private static final Long LONG_ONE = 1L;
+  private static final Double DOUBLE_ONE = 1.0;
+  private static final double A_POSITIVE_DOUBLE = 90.01;
+  private static final BigDecimal A_POSITIVE_BIG_DECIMAL = BigDecimal.valueOf( A_POSITIVE_DOUBLE );
+  private static final double A_NEGATIVE_DOUBLE = -0.0102030405;
+  private static final BigDecimal A_NEGATIVE_BIG_DECIMAL = BigDecimal.valueOf( A_NEGATIVE_DOUBLE );
+  private static final double ALMOST_ONE_DOUBLE = 0.999999999999;
+  private static final BigDecimal ALMOST_ONE_BIG_DECIMAL = BigDecimal.valueOf( ALMOST_ONE_DOUBLE );
+  private static final double ALMOST_MINUS_ONE_DOUBLE = -1.00000000001;
+  private static final BigDecimal ALMOST_MINUS_ONE_BIG_DECIMAL = BigDecimal.valueOf( ALMOST_MINUS_ONE_DOUBLE );
+  private static final double ASSERT_DELTA = 1e-6;
 
   private static Context ctx;
   private static ScriptableObject scope;
@@ -94,27 +100,25 @@ public class JavaScriptUtilsTest {
   public void jsToNumber_NativeJavaObject_Double() throws Exception {
     Scriptable value = getDoubleValue();
     Number number = JavaScriptUtils.jsToNumber( value, JAVA_OBJECT );
-    assertEquals( 1.0, number.doubleValue(), 1e-6 );
+    assertEquals( DOUBLE_ONE, number );
   }
 
   @Test
   public void jsToNumber_NativeJavaObject_Int() throws Exception {
     Scriptable value = getIntValue();
-    Number number = JavaScriptUtils.jsToNumber( value, JAVA_OBJECT );
-    assertEquals( 1.0, number.doubleValue(), 1e-6 );
+    assertEquals( DOUBLE_ONE, JavaScriptUtils.jsToNumber( value, JAVA_OBJECT ) );
   }
 
   @Test
   public void jsToNumber_NativeNumber() throws Exception {
     Scriptable value = Context.toObject( 1.0, scope );
-    Number number = JavaScriptUtils.jsToNumber( value, NATIVE_NUMBER );
-    assertEquals( 1.0, number.doubleValue(), 1e-6 );
+    assertEquals( DOUBLE_ONE, JavaScriptUtils.jsToNumber( value, NATIVE_NUMBER ) );
   }
 
   @Test
   public void jsToNumber_JavaNumber() throws Exception {
     Number number = JavaScriptUtils.jsToNumber( 1.0, Double.class.getName() );
-    assertEquals( 1.0, number.doubleValue(), 1e-6 );
+    assertEquals( DOUBLE_ONE, number.doubleValue(), ASSERT_DELTA);
   }
 
   // jsToInteger tests
@@ -129,13 +133,13 @@ public class JavaScriptUtilsTest {
     Number[] naturalNumbers = new Number[] { (byte) 1, (short) 1, 1, (long) 1 };
 
     for ( Number number : naturalNumbers ) {
-      assertEquals( Long.valueOf( 1 ), JavaScriptUtils.jsToInteger( number, number.getClass() ) );
+      assertEquals( LONG_ONE, JavaScriptUtils.jsToInteger( number, number.getClass() ) );
     }
   }
 
   @Test
   public void jsToInteger_String() throws Exception {
-    assertEquals( Long.valueOf( 1 ), JavaScriptUtils.jsToInteger( "1", String.class ) );
+    assertEquals( LONG_ONE, JavaScriptUtils.jsToInteger( "1", String.class ) );
   }
 
   @Test( expected = NumberFormatException.class )
@@ -145,24 +149,24 @@ public class JavaScriptUtilsTest {
 
   @Test
   public void jsToInteger_Double() throws Exception {
-    assertEquals( Long.valueOf( 1 ), JavaScriptUtils.jsToInteger( 1.0, Double.class ) );
+    assertEquals( LONG_ONE, JavaScriptUtils.jsToInteger( 1.0, Double.class ) );
   }
 
   @Test
   public void jsToInteger_NativeJavaObject_Int() throws Exception {
     Scriptable value = getIntValue();
-    assertEquals( Long.valueOf( 1 ), JavaScriptUtils.jsToInteger( value, NativeJavaObject.class ) );
+    assertEquals( LONG_ONE, JavaScriptUtils.jsToInteger( value, NativeJavaObject.class ) );
   }
 
   @Test
   public void jsToInteger_NativeJavaObject_Double() throws Exception {
     Scriptable value = getDoubleValue();
-    assertEquals( Long.valueOf( 1 ), JavaScriptUtils.jsToInteger( value, NativeJavaObject.class ) );
+    assertEquals( LONG_ONE, JavaScriptUtils.jsToInteger( value, NativeJavaObject.class ) );
   }
 
   @Test
   public void jsToInteger_Other_Int() throws Exception {
-    assertEquals( Long.valueOf( 1 ), JavaScriptUtils.jsToInteger( 1, getClass() ) );
+    assertEquals( LONG_ONE, JavaScriptUtils.jsToInteger( 1, getClass() ) );
   }
 
   @Test( expected = NumberFormatException.class )
@@ -232,23 +236,33 @@ public class JavaScriptUtilsTest {
   @Test
   public void jsToBigNumber_Undefined() throws Exception {
     assertNull( JavaScriptUtils.jsToBigNumber( null, UNDEFINED ) );
+    Object objMock = mock( Object.class );
+    assertNull( JavaScriptUtils.jsToBigNumber( objMock, UNDEFINED ) );
   }
 
   @Test
   public void jsToBigNumber_NativeNumber() throws Exception {
-    Scriptable value = Context.toObject( 1.0, scope );
-    BigDecimal number = JavaScriptUtils.jsToBigNumber( value, NATIVE_NUMBER );
-    assertEquals( 1.0, number.doubleValue(), 1e-6 );
+    Scriptable value = Context.toObject( A_POSITIVE_DOUBLE, scope );
+    assertEquals( A_POSITIVE_BIG_DECIMAL, JavaScriptUtils.jsToBigNumber( value, NATIVE_NUMBER ) );
+
+    value = Context.toObject( A_NEGATIVE_DOUBLE, scope );
+    assertEquals( A_NEGATIVE_BIG_DECIMAL, JavaScriptUtils.jsToBigNumber( value, NATIVE_NUMBER ) );
+
+    value = Context.toObject( ALMOST_ONE_DOUBLE, scope );
+    assertEquals( ALMOST_ONE_BIG_DECIMAL, JavaScriptUtils.jsToBigNumber( value, NATIVE_NUMBER ) );
+
+    value = Context.toObject( ALMOST_MINUS_ONE_DOUBLE, scope );
+    assertEquals( ALMOST_MINUS_ONE_BIG_DECIMAL, JavaScriptUtils.jsToBigNumber( value, NATIVE_NUMBER ) );
   }
 
   @Test
   public void jsToBigNumber_NativeJavaObject_Int() throws Exception {
-    assertEquals( 1.0, JavaScriptUtils.jsToBigNumber( getIntValue(), JAVA_OBJECT ).doubleValue(), 1e-6 );
+    assertEquals( BigDecimal.ONE, JavaScriptUtils.jsToBigNumber( getIntValue(), JAVA_OBJECT ) );
   }
 
   @Test
   public void jsToBigNumber_NativeJavaObject_Double() throws Exception {
-    assertEquals( 1.0, JavaScriptUtils.jsToBigNumber( getDoubleValue(), JAVA_OBJECT ).doubleValue(), 1e-6 );
+    assertEquals( BIG_DECIMAL_ONE_DOT_ZERO, JavaScriptUtils.jsToBigNumber( getDoubleValue(), JAVA_OBJECT ) );
   }
 
   @Test
@@ -256,7 +270,7 @@ public class JavaScriptUtilsTest {
     Value value = new Value();
     value.setValue( BigDecimal.ONE );
     Scriptable object = Context.toObject( value, scope );
-    assertEquals( 1.0, JavaScriptUtils.jsToBigNumber( object, JAVA_OBJECT ).doubleValue(), 1e-6 );
+    assertEquals( BigDecimal.ONE, JavaScriptUtils.jsToBigNumber( object, JAVA_OBJECT ) );
   }
 
   @Test
@@ -264,18 +278,18 @@ public class JavaScriptUtilsTest {
     Number[] naturalNumbers = new Number[] { (byte) 1, (short) 1, 1, (long) 1 };
 
     for ( Number number : naturalNumbers ) {
-      assertEquals( 1.0, JavaScriptUtils.jsToBigNumber( number, number.getClass().getName() ).doubleValue(), 1e-6 );
+      assertEquals( BigDecimal.ONE, JavaScriptUtils.jsToBigNumber( number, number.getClass().getName() ) );
     }
   }
 
   @Test
   public void jsToBigNumber_Double() throws Exception {
-    assertEquals( 1.0, JavaScriptUtils.jsToBigNumber( 1.0, Double.class.getName() ).doubleValue(), 1e-6 );
+    assertEquals( BIG_DECIMAL_ONE_DOT_ZERO, JavaScriptUtils.jsToBigNumber( 1.0, Double.class.getName() ) );
   }
 
   @Test
   public void jsToBigNumber_String() throws Exception {
-    assertEquals( 1.0, JavaScriptUtils.jsToBigNumber( "1", String.class.getName() ).doubleValue(), 1e-6 );
+    assertEquals( BigDecimal.ONE, JavaScriptUtils.jsToBigNumber( "1", String.class.getName() ) );
   }
 
   @Test( expected = RuntimeException.class )

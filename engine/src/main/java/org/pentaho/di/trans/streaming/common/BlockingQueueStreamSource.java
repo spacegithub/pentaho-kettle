@@ -1,35 +1,28 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 
 package org.pentaho.di.trans.streaming.common;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.reactivex.Observable;
-import io.reactivex.processors.FlowableProcessor;
-import io.reactivex.processors.ReplayProcessor;
+import io.reactivex.Flowable;
+import io.reactivex.processors.PublishProcessor;
 import org.pentaho.di.core.logging.LogChannel;
+import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.trans.streaming.api.StreamSource;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Semaphore;
@@ -53,7 +46,7 @@ public abstract class BlockingQueueStreamSource<T> implements StreamSource<T> {
 
   private final AtomicBoolean paused = new AtomicBoolean( false );
 
-  private final FlowableProcessor<T> publishProcessor = ReplayProcessor.createWithSize( 1000 );
+  private final PublishProcessor<T> publishProcessor = PublishProcessor.create();
   protected final BaseStreamStep streamStep;
 
   // binary semaphore used to block acceptance of rows when paused
@@ -65,8 +58,8 @@ public abstract class BlockingQueueStreamSource<T> implements StreamSource<T> {
   }
 
 
-  @Override public Observable<T> observable() {
-    return Observable
+  @Override public Flowable<T> flowable() {
+    return Flowable
       .fromPublisher( publishProcessor );
   }
 
@@ -98,9 +91,8 @@ public abstract class BlockingQueueStreamSource<T> implements StreamSource<T> {
     }
   }
 
-
   /**
-   * Accept rows, blocking if currently paused.
+   * Accept rows, blocking if currently paused or if there are no permits
    * <p>
    * Implementations should implement the open() function to pass external row events to the acceptRows method.
    * <p>
@@ -108,17 +100,33 @@ public abstract class BlockingQueueStreamSource<T> implements StreamSource<T> {
   protected void acceptRows( List<T> rows ) {
     try {
       acceptingRowsSemaphore.acquire();
-      rows.forEach( ( row ) -> {
+      waitForSubscribers();
+      for ( T row : rows ) {
+        streamStep.getSubtransExecutor().acquireBufferPermit();
         streamStep.incrementLinesInput();
         publishProcessor.onNext( row );
-      } );
+      }
     } catch ( InterruptedException e ) {
-      logChannel.logError(
-        getString( PKG, "BlockingQueueStream.AcceptRowsInterrupt",
-          Arrays.toString( rows.toArray() ) ) );
+      logChannel
+        .logError( getString( PKG, "BlockingQueueStream.AcceptRowsInterrupt", Arrays.toString( rows.toArray() ) ) );
+      Thread.currentThread().interrupt();
     } finally {
       acceptingRowsSemaphore.release();
     }
+  }
+
+  /**
+   * Wait for Subscribers Wait for the publish processor to have subscribers, otherwise the subtrans misses messages
+   * (even in .onSubscribe() the .hasSubscribers() is still false for a short while)
+   *
+   * @throws InterruptedException
+   */
+  private void waitForSubscribers() throws InterruptedException {
+    logChannel.logDebug( getString( PKG, "BlockingQueueStream.WaitForSubscribers" ) );
+    while ( !publishProcessor.hasSubscribers() ) {
+      Thread.sleep( 100 );
+    }
+    logChannel.logDebug( getString( PKG, "BlockingQueueStream.HasSubscribers" ) );
   }
 
   /**
@@ -130,5 +138,13 @@ public abstract class BlockingQueueStreamSource<T> implements StreamSource<T> {
    */
   public void error( Throwable throwable ) {
     publishProcessor.onError( throwable );
+  }
+
+  protected Object readBytes( byte[] bytes ) {
+    if ( streamStep.getVariablizedStepMeta().getMessageDataType() == ValueMetaInterface.TYPE_STRING ) {
+      return new String( bytes, StandardCharsets.UTF_8 );
+    } else {
+      return bytes;
+    }
   }
 }

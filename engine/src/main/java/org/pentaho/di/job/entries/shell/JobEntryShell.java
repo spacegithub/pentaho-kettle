@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.shell;
 
@@ -29,12 +21,19 @@ import org.pentaho.di.job.entry.validator.JobEntryValidatorUtils;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Arrays;
+
+import java.io.FileInputStream;
+import java.net.URI;
+import org.apache.commons.io.IOUtils;
 
 import org.apache.commons.vfs2.FileObject;
 import org.pentaho.di.cluster.SlaveServer;
@@ -53,6 +52,7 @@ import org.pentaho.di.core.logging.KettleLogStore;
 import org.pentaho.di.core.logging.LogLevel;
 import org.pentaho.di.core.util.StreamLogger;
 import org.pentaho.di.core.variables.VariableSpace;
+import org.pentaho.di.core.vfs.IKettleVFS;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.i18n.BaseMessages;
@@ -78,30 +78,21 @@ import com.google.common.annotations.VisibleForTesting;
  */
 public class JobEntryShell extends JobEntryBase implements Cloneable, JobEntryInterface {
   private static Class<?> PKG = JobEntryShell.class; // for i18n purposes, needed by Translator2!!
-
-  private String filename;
-
-  private String workDirectory;
-
   public String[] arguments;
-
   public boolean argFromPrevious;
-
   public boolean setLogfile;
-
   public String logfile, logext;
-
   public boolean addDate, addTime;
-
   public LogLevel logFileLevel;
-
   public boolean execPerRow;
-
   public boolean setAppendLogfile;
-
   public boolean insertScript;
-
   public String script;
+  private String filename;
+  private String workDirectory;
+  private static final String KETTLE = "kettle";
+  private static final String SHELL = "shell";
+  private static final String SHELL_BAT = "shell.bat";
 
   public JobEntryShell( String name ) {
     super( name, "" );
@@ -285,32 +276,32 @@ public class JobEntryShell extends JobEntryBase implements Cloneable, JobEntryIn
     filename = n;
   }
 
-  public void setFilename( String n ) {
-    filename = n;
-  }
-
   public String getFilename() {
     return filename;
+  }
+
+  public void setFilename( String n ) {
+    filename = n;
   }
 
   public String getRealFilename() {
     return environmentSubstitute( getFilename() );
   }
 
-  public void setWorkDirectory( String n ) {
-    workDirectory = n;
-  }
-
   public String getWorkDirectory() {
     return workDirectory;
   }
 
-  public void setScript( String scriptin ) {
-    script = scriptin;
+  public void setWorkDirectory( String n ) {
+    workDirectory = n;
   }
 
   public String getScript() {
     return script;
+  }
+
+  public void setScript( String scriptin ) {
+    script = scriptin;
   }
 
   public String getLogFilename() {
@@ -459,39 +450,64 @@ public class JobEntryShell extends JobEntryBase implements Cloneable, JobEntryIn
 
     try {
       // What's the exact command?
+      List<String> cmds = new ArrayList<>();
       String[] base = null;
-      List<String> cmds = new ArrayList<String>();
 
       if ( log.isBasic() ) {
         logBasic( BaseMessages.getString( PKG, "JobShell.RunningOn", Const.getOS() ) );
       }
 
+      IKettleVFS vfs = KettleVFS.getInstance( parentJobMeta.getBowl() );
+
       if ( insertScript ) {
         realScript = environmentSubstitute( script );
       } else {
         String realFilename = environmentSubstitute( getFilename() );
-        fileObject = KettleVFS.getFileObject( realFilename, this );
+        fileObject = vfs.getFileObject( realFilename, this );
       }
 
-      if ( Const.getOS().equals( "Windows 95" ) ) {
-        base = new String[] { "command.com", "/C" };
-        if ( insertScript ) {
-          tempFile =
-            KettleVFS.createTempFile( "kettle", "shell.bat", System.getProperty( "java.io.tmpdir" ), this );
-          fileObject = createTemporaryShellFile( tempFile, realScript );
+      // We'll need to know if we are on Windows or not...
+      boolean isWindows = Const.isWindows();
+
+      if ( isWindows ) {
+        // On a Windows machine, one needs a command interpreter.
+        // Let's select the appropriate one.
+        if ( Const.getOS().equals( "Windows 95" ) ) {
+          base = new String[] { "command.com", "/C" };
+        } else {
+          base = new String[] { "cmd.exe", "/C" };
         }
-      } else if ( Const.getOS().startsWith( "Windows" ) ) {
-        base = new String[] { "cmd.exe", "/C" };
+
         if ( insertScript ) {
-          tempFile =
-            KettleVFS.createTempFile( "kettle", "shell.bat", System.getProperty( "java.io.tmpdir" ), this );
+          tempFile = vfs.createTempFile( KETTLE, SHELL_BAT, KettleVFS.TEMP_DIR, this );
           fileObject = createTemporaryShellFile( tempFile, realScript );
         }
       } else {
         if ( insertScript ) {
-          tempFile = KettleVFS.createTempFile( "kettle", "shell", System.getProperty( "java.io.tmpdir" ), this );
+          tempFile = vfs.createTempFile( KETTLE, SHELL, KettleVFS.TEMP_DIR, this );
           fileObject = createTemporaryShellFile( tempFile, realScript );
+        } else {
+          // Check if we want to execute a temporary generated file
+          if ( "Y".equalsIgnoreCase( System.getProperty( Const.KETTLE_EXECUTE_TEMPORARY_GENERATED_FILE, "Y" ) ) ) {
+            // Obtain the script content
+            String realFilename = new URI( environmentSubstitute( getFilename() ) ).getPath();
+            try ( FileInputStream fis = new FileInputStream( realFilename ) ) {
+              realScript = IOUtils.toString( fis, StandardCharsets.UTF_8 );
+            }
+
+            // Where to create the temporary generated file?
+            String parentDir = KettleVFS.TEMP_DIR;
+            if ( "N".equalsIgnoreCase(
+              System.getProperty( Const.KETTLE_EXECUTE_TEMPORARY_GENERATED_FILE_IN_TEMP_DIR, "N" ) ) ) {
+              // PDI-19676 - creating a temp file in same file location to avoid script failure.
+              parentDir = Paths.get( realFilename ).getParent().toString();
+            }
+
+            tempFile = vfs.createTempFile( KETTLE, SHELL, parentDir, this );
+            fileObject = createTemporaryShellFile( tempFile, realScript );
+          }
         }
+
         base = new String[] { KettleVFS.getFilename( fileObject ) };
       }
 
@@ -499,13 +515,12 @@ public class JobEntryShell extends JobEntryBase implements Cloneable, JobEntryIn
       if ( argFromPrevious && cmdRows != null ) {
         // Add the base command...
         for ( int i = 0; i < base.length; i++ ) {
-          cmds.add( base[i] );
+          cmds.add( base[ i ] );
         }
 
-        if ( Const.getOS().equals( "Windows 95" ) || Const.getOS().startsWith( "Windows" ) ) {
+        if ( isWindows ) {
           // for windows all arguments including the command itself
-          // need to be
-          // included in 1 argument to cmd/command.
+          // need to be included in 1 argument to cmd/command.
 
           StringBuilder cmdline = new StringBuilder( 300 );
 
@@ -537,13 +552,12 @@ public class JobEntryShell extends JobEntryBase implements Cloneable, JobEntryIn
       } else if ( args != null ) {
         // Add the base command...
         for ( int i = 0; i < base.length; i++ ) {
-          cmds.add( base[i] );
+          cmds.add( base[ i ] );
         }
 
-        if ( Const.getOS().equals( "Windows 95" ) || Const.getOS().startsWith( "Windows" ) ) {
+        if ( isWindows ) {
           // for windows all arguments including the command itself
-          // need to be
-          // included in 1 argument to cmd/command.
+          // need to be included in 1 argument to cmd/command.
 
           StringBuilder cmdline = new StringBuilder( 300 );
 
@@ -552,44 +566,30 @@ public class JobEntryShell extends JobEntryBase implements Cloneable, JobEntryIn
 
           for ( int i = 0; i < args.length; i++ ) {
             cmdline.append( ' ' );
-            cmdline.append( Const.optionallyQuoteStringByOS( args[i] ) );
+            cmdline.append( Const.optionallyQuoteStringByOS( args[ i ] ) );
           }
           cmdline.append( '"' );
           cmds.add( cmdline.toString() );
         } else {
           for ( int i = 0; i < args.length; i++ ) {
-            cmds.add( args[i] );
+            cmds.add( args[ i ] );
           }
         }
       }
 
-      StringBuilder command = new StringBuilder();
+      String command = getCommandAsString( cmds );
 
-      Iterator<String> it = cmds.iterator();
-      boolean first = true;
-      while ( it.hasNext() ) {
-        if ( !first ) {
-          command.append( ' ' );
-        } else {
-          first = false;
-        }
-        command.append( it.next() );
-      }
       if ( log.isBasic() ) {
-        logBasic( BaseMessages.getString( PKG, "JobShell.ExecCommand", command.toString() ) );
+        logBasic( BaseMessages.getString( PKG, "JobShell.ExecCommand", command ) );
       }
 
       // Build the environment variable list...
       ProcessBuilder procBuilder = new ProcessBuilder( cmds );
-      Map<String, String> env = procBuilder.environment();
-      String[] variables = listVariables();
-      for ( int i = 0; i < variables.length; i++ ) {
-        env.put( variables[i], getVariable( variables[i] ) );
-      }
+      populateProcessBuilderEnvironment( procBuilder );
 
       if ( getWorkDirectory() != null && !Utils.isEmpty( Const.rtrim( getWorkDirectory() ) ) ) {
         String vfsFilename = environmentSubstitute( getWorkDirectory() );
-        File file = new File( KettleVFS.getFilename( KettleVFS.getFileObject( vfsFilename, this ) ) );
+        File file = new File( KettleVFS.getFilename( vfs.getFileObject( vfsFilename, this ) ) );
         procBuilder.directory( file );
       }
       Process proc = procBuilder.start();
@@ -608,7 +608,7 @@ public class JobEntryShell extends JobEntryBase implements Cloneable, JobEntryIn
 
       proc.waitFor();
       if ( log.isDetailed() ) {
-        logDetailed( BaseMessages.getString( PKG, "JobShell.CommandFinished", command.toString() ) );
+        logDetailed( BaseMessages.getString( PKG, "JobShell.CommandFinished", command ) );
       }
 
       // What's the exit status?
@@ -655,11 +655,24 @@ public class JobEntryShell extends JobEntryBase implements Cloneable, JobEntryIn
       }
     }
 
-    if ( result.getNrErrors() > 0 ) {
-      result.setResult( false );
-    } else {
-      result.setResult( true );
+    result.setResult( result.getNrErrors() <= 0 );
+  }
+
+  private static String getCommandAsString( List<String> cmds ) {
+    StringBuilder command = new StringBuilder();
+
+    Iterator<String> it = cmds.iterator();
+    boolean first = true;
+    while ( it.hasNext() ) {
+      if ( !first ) {
+        command.append( ' ' );
+      } else {
+        first = false;
+      }
+      command.append( it.next() );
     }
+
+    return command.toString();
   }
 
   private FileObject createTemporaryShellFile( FileObject tempFile, String fileContent ) throws Exception {
@@ -691,7 +704,6 @@ public class JobEntryShell extends JobEntryBase implements Cloneable, JobEntryIn
           new Thread( outputLogger ).start();
           proc.waitFor();
         }
-
       } catch ( Exception e ) {
         throw new Exception( "Unable to create temporary file to execute script", e );
       }
@@ -706,6 +718,37 @@ public class JobEntryShell extends JobEntryBase implements Cloneable, JobEntryIn
     result = result.replaceAll( "\\r\\n?", "\n" );
 
     return result;
+  }
+
+  @VisibleForTesting
+  void populateProcessBuilderEnvironment( ProcessBuilder processBuilder ) {
+    Map<String, String> env = processBuilder.environment();
+    List<String> envsToIgnore =
+      Arrays.asList( Const.NVL( getVariable( Const.SHELL_STEP_ENVIRONMENT_VARIABLES_TO_IGNORE ),
+          Const.SHELL_STEP_ENVIRONMENT_VARIABLES_TO_IGNORE_DEFAULT )
+        .split( "," ) );
+
+    for ( String variable : listVariables() ) {
+      String value = getVariable( variable );
+      int size = ( null != value ) ? value.length() : 0;
+
+      if ( log.isDebug() ) {
+        if ( log.isRowLevel() ) {
+          logRowlevel( BaseMessages.getString( PKG, "JobShell.VariableValueForProcessBuilderEnvironment", variable,
+            size, value ) );
+        } else {
+          logDebug( BaseMessages.getString( PKG, "JobShell.VariableSizeForProcessBuilderEnvironment", variable,
+            size ) );
+        }
+      }
+      if ( envsToIgnore.contains( variable ) ) {
+        if ( log.isDebug() ) {
+          logDebug( BaseMessages.getString( PKG, "JobShell.VariableIgnoredFromProcessBuilderEnvironment", variable ) );
+        }
+      } else {
+        env.put( variable, value );
+      }
+    }
   }
 
   public boolean evaluates() {
@@ -735,12 +778,12 @@ public class JobEntryShell extends JobEntryBase implements Cloneable, JobEntryIn
     AndValidator.putValidators( ctx, JobEntryValidatorUtils.notBlankValidator(),
         JobEntryValidatorUtils.fileExistsValidator() );
 
-    JobEntryValidatorUtils.andValidator().validate( this, "workDirectory", remarks, ctx );
-    JobEntryValidatorUtils.andValidator().validate( this, "filename", remarks,
+    JobEntryValidatorUtils.andValidator().validate( parentJobMeta.getBowl(), this, "workDirectory", remarks, ctx );
+    JobEntryValidatorUtils.andValidator().validate( parentJobMeta.getBowl(), this, "filename", remarks,
         AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
 
     if ( setLogfile ) {
-      JobEntryValidatorUtils.andValidator().validate( this, "logfile", remarks,
+      JobEntryValidatorUtils.andValidator().validate( parentJobMeta.getBowl(), this, "logfile", remarks,
           AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
     }
   }

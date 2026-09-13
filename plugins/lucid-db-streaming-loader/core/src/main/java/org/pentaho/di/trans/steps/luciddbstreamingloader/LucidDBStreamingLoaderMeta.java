@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.luciddbstreamingloader;
 
@@ -29,6 +21,7 @@ import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.SQLStatement;
 import org.pentaho.di.core.annotations.Step;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.Database;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleDatabaseException;
@@ -46,11 +39,7 @@ import org.pentaho.di.shared.SharedObjectInterface;
 import org.pentaho.di.trans.DatabaseImpact;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
-import org.pentaho.di.trans.step.BaseStepMeta;
-import org.pentaho.di.trans.step.StepDataInterface;
-import org.pentaho.di.trans.step.StepInterface;
-import org.pentaho.di.trans.step.StepMeta;
-import org.pentaho.di.trans.step.StepMetaInterface;
+import org.pentaho.di.trans.step.*;
 import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
 
@@ -61,13 +50,14 @@ import org.w3c.dom.Node;
  *
  */
 
-@Step( id = "LucidDBStreamingLoader", image = "ui/images/deprecated.svg",
-  i18nPackageName = "org.pentaho.di.trans.steps.luciddbstreamingloader", name = "LucidDBStreamingLoaderMeta.Name",
-  description = "LucidDBStreamingLoaderMeta.Description",
-  categoryDescription = "i18n:org.pentaho.di.trans.step:BaseStep.Category.Deprecated",
-  suggestion = "LucidDBStreamingLoaderMeta.SuggestedStep" )
+// BACKLOG-38582 Remove specific deprecated steps and job entries from PDI, Please uncomment to enable plugin if needed.
+//@Step( id = "LucidDBStreamingLoader", image = "ui/images/deprecated.svg",
+//  i18nPackageName = "org.pentaho.di.trans.steps.luciddbstreamingloader", name = "LucidDBStreamingLoaderMeta.Name",
+//  description = "LucidDBStreamingLoaderMeta.Description",
+//  categoryDescription = "i18n:org.pentaho.di.trans.step:BaseStep.Category.Deprecated",
+//  suggestion = "LucidDBStreamingLoaderMeta.SuggestedStep" )
 
-public class LucidDBStreamingLoaderMeta extends BaseStepMeta implements StepMetaInterface {
+public class LucidDBStreamingLoaderMeta extends BaseDatabaseStepMeta implements StepMetaInterface {
   private static Class<?> PKG = LucidDBStreamingLoaderMeta.class; // for i18n
 
   public static String TARGET_TABLE_ALIAS = "TGT";
@@ -207,7 +197,7 @@ public class LucidDBStreamingLoaderMeta extends BaseStepMeta implements StepMeta
     return retval;
   }
 
-  private void readData( Node stepnode, List<? extends SharedObjectInterface> databases ) throws KettleXMLException {
+  private void readData( Node stepnode, List<DatabaseMeta> databases ) throws KettleXMLException {
     try {
       String con = XMLHandler.getTagValue( stepnode, "connection" );
       databaseMeta = DatabaseMeta.findDatabase( databases, con );
@@ -389,7 +379,8 @@ public class LucidDBStreamingLoaderMeta extends BaseStepMeta implements StepMeta
     }
   }
 
-  public void getFields( RowMetaInterface rowMeta, String origin, RowMetaInterface[] info, StepMeta nextStep,
+  @Override
+  public void getFields( Bowl bowl, RowMetaInterface rowMeta, String origin, RowMetaInterface[] info, StepMeta nextStep,
     VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
     // Default: nothing changes to rowMeta
   }
@@ -855,7 +846,7 @@ public class LucidDBStreamingLoaderMeta extends BaseStepMeta implements StepMeta
         throw new KettleException( BaseMessages.getString(
           PKG, "LucidDBStreamingLoaderMeta.Exception.ErrorGettingFields" ), e );
       } finally {
-        db.disconnect();
+        db.close();
       }
     } else {
       throw new KettleException( BaseMessages.getString(
@@ -981,7 +972,7 @@ public class LucidDBStreamingLoaderMeta extends BaseStepMeta implements StepMeta
             retval.setError( BaseMessages.getString( PKG, "LucidDBStreamingLoaderMeta.Error.ErrorConnecting", dbe
               .getMessage() ) );
           } finally {
-            db.disconnect();
+            db.close();
           }
         } else {
           retval.setError( BaseMessages.getString( PKG, "LucidDBStreamingLoaderMeta.Error.NoTable" ) );

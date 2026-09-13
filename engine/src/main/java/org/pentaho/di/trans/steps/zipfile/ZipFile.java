@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.zipfile;
 
@@ -86,8 +78,8 @@ public class ZipFile extends BaseStep implements StepInterface {
       first = false;
 
       data.outputRowMeta = getInputRowMeta().clone();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, getTrans().getRepository(), getTrans()
-        .getMetaStore() );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this,
+        getTrans().getRepository(), getTrans().getMetaStore() );
 
       // Check is source filename field is provided
       if ( Utils.isEmpty( meta.getDynamicSourceFileNameField() ) ) {
@@ -153,7 +145,8 @@ public class ZipFile extends BaseStep implements StepInterface {
         log.logError( toString(), BaseMessages.getString( PKG, "ZipFile.Error.SourceFileEmpty" ) );
         throw new KettleException( BaseMessages.getString( PKG, "ZipFile.Error.SourceFileEmpty" ) );
       }
-      data.sourceFile = KettleVFS.getFileObject( sourceFilename, this );
+      data.sourceFile = KettleVFS.getInstance( getTransMeta().getBowl() )
+        .getFileObject( sourceFilename, this );
 
       // Check sourcefile
       boolean skip = false;
@@ -194,7 +187,7 @@ public class ZipFile extends BaseStep implements StepInterface {
           log.logError( toString(), BaseMessages.getString( PKG, "ZipFile.Error.TargetFileEmpty" ) );
           throw new KettleException( BaseMessages.getString( PKG, "ZipFile.Error.TargetFileEmpty" ) );
         }
-        data.zipFile = KettleVFS.getFileObject( targetFilename, this );
+        data.zipFile = KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( targetFilename, this );
         if ( data.zipFile.exists() ) {
           if ( log.isDetailed() ) {
             log.logDetailed( toString(), BaseMessages.getString(
@@ -275,7 +268,7 @@ public class ZipFile extends BaseStep implements StepInterface {
         FileObject moveToFolder = null;
         try {
           // Move to folder
-          moveToFolder = KettleVFS.getFileObject( folder, this );
+          moveToFolder = KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( folder, this );
 
           if ( moveToFolder.exists() ) {
             if ( moveToFolder.getType() != FileType.FOLDER ) {
@@ -289,7 +282,7 @@ public class ZipFile extends BaseStep implements StepInterface {
           String targetfilename =
             KettleVFS.getFilename( moveToFolder )
               + Const.FILE_SEPARATOR + data.sourceFile.getName().getBaseName();
-          file = KettleVFS.getFileObject( targetfilename, this );
+          file = KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( targetfilename, this );
 
           // Move file
           data.sourceFile.moveTo( file );
@@ -375,7 +368,7 @@ public class ZipFile extends BaseStep implements StepInterface {
 
       // Prepare Zip File
       buffer = new byte[18024];
-      dest = KettleVFS.getOutputStream( localrealZipfilename, false );
+      dest = KettleVFS.getInstance( getTransMeta().getBowl() ).getOutputStream( localrealZipfilename, false );
       buff = new BufferedOutputStream( dest );
       out = new ZipOutputStream( buff );
 

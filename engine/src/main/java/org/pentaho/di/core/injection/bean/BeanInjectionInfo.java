@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.injection.bean;
 
@@ -30,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.pentaho.di.core.injection.Injection;
 import org.pentaho.di.core.injection.InjectionSupported;
 import org.pentaho.di.core.logging.KettleLogStore;
@@ -91,6 +83,10 @@ public class BeanInjectionInfo {
     }
   }
 
+  public Class<?> getBeanInjectionClass() {
+    return clazz;
+  }
+
   public String getLocalizationPrefix() {
     return clazzAnnotation.localizationPrefix();
   }
@@ -118,7 +114,7 @@ public class BeanInjectionInfo {
       return;
     }
 
-    Property prop = new Property( propertyName, metaInj.group(), leaf.createCallStack() );
+    Property prop = new Property( propertyName, metaInj.group(), metaInj.required(), leaf.createCallStack() );
     properties.put( prop.name, prop );
     Group gr = groupsMap.get( metaInj.group() );
     if ( gr == null ) {
@@ -161,16 +157,52 @@ public class BeanInjectionInfo {
     return name;
   }
 
+  /**
+   * @return A human friendly message listing any metadata injection properties for the target class that
+   * do not have localized values.  Returns null if everything is ok
+   */
+  public String checkMetaDataInjectionBeanAgainstMessages() {
+    String desc;
+    List<String> propertiesWithNoLocalizedValues = new ArrayList<>();
+    for ( String property : getProperties().keySet() ) {
+      desc = getDescription( property );
+      if ( desc.startsWith( "!" ) && desc.endsWith( "!" ) ) {
+        propertiesWithNoLocalizedValues.add( property );
+      }
+    }
+    if ( !propertiesWithNoLocalizedValues.isEmpty() ) {
+      StringBuilder sb = new StringBuilder();
+      for ( String property : propertiesWithNoLocalizedValues ) {
+        if ( sb.length() > 0 ) {
+          sb.append( ", " );
+        }
+        sb.append( "\"" ).append( this.clazzAnnotation.localizationPrefix() );
+        sb.append( property ).append( "\"" );
+      }
+      sb.insert( 0, "The following Metadata Injection properties have no localized values set: " );
+      sb.append( ".  Add entries in the appropriate localized message properties file." );
+      return sb.toString();
+    }
+    return null;
+  }
+
   public class Property {
     private final String name;
     private final String groupName;
     protected final List<BeanLevelInfo> path;
     public final int pathArraysCount;
 
+    private boolean require;
+
     public Property( String name, String groupName, List<BeanLevelInfo> path ) {
+      this( name, groupName, false, path );
+    }
+
+    public Property( String name, String groupName, boolean require, List<BeanLevelInfo> path ) {
       this.name = name;
       this.groupName = groupName;
       this.path = path;
+      this.require = require;
       int ac = 0;
       for ( BeanLevelInfo level : path ) {
         if ( level.dim != BeanLevelInfo.DIMENSION.NONE ) {
@@ -188,9 +220,16 @@ public class BeanInjectionInfo {
       return groupName;
     }
 
+    public List<BeanLevelInfo> getPath() {
+      return path;
+    }
+
     public String getDescription() {
       return BeanInjectionInfo.this.getDescription( name );
     }
+
+    public boolean isRequire() {
+      return require; }
 
     public Class<?> getPropertyClass() {
       return path.get( path.size() - 1 ).leafClass;

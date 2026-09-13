@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.getxmldata;
 
@@ -41,6 +33,7 @@ import org.eclipse.jface.dialogs.ProgressMonitorDialog;
 import org.eclipse.jface.operation.IRunnableWithProgress;
 import org.eclipse.swt.widgets.Shell;
 import org.pentaho.di.compatibility.Value;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.RowMetaAndData;
 import org.pentaho.di.core.vfs.KettleVFS;
@@ -121,11 +114,11 @@ public class XMLInputFieldsImportProgressDialog {
     }
   }
 
-  public RowMetaAndData[] open() {
+  public RowMetaAndData[] open( Bowl bowl ) {
     IRunnableWithProgress op = new IRunnableWithProgress() {
       public void run( IProgressMonitor monitor ) throws InvocationTargetException, InterruptedException {
         try {
-          fields = doScan( monitor );
+          fields = doScan( bowl, monitor );
         } catch ( Exception e ) {
           e.printStackTrace();
           throw new InvocationTargetException( e, BaseMessages.getString( PKG,
@@ -150,8 +143,7 @@ public class XMLInputFieldsImportProgressDialog {
     return fields;
   }
 
-  @SuppressWarnings( "unchecked" )
-  private RowMetaAndData[] doScan( IProgressMonitor monitor ) throws Exception {
+  private RowMetaAndData[] doScan( Bowl bowl, IProgressMonitor monitor ) throws Exception {
     monitor.beginTask( BaseMessages.getString( PKG, "GetXMLDateLoopNodesImportProgressDialog.Task.ScanningFile",
         filename ), 1 );
 
@@ -179,7 +171,7 @@ public class XMLInputFieldsImportProgressDialog {
 
       Document document = null;
       if ( !Utils.isEmpty( filename ) ) {
-        is = KettleVFS.getInputStream( filename );
+        is = KettleVFS.getInstance( bowl ).getInputStream( filename );
         document = reader.read( is, encoding );
       } else {
         if ( !Utils.isEmpty( xml ) ) {
@@ -239,7 +231,6 @@ public class XMLInputFieldsImportProgressDialog {
 
   }
 
-  @SuppressWarnings( "unchecked" )
   private void setNodeField( Node node, IProgressMonitor monitor ) {
     Element e = (Element) node;
     // get all attributes

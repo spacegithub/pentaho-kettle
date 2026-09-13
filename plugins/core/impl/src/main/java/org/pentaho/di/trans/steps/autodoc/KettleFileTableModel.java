@@ -1,24 +1,17 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
+
 
 package org.pentaho.di.trans.steps.autodoc;
 
@@ -32,8 +25,8 @@ import javax.swing.table.TableModel;
 
 import org.jfree.ui.Drawable;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.RowMetaAndData;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.Database;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
@@ -42,6 +35,7 @@ import org.pentaho.di.core.logging.LogChannelInterface;
 import org.pentaho.di.core.logging.LogStatus;
 import org.pentaho.di.core.logging.LogTableInterface;
 import org.pentaho.di.core.logging.LoggingObjectInterface;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.trans.TransMeta;
@@ -51,7 +45,8 @@ public class KettleFileTableModel implements TableModel {
   public enum Field {
     location( ReportSubjectLocation.class ), filename( String.class ), name( String.class ), description(
       String.class ), extended_description( String.class ), logging( String.class ), creation( String.class ),
-      modification( String.class ), last_exec_result( String.class ), image( Drawable.class );
+      modification( String.class ), last_exec_result( String.class ), image( Drawable.class ),
+      pdf_image( Drawable.class );
 
     private Class<?> clazz;
 
@@ -64,6 +59,7 @@ public class KettleFileTableModel implements TableModel {
     }
   }
 
+  private Bowl bowl;
   private List<ReportSubjectLocation> locations;
   private LoggingObjectInterface parentObject;
   private LogChannelInterface log;
@@ -71,7 +67,8 @@ public class KettleFileTableModel implements TableModel {
   public KettleFileTableModel() {
   }
 
-  public KettleFileTableModel( LoggingObjectInterface parentObject, List<ReportSubjectLocation> locations ) {
+  public KettleFileTableModel( Bowl bowl, LoggingObjectInterface parentObject, List<ReportSubjectLocation> locations ) {
+    this.bowl = bowl;
     this.parentObject = parentObject;
     this.locations = locations;
     this.log = new LogChannel( "Kettle File Table Model", parentObject );
@@ -96,6 +93,7 @@ public class KettleFileTableModel implements TableModel {
     return locations.size();
   }
 
+  @Override
   public Object getValueAt( int rowIndex, int columnIndex ) {
 
     ReportSubjectLocation location = locations.get( rowIndex );
@@ -109,21 +107,23 @@ public class KettleFileTableModel implements TableModel {
         case filename:
           return location.getFilename();
         case name:
-          return getName( location );
+          return getName( bowl, location );
         case description:
-          return getDescription( location );
+          return getDescription( bowl, location );
         case extended_description:
-          return getExtendedDescription( location );
+          return getExtendedDescription( bowl, location );
         case logging:
-          return getLogging( location );
+          return getLogging( bowl, location );
         case creation:
-          return getCreation( location );
+          return getCreation( bowl, location );
         case modification:
-          return getModification( location );
+          return getModification( bowl, location );
         case last_exec_result:
-          return getLastExecutionResult( log, parentObject, location );
+          return getLastExecutionResult( bowl, log, parentObject, location );
         case image:
-          return getImage( location );
+          return new TransJobDrawable( bowl, location, false );
+        case pdf_image:
+          return new TransJobDrawable( bowl, location, true );
         default:
           throw new RuntimeException( "Unhandled field type: " + field + " in function getValueAt()" );
       }
@@ -133,37 +133,37 @@ public class KettleFileTableModel implements TableModel {
     }
   }
 
-  public static String getName( ReportSubjectLocation filename ) throws KettleException {
+  public static String getName( Bowl bowl, ReportSubjectLocation filename ) throws KettleException {
     if ( filename.isTransformation() ) {
-      return TransformationInformation.getInstance().getTransMeta( filename ).getName();
+      return TransformationInformation.getInstance().getTransMeta( bowl, filename ).getName();
     } else {
-      return JobInformation.getInstance().getJobMeta( filename ).getName();
+      return JobInformation.getInstance().getJobMeta( bowl, filename ).getName();
     }
   }
 
-  public static String getDescription( ReportSubjectLocation filename ) throws KettleException {
+  public static String getDescription( Bowl bowl, ReportSubjectLocation filename ) throws KettleException {
     if ( filename.isTransformation() ) {
-      return TransformationInformation.getInstance().getTransMeta( filename ).getDescription();
+      return TransformationInformation.getInstance().getTransMeta( bowl, filename ).getDescription();
     } else {
-      return JobInformation.getInstance().getJobMeta( filename ).getDescription();
+      return JobInformation.getInstance().getJobMeta( bowl, filename ).getDescription();
     }
   }
 
-  public static String getExtendedDescription( ReportSubjectLocation filename ) throws KettleException {
+  public static String getExtendedDescription( Bowl bowl, ReportSubjectLocation filename ) throws KettleException {
     if ( filename.isTransformation() ) {
-      return TransformationInformation.getInstance().getTransMeta( filename ).getExtendedDescription();
+      return TransformationInformation.getInstance().getTransMeta( bowl, filename ).getExtendedDescription();
     } else {
-      return JobInformation.getInstance().getJobMeta( filename ).getExtendedDescription();
+      return JobInformation.getInstance().getJobMeta( bowl, filename ).getExtendedDescription();
     }
   }
 
-  public static String getLogging( ReportSubjectLocation filename ) throws KettleException {
+  public static String getLogging( Bowl bowl, ReportSubjectLocation filename ) throws KettleException {
     List<LogTableInterface> logTables;
     if ( filename.isTransformation() ) {
-      TransMeta transMeta = TransformationInformation.getInstance().getTransMeta( filename );
+      TransMeta transMeta = TransformationInformation.getInstance().getTransMeta( bowl, filename );
       logTables = transMeta.getLogTables();
     } else {
-      JobMeta jobMeta = JobInformation.getInstance().getJobMeta( filename );
+      JobMeta jobMeta = JobInformation.getInstance().getJobMeta( bowl, filename );
       logTables = jobMeta.getLogTables();
     }
     String logging = "";
@@ -179,49 +179,49 @@ public class KettleFileTableModel implements TableModel {
     return logging;
   }
 
-  public static BufferedImage getImage( ReportSubjectLocation filename ) throws KettleException {
+  public static BufferedImage getImage( Bowl bowl, ReportSubjectLocation filename ) throws KettleException {
     if ( filename.isTransformation() ) {
-      return TransformationInformation.getInstance().getImage( filename );
+      return TransformationInformation.getInstance().getImage( bowl, filename );
     } else {
-      return JobInformation.getInstance().getImage( filename );
+      return JobInformation.getInstance().getImage( bowl, filename );
     }
   }
 
-  public static String getCreation( ReportSubjectLocation filename ) throws KettleException {
+  public static String getCreation( Bowl bowl, ReportSubjectLocation filename ) throws KettleException {
     Date date = null;
     String user = null;
     if ( filename.isTransformation() ) {
-      date = TransformationInformation.getInstance().getTransMeta( filename ).getCreatedDate();
-      user = TransformationInformation.getInstance().getTransMeta( filename ).getCreatedUser();
+      date = TransformationInformation.getInstance().getTransMeta( bowl, filename ).getCreatedDate();
+      user = TransformationInformation.getInstance().getTransMeta( bowl, filename ).getCreatedUser();
     } else {
-      date = JobInformation.getInstance().getJobMeta( filename ).getCreatedDate();
-      user = JobInformation.getInstance().getJobMeta( filename ).getCreatedUser();
+      date = JobInformation.getInstance().getJobMeta( bowl, filename ).getCreatedDate();
+      user = JobInformation.getInstance().getJobMeta( bowl, filename ).getCreatedUser();
     }
     return Const.NVL( XMLHandler.date2string( date ), "-" ) + " by " + Const.NVL( user, "-" );
   }
 
-  public static String getModification( ReportSubjectLocation filename ) throws KettleException {
+  public static String getModification( Bowl bowl, ReportSubjectLocation filename ) throws KettleException {
     Date date = null;
     String user = null;
     if ( filename.isTransformation() ) {
-      date = TransformationInformation.getInstance().getTransMeta( filename ).getModifiedDate();
-      user = TransformationInformation.getInstance().getTransMeta( filename ).getModifiedUser();
+      date = TransformationInformation.getInstance().getTransMeta( bowl, filename ).getModifiedDate();
+      user = TransformationInformation.getInstance().getTransMeta( bowl, filename ).getModifiedUser();
     } else {
-      date = JobInformation.getInstance().getJobMeta( filename ).getModifiedDate();
-      user = JobInformation.getInstance().getJobMeta( filename ).getModifiedUser();
+      date = JobInformation.getInstance().getJobMeta( bowl, filename ).getModifiedDate();
+      user = JobInformation.getInstance().getJobMeta( bowl, filename ).getModifiedUser();
     }
     return Const.NVL( XMLHandler.date2string( date ), "-" ) + " by " + Const.NVL( user, "-" );
   }
 
-  public static String getLastExecutionResult( LogChannelInterface log, LoggingObjectInterface parentObject,
+  public static String getLastExecutionResult( Bowl bowl, LogChannelInterface log, LoggingObjectInterface parentObject,
     ReportSubjectLocation filename ) throws KettleException {
 
     LogTableInterface logTable = null;
     if ( filename.isTransformation() ) {
-      TransMeta transMeta = TransformationInformation.getInstance().getTransMeta( filename );
+      TransMeta transMeta = TransformationInformation.getInstance().getTransMeta( bowl, filename );
       logTable = transMeta.getTransLogTable();
     } else {
-      JobMeta jobMeta = JobInformation.getInstance().getJobMeta( filename );
+      JobMeta jobMeta = JobInformation.getInstance().getJobMeta( bowl, filename );
       logTable = jobMeta.getJobLogTable();
     }
     if ( logTable != null && logTable.isDefined() ) {

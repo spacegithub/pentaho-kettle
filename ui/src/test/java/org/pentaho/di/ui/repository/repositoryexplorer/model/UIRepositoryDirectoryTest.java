@@ -1,29 +1,25 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2017-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.repository.repositoryexplorer.model;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.any;
+
 
 import java.util.Collections;
 
@@ -33,9 +29,7 @@ import org.pentaho.di.repository.LongObjectId;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.repository.RepositoryDirectory;
 import org.pentaho.di.repository.RepositoryElementMetaInterface;
-import org.pentaho.di.repository.RepositoryExtended;
 import org.pentaho.di.repository.RepositoryObjectType;
-import org.pentaho.di.repository.UserInfo;
 
 public class UIRepositoryDirectoryTest {
 
@@ -48,18 +42,20 @@ public class UIRepositoryDirectoryTest {
     root.addSubdirectory( dir );
     RepositoryElementMetaInterface meta = mock( RepositoryElementMetaInterface.class );
     when( meta.getObjectType() ).thenReturn( RepositoryObjectType.TRANSFORMATION );
-
     root.setRepositoryObjects( Collections.emptyList() );
     dir.setRepositoryObjects( Collections.singletonList( meta ) );
 
     Repository repo = mock( Repository.class );
+    String dirTest = "dirTest";
+    dir.setName( dirTest );
+    String[] dirNames = { dirTest };
+    when( repo.getDirectoryNames( any() ) ).thenReturn( dirNames );
     UIRepositoryDirectory uiDir = new UIRepositoryDirectory( root, null, repo );
     UIRepositoryObjects objects = uiDir.getRepositoryObjects();
     assertNotNull( objects );
     uiDir = new UIRepositoryDirectory( dir, uiDir, repo );
     objects = uiDir.getRepositoryObjects();
     assertEquals( 1, objects.size() );
-    verifyZeroInteractions( repo );
   }
 
   @Test
@@ -78,6 +74,10 @@ public class UIRepositoryDirectoryTest {
         Collections.singletonList( meta ) );
     when( repo.getJobAndTransformationObjects( root.getObjectId(), false ) ).thenReturn( Collections.emptyList() );
 
+    String dirTest = "dirTest";
+    dir.setName( dirTest );
+    String[] dirNames = { dirTest };
+    when( repo.getDirectoryNames( any() ) ).thenReturn( dirNames );
     UIRepositoryDirectory uiDir = new UIRepositoryDirectory( root, null, repo );
     UIRepositoryObjects objects = uiDir.getRepositoryObjects();
     assertNotNull( objects );

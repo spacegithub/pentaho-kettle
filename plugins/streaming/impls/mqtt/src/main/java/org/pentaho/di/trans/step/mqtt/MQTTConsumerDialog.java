@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step.mqtt;
 
@@ -34,7 +26,7 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableItem;
-import org.pentaho.di.core.row.value.ValueMetaFactory;
+import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.StepDialogInterface;
@@ -47,8 +39,12 @@ import org.pentaho.di.ui.trans.step.BaseStreamingDialog;
 
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.util.Arrays.stream;
+import static org.pentaho.di.core.row.ValueMetaInterface.TYPE_BINARY;
+import static org.pentaho.di.core.row.ValueMetaInterface.TYPE_STRING;
+import static org.pentaho.di.core.row.ValueMetaInterface.getTypeDescription;
 import static org.pentaho.di.trans.step.mqtt.MQTTConstants.AUTOMATIC_RECONNECT;
 import static org.pentaho.di.trans.step.mqtt.MQTTConstants.CLEAN_SESSION;
 import static org.pentaho.di.trans.step.mqtt.MQTTConstants.CONNECTION_TIMEOUT;
@@ -57,17 +53,18 @@ import static org.pentaho.di.trans.step.mqtt.MQTTConstants.MAX_INFLIGHT;
 import static org.pentaho.di.trans.step.mqtt.MQTTConstants.MQTT_VERSION;
 import static org.pentaho.di.trans.step.mqtt.MQTTConstants.SERVER_URIS;
 import static org.pentaho.di.trans.step.mqtt.MQTTConstants.STORAGE_LEVEL;
+import static org.pentaho.di.ui.core.WidgetUtils.formDataBelow;
 
 @SuppressWarnings( "unused" )
 public class MQTTConsumerDialog extends BaseStreamingDialog implements StepDialogInterface {
 
-  private static Class<?> PKG = MQTTConsumerMeta.class; // for i18n purposes, needed by Translator2!!   $NON-NLS-1$
+  private static final Class<?> PKG = MQTTConsumerMeta.class; // for i18n purposes, needed by Translator2!!   $NON-NLS-1$
 
   private MQTTConsumerMeta mqttMeta;
   private TextVar wConnection;
+  private TextVar wClientId;
   private TableView topicsTable;
   private ComboVar wQOS;
-  private TableView fieldsTable;
 
   private final Point startingDimensions = new Point( 527, 676 );
 
@@ -83,6 +80,7 @@ public class MQTTConsumerDialog extends BaseStreamingDialog implements StepDialo
   @Override protected void getData() {
     super.getData();
     wConnection.setText( mqttMeta.getMqttServer() );
+    wClientId.setText( mqttMeta.getClientId() );
     populateTopicsData();
     wQOS.setText( mqttMeta.getQos() );
 
@@ -133,19 +131,25 @@ public class MQTTConsumerDialog extends BaseStreamingDialog implements StepDialo
     wConnection = new TextVar( transMeta, wSetupComp, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
     props.setLook( wConnection );
     wConnection.addModifyListener( lsMod );
-    FormData fdConnection = new FormData();
-    fdConnection.left = new FormAttachment( 0, 0 );
-    fdConnection.right = new FormAttachment( 0, 363 );
-    fdConnection.top = new FormAttachment( wlConnection, 5 );
+    FormData fdConnection = formDataBelow( wlConnection, INPUT_WIDTH, 5 );
     wConnection.setLayoutData( fdConnection );
+
+    Label wlClientId = new Label( wSetupComp, SWT.LEFT );
+    props.setLook( wlClientId );
+    wlClientId.setText( BaseMessages.getString( PKG, "MQTTConsumerDialog.ClientId" ) );
+    FormData fdlClientId = formDataBelow( wConnection, INPUT_WIDTH, 5 );
+    wlClientId.setLayoutData( fdlClientId );
+
+    wClientId = new TextVar( transMeta, wSetupComp, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
+    props.setLook( wClientId );
+    wClientId.addModifyListener( lsMod );
+    FormData fdClientId = formDataBelow( wlClientId, INPUT_WIDTH, 5 );
+    wClientId.setLayoutData( fdClientId );
 
     Label wlTopics = new Label( wSetupComp, SWT.LEFT );
     props.setLook( wlTopics );
     wlTopics.setText( BaseMessages.getString( PKG, "MQTTConsumerDialog.Topics" ) );
-    FormData fdlTopics = new FormData();
-    fdlTopics.left = new FormAttachment( 0, 0 );
-    fdlTopics.top = new FormAttachment( wConnection, 10 );
-    fdlTopics.right = new FormAttachment( 50, 0 );
+    FormData fdlTopics = formDataBelow( wClientId, INPUT_WIDTH, 5 );
     wlTopics.setLayoutData( fdlTopics );
 
     wQOS = new ComboVar( transMeta, wSetupComp, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
@@ -228,16 +232,6 @@ public class MQTTConsumerDialog extends BaseStreamingDialog implements StepDialo
     optionsLayout.buildTab();
   }
 
-
-  @Override protected String[] getFieldNames() {
-    return stream( fieldsTable.getTable().getItems() ).map( row -> row.getText( 2 ) ).toArray( String[]::new );
-  }
-
-  @Override protected int[] getFieldTypes() {
-    return stream( fieldsTable.getTable().getItems() )
-      .mapToInt( row -> ValueMetaFactory.getIdForValueMeta( row.getText( 3 ) ) ).toArray();
-  }
-
   private void buildFieldsTab() {
     CTabItem wFieldsTab = new CTabItem( wTabFolder, SWT.NONE, 3 );
     wFieldsTab.setText( BaseMessages.getString( PKG, "MQTTConsumerDialog.FieldsTab" ) );
@@ -309,13 +303,16 @@ public class MQTTConsumerDialog extends BaseStreamingDialog implements StepDialo
     TableItem messageItem = fieldsTable.getTable().getItem( 0 );
     messageItem.setText( 1, BaseMessages.getString( PKG, "MQTTConsumerDialog.InputName.Message" ) );
     messageItem.setText( 2, mqttMeta.getMsgOutputName() );
-    messageItem.setText( 3, "String" );
+    messageItem.setText( 3, getTypeDescription( mqttMeta.getMessageDataType() ) );
 
     TableItem topicItem = fieldsTable.getTable().getItem( 1 );
     topicItem.setText( 1, BaseMessages.getString( PKG, "MQTTConsumerDialog.InputName.Topic" ) );
     topicItem.setText( 2, mqttMeta.getTopicOutputName() );
-    topicItem.setText( 3, "String" );
+    topicItem.setText( 3, getTypeDescription( TYPE_STRING ) );
   }
+
+  private static String[] messageTypes =
+    Stream.of( TYPE_BINARY, TYPE_STRING ).map( ValueMetaInterface::getTypeDescription ).toArray( String[]::new );
 
   private ColumnInfo[] getFieldColumns() {
     ColumnInfo referenceName = new ColumnInfo( BaseMessages.getString( PKG, "MQTTConsumerDialog.Column.Ref" ),
@@ -325,7 +322,11 @@ public class MQTTConsumerDialog extends BaseStreamingDialog implements StepDialo
       ColumnInfo.COLUMN_TYPE_TEXT, false, false );
 
     ColumnInfo type = new ColumnInfo( BaseMessages.getString( PKG, "MQTTConsumerDialog.Column.Type" ),
-      ColumnInfo.COLUMN_TYPE_TEXT, false, true );
+      ColumnInfo.COLUMN_TYPE_CCOMBO, messageTypes, false );
+
+    type.setDisabledListener(
+      rowNumber -> !BaseMessages.getString( PKG, "MQTTConsumerDialog.InputName.Message" )
+        .equals( fieldsTable.getTable().getItem( rowNumber ).getText( 1 ) ) );
 
     return new ColumnInfo[] { referenceName, name, type };
   }
@@ -333,6 +334,7 @@ public class MQTTConsumerDialog extends BaseStreamingDialog implements StepDialo
 
   @Override protected void additionalOks( BaseStreamStepMeta meta ) {
     mqttMeta.setMqttServer( wConnection.getText() );
+    mqttMeta.setClientId( wClientId.getText() );
     mqttMeta.setTopics( stream( topicsTable.getTable().getItems() )
       .map( item -> item.getText( 1 ) )
       .filter( t -> !"".equals( t ) )
@@ -345,8 +347,9 @@ public class MQTTConsumerDialog extends BaseStreamingDialog implements StepDialo
     mqttMeta.setPassword( securityLayout.getPassword() );
     mqttMeta.setUseSsl( securityLayout.useSsl() );
     mqttMeta.setSslConfig( securityLayout.sslConfig() );
+    mqttMeta.messageDataType = fieldsTable.getTable().getItem( 0 ).getText( 3 );
 
-    optionsLayout.retrieveOptions().stream()
+    optionsLayout.retrieveOptions()
       .forEach( option -> {
         switch ( option.getKey() ) {
           case KEEP_ALIVE_INTERVAL:
@@ -373,6 +376,8 @@ public class MQTTConsumerDialog extends BaseStreamingDialog implements StepDialo
           case AUTOMATIC_RECONNECT:
             mqttMeta.setAutomaticReconnect( option.getValue() );
             break;
+          default:
+            log.logBasic( BaseMessages.getString( PKG, "MQTTDialog.Error.UnknownOption", option.getKey() ) );
         }
       } );
   }

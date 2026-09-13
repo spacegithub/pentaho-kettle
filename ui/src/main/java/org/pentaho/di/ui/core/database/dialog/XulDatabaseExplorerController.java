@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.core.database.dialog;
 
@@ -127,7 +119,7 @@ public class XulDatabaseExplorerController extends AbstractXulEventHandler imple
 
     this.dbExplorerDialog = (SwtDialog) this.document.getElementById( "databaseExplorerDialog" );
 
-    createDatabaseNodes();
+    createDatabaseNodes( shell );
     if ( this.status != UiPostActionStatus.OK ) {
       // something goes dramatically wrong!
       return;
@@ -257,7 +249,8 @@ public class XulDatabaseExplorerController extends AbstractXulEventHandler imple
       new GetQueryFieldsProgressDialog( this.shell, databaseMeta, theSql );
     RowMetaInterface fields = theProgressDialog.open();
 
-    StepFieldsDialog stepFieldsDialog = new StepFieldsDialog( shell, databaseMeta, SWT.NONE, schemaTable, fields );
+    StepFieldsDialog stepFieldsDialog =
+        new StepFieldsDialog( this.dbExplorerDialog.getShell(), databaseMeta, SWT.NONE, schemaTable, fields );
     stepFieldsDialog.setShellText( BaseMessages.getString( PKG, "DatabaseExplorerDialog.TableLayout.ShellText" ) );
     stepFieldsDialog
       .setOriginText( BaseMessages.getString( PKG, "DatabaseExplorerDialog.TableLayout.OriginText" ) );
@@ -360,7 +353,7 @@ public class XulDatabaseExplorerController extends AbstractXulEventHandler imple
   public void refresh() {
     collapse();
     this.model.getDatabase().clear();
-    createDatabaseNodes();
+    createDatabaseNodes( this.dbExplorerDialog.getShell() );
     if ( this.status != UiPostActionStatus.OK ) {
       // something goes dramatically wrong!
       return;
@@ -373,15 +366,23 @@ public class XulDatabaseExplorerController extends AbstractXulEventHandler imple
    * @return true if all goes fine, false otherwise. This will signal to caller
    * that it may not attempt to show broken dialog
    */
-  void createDatabaseNodes() {
+  void createDatabaseNodes( Shell dialogsParent ) {
     this.status = UiPostActionStatus.NONE;
     Database theDatabase = new Database( null, this.model.getDatabaseMeta() );
     try {
       theDatabase.connect();
       GetDatabaseInfoProgressDialog gdipd =
-        new GetDatabaseInfoProgressDialog( (Shell) this.dbExplorerDialog.getRootObject(), this.model
-          .getDatabaseMeta() );
+        new GetDatabaseInfoProgressDialog( dialogsParent, this.model.getDatabaseMeta() );
+      gdipd.addDatabaseProgressListener( progressMonitor -> {
+        if ( progressMonitor.isCanceled() ) {
+          status = UiPostActionStatus.CANCEL;
+        }
+      } );
       DatabaseMetaInformation dmi = gdipd.open();
+
+      if ( status == UiPostActionStatus.CANCEL ) {
+        return;
+      }
 
       // Adds the main database node.
       DatabaseExplorerNode theDatabaseNode = new DatabaseExplorerNode();
@@ -449,6 +450,7 @@ public class XulDatabaseExplorerController extends AbstractXulEventHandler imple
         Collections.sort( tables );
         for ( String table : tables ) {
           DatabaseExplorerNode theTableNode = new DatabaseExplorerNode();
+          theTableNode.setSchema( schema );
           theTableNode.setIsTable( true );
           theTableNode.setName( table );
           theTableNode.setImage( TABLE_IMAGE );
@@ -496,13 +498,13 @@ public class XulDatabaseExplorerController extends AbstractXulEventHandler imple
       // Something goes wrong?
       this.status = UiPostActionStatus.ERROR;
       theDatabase.disconnect();
-      new ErrorDialog( shell, "Error", "Unexpected explorer error:", e );
+      new ErrorDialog( dialogsParent, "Error", "Unexpected explorer error:", e );
       this.status = UiPostActionStatus.ERROR_DIALOG_SHOWN;
       return;
     } finally {
       if ( theDatabase != null ) {
         try {
-          theDatabase.disconnect();
+          theDatabase.close();
         } catch ( Exception ignored ) {
           // Can't do anything else here...
         }
@@ -555,7 +557,7 @@ public class XulDatabaseExplorerController extends AbstractXulEventHandler imple
         this.dbExplorerDialog.getShell(), BaseMessages.getString( PKG, "Dialog.Error.Header" ), BaseMessages
           .getString( PKG, "DatabaseExplorerDialog.Error.RetrieveLayout" ), dbe );
     } finally {
-      db.disconnect();
+      db.close();
     }
   }
 
@@ -597,7 +599,7 @@ public class XulDatabaseExplorerController extends AbstractXulEventHandler imple
                 .getDatabaseMeta(), this.dbcache, sql );
             se.open();
           } finally {
-            targetdb.disconnect();
+            targetdb.close();
           }
         }
       } catch ( KettleDatabaseException dbe ) {

@@ -29,6 +29,7 @@ import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.annotations.Step;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
@@ -51,12 +52,12 @@ import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepMetaInterface;
 import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
-
-@Step( id = "PaloCellInput", image = "ui/images/deprecated.svg",
-    i18nPackageName = "org.pentaho.di.trans.steps.palo.cellinput",
-    name = "PaloCellInput.TransName", description = "PaloCellInput.TransDescription",
-    documentationUrl = "http://wiki.pentaho.com/display/EAI/Palo+Cell+Input",
-    categoryDescription = "i18n:org.pentaho.di.trans.step:BaseStep.Category.Deprecated" )
+// BACKLOG-38582 Remove specific deprecated steps and job entries from PDI, Please uncomment to enable plugin if needed.
+//@Step( id = "PaloCellInput", image = "ui/images/deprecated.svg",
+//    i18nPackageName = "org.pentaho.di.trans.steps.palo.cellinput",
+//    name = "PaloCellInput.TransName", description = "PaloCellInput.TransDescription",
+//    documentationUrl = "http://wiki.pentaho.com/display/EAI/Palo+Cell+Input",
+//    categoryDescription = "i18n:org.pentaho.di.trans.step:BaseStep.Category.Deprecated" )
 public class PaloCellInputMeta extends BaseStepMeta implements StepMetaInterface {
   private DatabaseMeta databaseMeta = null;
   private String cube = "";
@@ -94,7 +95,7 @@ public class PaloCellInputMeta extends BaseStepMeta implements StepMetaInterface
     return retval;
   }
 
-  private void readData( final Node stepnode, final List<? extends SharedObjectInterface> databases )
+  private void readData( final Node stepnode, final List<DatabaseMeta> databases )
     throws KettleXMLException {
     try {
       this.databaseMeta = DatabaseMeta.findDatabase( databases, XMLHandler.getTagValue( stepnode, "connection" ) );
@@ -126,7 +127,7 @@ public class PaloCellInputMeta extends BaseStepMeta implements StepMetaInterface
   }
 
   @Override
-  public void getFields( final RowMetaInterface row, final String origin, final RowMetaInterface[] info,
+  public void getFields( Bowl bowl, final RowMetaInterface row, final String origin, final RowMetaInterface[] info,
       final StepMeta nextStep, final VariableSpace space, Repository repository, IMetaStore metaStore )
     throws KettleStepException {
     if ( databaseMeta == null ) {

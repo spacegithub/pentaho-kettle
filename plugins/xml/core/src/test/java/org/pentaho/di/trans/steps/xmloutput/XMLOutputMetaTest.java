@@ -1,47 +1,24 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
 
+
+
 package org.pentaho.di.trans.steps.xmloutput;
-
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotSame;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 import org.apache.commons.vfs2.FileObject;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.KettleClientEnvironment;
@@ -61,6 +38,22 @@ import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class XMLOutputMetaTest {
   @BeforeClass
@@ -425,7 +418,8 @@ public class XMLOutputMetaTest {
     IMetaStore metastore = mock( IMetaStore.class );
     ValueMetaInterface vmi = mock( ValueMetaInterface.class );
     when( row.searchValueMeta( "aField" ) ).thenReturn( vmi );
-    xmlOutputMeta.getFields( row, "", new RowMetaInterface[] { rmi }, nextStep, new Variables(), repo, metastore );
+    xmlOutputMeta.getFields( DefaultBowl.getInstance(), row, "", new RowMetaInterface[] { rmi }, nextStep,
+      new Variables(), repo, metastore );
     verify( vmi ).setLength( 10, 3 );
   }
 
@@ -492,11 +486,17 @@ public class XMLOutputMetaTest {
   public void testExportResources() throws Exception {
     XMLOutputMeta xmlOutputMeta = new XMLOutputMeta();
     xmlOutputMeta.setDefault();
+
+    StepMeta stepMeta = mock( StepMeta.class );
+    TransMeta transMeta = mock( TransMeta.class );
+    when( stepMeta.getParentTransMeta() ).thenReturn( transMeta );
+    when( transMeta.getBowl() ).thenReturn( DefaultBowl.getInstance() );
+    xmlOutputMeta.setParentStepMeta( stepMeta );
     ResourceNamingInterface resourceNamingInterface = mock( ResourceNamingInterface.class );
     Variables space = new Variables();
     when( resourceNamingInterface.nameResource( any( FileObject.class ), eq( space ), eq( true ) ) ).thenReturn(
         "exportFile" );
-    xmlOutputMeta.exportResources( space, null, resourceNamingInterface, null, null );
+    xmlOutputMeta.exportResources( DefaultBowl.getInstance(), null, space, null, resourceNamingInterface, null, null );
     assertEquals( "exportFile", xmlOutputMeta.getFileName() );
   }
 

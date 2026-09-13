@@ -1,29 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.regexeval;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,6 +31,7 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.KettleEnvironment;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
@@ -88,7 +81,8 @@ public class RegexEvalMetaTest implements InitializerInterface<StepMetaInterface
     when( mockValueMeta.getName() ).thenReturn( mockName );
     when( mockInputRowMeta.getValueMeta( 0 ) ).thenReturn( mockValueMeta );
     regexEvalMeta.setReplacefields( true );
-    regexEvalMeta.getFields( mockInputRowMeta, name, null, null, mockVariableSpace, null, null );
+    regexEvalMeta.getFields( DefaultBowl.getInstance(), mockInputRowMeta, name, null, null, mockVariableSpace, null,
+      null );
     ArgumentCaptor<ValueMetaInterface> captor = ArgumentCaptor.forClass( ValueMetaInterface.class );
     verify( mockInputRowMeta ).setValueMeta( eq( 0 ), captor.capture() );
     assertEquals( mockName, captor.getValue().getName() );
@@ -106,7 +100,8 @@ public class RegexEvalMetaTest implements InitializerInterface<StepMetaInterface
     when( mockVariableSpace.environmentSubstitute( resultField ) ).thenReturn( mockName );
     when( mockInputRowMeta.getValueMeta( 0 ) ).thenReturn( mockValueMeta );
     regexEvalMeta.setReplacefields( true );
-    regexEvalMeta.getFields( mockInputRowMeta, name, null, null, mockVariableSpace, null, null );
+    regexEvalMeta.getFields( DefaultBowl.getInstance(), mockInputRowMeta, name, null, null, mockVariableSpace, null,
+      null );
     ArgumentCaptor<ValueMetaInterface> captor = ArgumentCaptor.forClass( ValueMetaInterface.class );
     verify( mockInputRowMeta ).addValueMeta( captor.capture() );
     assertEquals( mockName, captor.getValue().getName() );
@@ -127,7 +122,8 @@ public class RegexEvalMetaTest implements InitializerInterface<StepMetaInterface
     when( mockInputRowMeta.getValueMeta( 0 ) ).thenReturn( mockValueMeta );
     regexEvalMeta.setReplacefields( true );
     regexEvalMeta.setAllowCaptureGroupsFlag( true );
-    regexEvalMeta.getFields( mockInputRowMeta, name, null, null, mockVariableSpace, null, null );
+    regexEvalMeta.getFields( DefaultBowl.getInstance(), mockInputRowMeta, name, null, null, mockVariableSpace, null,
+      null );
     ArgumentCaptor<ValueMetaInterface> captor = ArgumentCaptor.forClass( ValueMetaInterface.class );
     verify( mockInputRowMeta ).setValueMeta( eq( 0 ), captor.capture() );
     assertEquals( mockName, captor.getValue().getName() );
@@ -147,7 +143,8 @@ public class RegexEvalMetaTest implements InitializerInterface<StepMetaInterface
     when( mockInputRowMeta.getValueMeta( 0 ) ).thenReturn( mockValueMeta );
     regexEvalMeta.setReplacefields( true );
     regexEvalMeta.setAllowCaptureGroupsFlag( true );
-    regexEvalMeta.getFields( mockInputRowMeta, name, null, null, mockVariableSpace, null, null );
+    regexEvalMeta.getFields( DefaultBowl.getInstance(), mockInputRowMeta, name, null, null, mockVariableSpace, null,
+      null );
     ArgumentCaptor<ValueMetaInterface> captor = ArgumentCaptor.forClass( ValueMetaInterface.class );
     verify( mockInputRowMeta ).addValueMeta( captor.capture() );
     assertEquals( fieldName, captor.getValue().getName() );
@@ -163,7 +160,7 @@ public class RegexEvalMetaTest implements InitializerInterface<StepMetaInterface
             "fieldDecimal", "fieldCurrency", "fieldNullIf", "fieldIfNull", "fieldTrimType", "fieldLength", "fieldPrecision",
             "fieldType" );
 
-    Map<String, String> getterMap = new HashMap<String, String>() {
+    Map<String, String> getterMap = new HashMap<>() {
       {
         put( "script", "getScript" );
         put( "matcher", "getMatcher" );
@@ -191,7 +188,7 @@ public class RegexEvalMetaTest implements InitializerInterface<StepMetaInterface
         put( "fieldType", "getFieldType" );
       }
     };
-    Map<String, String> setterMap = new HashMap<String, String>() {
+    Map<String, String> setterMap = new HashMap<>() {
       {
         put( "script", "setScript" );
         put( "matcher", "setMatcher" );
@@ -220,10 +217,10 @@ public class RegexEvalMetaTest implements InitializerInterface<StepMetaInterface
       }
     };
     FieldLoadSaveValidator<String[]> stringArrayLoadSaveValidator =
-        new ArrayLoadSaveValidator<String>( new StringLoadSaveValidator(), 5 );
+      new ArrayLoadSaveValidator<>( new StringLoadSaveValidator(), 5 );
 
 
-    Map<String, FieldLoadSaveValidator<?>> attrValidatorMap = new HashMap<String, FieldLoadSaveValidator<?>>();
+    Map<String, FieldLoadSaveValidator<?>> attrValidatorMap = new HashMap<>();
     attrValidatorMap.put( "fieldName", stringArrayLoadSaveValidator );
     attrValidatorMap.put( "fieldFormat", stringArrayLoadSaveValidator );
     attrValidatorMap.put( "fieldGroup", stringArrayLoadSaveValidator );
@@ -237,7 +234,7 @@ public class RegexEvalMetaTest implements InitializerInterface<StepMetaInterface
     attrValidatorMap.put( "fieldType", new PrimitiveIntArrayLoadSaveValidator( new IntLoadSaveValidator( 9 ), 5 ) );
 
 
-    Map<String, FieldLoadSaveValidator<?>> typeValidatorMap = new HashMap<String, FieldLoadSaveValidator<?>>();
+    Map<String, FieldLoadSaveValidator<?>> typeValidatorMap = new HashMap<>();
 
     loadSaveTester =
         new LoadSaveTester( testMetaClass, attributes, new ArrayList<String>(), new ArrayList<String>(),

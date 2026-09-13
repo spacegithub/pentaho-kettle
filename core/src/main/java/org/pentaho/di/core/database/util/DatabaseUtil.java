@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.database.util;
 
@@ -32,6 +24,7 @@ import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.sql.DataSource;
 
+import org.pentaho.di.core.database.ConnectionPoolUtil;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.database.DataSourceNamingException;
 import org.pentaho.di.core.database.DataSourceProviderInterface;
@@ -197,5 +190,16 @@ public class DatabaseUtil implements DataSourceProviderInterface {
       }
     }
     throw new IllegalArgumentException( "Unsupported data source type: " + type );
+  }
+
+  @Override public DataSource invalidateNamedDataSource( String datasourceName, DatasourceType type )
+    throws DataSourceNamingException {
+
+    switch ( type ) {
+      case POOLED:
+        return ConnectionPoolUtil.removeDataSource( datasourceName );
+      default:
+        return FoundDS.remove( datasourceName );
+    }
   }
 }

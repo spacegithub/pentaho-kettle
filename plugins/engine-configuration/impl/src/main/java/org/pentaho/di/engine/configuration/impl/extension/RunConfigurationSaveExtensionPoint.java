@@ -1,38 +1,41 @@
-/*
- * *****************************************************************************
+/*! ******************************************************************************
  *
- *  Pentaho Data Integration
+ * Pentaho
  *
- *  Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *  *******************************************************************************
- *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use
- *  this file except in compliance with the License. You may obtain a copy of the
- *  License at
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- * *****************************************************************************
- *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 
 package org.pentaho.di.engine.configuration.impl.extension;
 
-import org.pentaho.di.base.AbstractMeta;
 import org.pentaho.di.core.attributes.metastore.EmbeddedMetaStore;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.extension.ExtensionPoint;
 import org.pentaho.di.core.extension.ExtensionPointInterface;
 import org.pentaho.di.core.logging.LogChannelInterface;
+import org.pentaho.di.core.util.StringUtil;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.engine.configuration.api.RunConfiguration;
+import org.pentaho.di.engine.configuration.api.RunConfigurationProvider;
+import org.pentaho.di.engine.configuration.api.RunConfigurationService;
 import org.pentaho.di.engine.configuration.impl.EmbeddedRunConfigurationManager;
 import org.pentaho.di.engine.configuration.impl.RunConfigurationManager;
+import org.pentaho.di.engine.configuration.impl.RunConfigurationProviderFactoryManagerImpl;
+import org.pentaho.di.engine.configuration.impl.pentaho.DefaultRunConfigurationProvider;
+import org.pentaho.di.job.JobMeta;
+import org.pentaho.di.job.entry.JobEntryCopy;
+import org.pentaho.di.job.entry.JobEntryRunConfigurableInterface;
+
+import com.google.common.annotations.VisibleForTesting;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Created by bmorrise on 5/3/17.
@@ -41,23 +44,66 @@ import org.pentaho.di.engine.configuration.impl.RunConfigurationManager;
   description = "" )
 public class RunConfigurationSaveExtensionPoint implements ExtensionPointInterface {
 
-  private RunConfigurationManager runConfigurationManager;
-
-  public RunConfigurationSaveExtensionPoint( RunConfigurationManager runConfigurationManager ) {
-    this.runConfigurationManager = runConfigurationManager;
-  }
+  private RunConfigurationService runConfigurationManager;
 
   @Override public void callExtensionPoint( LogChannelInterface logChannelInterface, Object o ) throws KettleException {
-    AbstractMeta abstractMeta = (AbstractMeta) ( (Object[]) o )[ 0 ];
-    String runConfiguration = (String) ( (Object[]) o )[ 1 ];
-    final EmbeddedMetaStore embeddedMetaStore = abstractMeta.getEmbeddedMetaStore();
+    JobMeta jobMeta = (JobMeta) ( (Object[]) o )[ 0 ];
+    final EmbeddedMetaStore embeddedMetaStore = jobMeta.getEmbeddedMetaStore();
 
     RunConfigurationManager embeddedRunConfigurationManager =
       EmbeddedRunConfigurationManager.build( embeddedMetaStore );
     embeddedRunConfigurationManager.deleteAll();
 
-    RunConfiguration loadedRunConfiguration = runConfigurationManager.load( abstractMeta.environmentSubstitute( runConfiguration ) );
-    embeddedRunConfigurationManager.save( loadedRunConfiguration );
+    List<String> runConfigurationNames = new ArrayList<>();
+    boolean embedAll = false;
+    for ( JobEntryCopy jobEntryCopy : jobMeta.getJobCopies() ) {
+      if ( jobEntryCopy.getEntry() instanceof JobEntryRunConfigurableInterface ) {
+        String usedConfiguration = ( (JobEntryRunConfigurableInterface) jobEntryCopy.getEntry() ).getRunConfiguration();
+        embedAll = embedAll || StringUtil.isVariable( usedConfiguration );
+        if ( !Utils.isEmpty( usedConfiguration ) && !runConfigurationNames.contains( usedConfiguration ) ) {
+          runConfigurationNames.add( usedConfiguration );
+        }
+      }
+    }
+
+    if ( embedAll ) {
+      embedAllRunConfigurations( jobMeta, embeddedRunConfigurationManager );
+    } else {
+      embedRunConfigurations( jobMeta, embeddedRunConfigurationManager, runConfigurationNames );
+    }
   }
 
+  private void embedAllRunConfigurations( JobMeta jobMeta,
+                                          RunConfigurationManager embeddedRunConfigurationManager ) throws KettleException {
+    List<RunConfiguration> runConfigurations = getRunConfigurationManager( jobMeta ).load();
+    for ( RunConfiguration loadedRunConfiguration : runConfigurations ) {
+      if ( !loadedRunConfiguration.isReadOnly() ) {
+        embeddedRunConfigurationManager.save( loadedRunConfiguration );
+      }
+    }
+  }
+
+  private void embedRunConfigurations( JobMeta jobMeta, RunConfigurationManager embeddedRunConfigurationManager,
+                                       List<String> runConfigurationNames ) throws KettleException {
+    for ( String runConfigurationName : runConfigurationNames ) {
+      if ( !runConfigurationName.equals( RunConfigurationProvider.DEFAULT_CONFIG_NAME ) ) {
+        RunConfiguration loadedRunConfiguration = getRunConfigurationManager( jobMeta ).load( runConfigurationName );
+        embeddedRunConfigurationManager.save( loadedRunConfiguration );
+      }
+    }
+  }
+
+  @VisibleForTesting
+  void setRunConfigurationManager( RunConfigurationManager runConfigurationManager ) {
+    this.runConfigurationManager = runConfigurationManager;
+  }
+
+  private RunConfigurationService getRunConfigurationManager( JobMeta meta ) throws KettleException {
+    if ( runConfigurationManager != null ) {
+      return runConfigurationManager;
+    }
+
+    RunConfigurationProviderFactoryManagerImpl.getInstance();
+    return meta.getBowl().getManager( RunConfigurationService.class );
+  }
 }

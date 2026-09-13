@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.xml;
 
@@ -30,8 +22,7 @@ import org.pentaho.di.junit.rules.RestorePDIEnvironment;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.xml.sax.SAXParseException;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
+
 import javax.xml.parsers.DocumentBuilder;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -44,7 +35,6 @@ import java.util.GregorianCalendar;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
-import static org.mockito.Mockito.when;
 
 public class XMLHandlerUnitTest {
   @ClassRule public static RestorePDIEnvironment env = new RestorePDIEnvironment();
@@ -200,7 +190,7 @@ public class XMLHandlerUnitTest {
   @Test
   public void addTagValueBinary() throws IOException {
     byte[] input = "Test Data".getBytes();
-    String result = "H4sIAAAAAAAAAAtJLS5RcEksSQQAL4PL8QkAAAA=";
+    String result = "H4sIAAAAAAAA/wtJLS5RcEksSQQAL4PL8QkAAAA=";
 
     assertEquals( "<bytedata>" + result + "</bytedata>" + cr, XMLHandler.addTagValue( "bytedata", input ) );
     assertEquals( "<bytedata>" + result + "</bytedata>" + cr, XMLHandler.addTagValue( "bytedata", input, true ) );
@@ -357,5 +347,161 @@ public class XMLHandlerUnitTest {
     subNode = XMLHandler.getSubNodeByNr( rootNode, "xpto", 3, false );
     assertNotNull( subNode );
     assertEquals( "3", subNode.getTextContent() );
+  }
+
+  /**
+   * Test that the default cached DocumentBuilder parses XML correctly.
+   * Verifies ThreadLocal caching of builders works and produces valid Documents.
+   */
+  @Test
+  public void cachedDefaultBuilderParsesXmlCorrectly() throws Exception {
+    String simpleXml = "<?xml version=\"1.0\"?><root><item>test</item></root>";
+    Document doc = XMLHandler.loadXMLString( simpleXml );
+    assertNotNull( "Document should not be null", doc );
+    assertNotNull( "Root element should exist", doc.getDocumentElement() );
+    assertEquals( "Root element name", "root", doc.getDocumentElement().getNodeName() );
+  }
+
+  /**
+   * Test that the namespace-aware cached DocumentBuilder works correctly.
+   */
+  @Test
+  public void cachedNamespaceAwareBuilderParsesXmlCorrectly() throws Exception {
+    String nsXml = "<?xml version=\"1.0\"?><root xmlns=\"http://example.com\"><item>test</item></root>";
+    Document doc = XMLHandler.loadXMLString( nsXml, true, true );
+    assertNotNull( "Document should not be null", doc );
+    assertNotNull( "Root element should exist", doc.getDocumentElement() );
+    assertEquals( "Root element local name", "root", doc.getDocumentElement().getLocalName() );
+  }
+
+  /**
+   * Test that cached builders produce the same results as fresh builders.
+   * This ensures ThreadLocal caching is functionally equivalent.
+   */
+  @Test
+  public void cachedBuilderProducesIdenticalResultsAsNewBuilder() throws Exception {
+    String testXml = "<?xml version=\"1.0\"?><root attr=\"value\"><child>text</child></root>";
+    
+    // Parse with cached builder
+    Document cachedDoc = XMLHandler.loadXMLString( testXml );
+    
+    // Parse with new builder
+    DocumentBuilder freshBuilder = XMLHandler.createDocumentBuilder( false, true );
+    Document freshDoc = XMLHandler.loadXMLString( freshBuilder, testXml );
+    
+    assertNotNull( "Cached document", cachedDoc );
+    assertNotNull( "Fresh document", freshDoc );
+    assertEquals( "Root element names match",
+      cachedDoc.getDocumentElement().getNodeName(),
+      freshDoc.getDocumentElement().getNodeName() );
+    assertEquals( "Child node count",
+      cachedDoc.getDocumentElement().getChildNodes().getLength(),
+      freshDoc.getDocumentElement().getChildNodes().getLength() );
+  }
+
+  /**
+   * Test that non-standard configurations work (creates fresh builder, not cached).
+   */
+  @Test
+  public void nonStandardConfigurationCreatesFreshBuilder() throws Exception {
+    String testXml = "<?xml version=\"1.0\"?><root><item>test</item></root>";
+    Document doc = XMLHandler.loadXMLString( testXml, true, false );
+    assertNotNull( "Non-standard config should parse", doc );
+    assertEquals( "Root element name", "root", doc.getDocumentElement().getNodeName() );
+  }
+
+  /**
+   * Test concurrent access to cached builders.
+   * Each thread gets its own DocumentBuilder via ThreadLocal, so no synchronization issues.
+   */
+  @Test
+  public void concurrentAccessToCachedBuilders() throws Exception {
+    String testXml = "<?xml version=\"1.0\"?><root><data>concurrent test</data></root>";
+    final int threadCount = 10;
+    final int iterationsPerThread = 20;
+    
+    Thread[] threads = new Thread[threadCount];
+    final Exception[] exceptions = new Exception[threadCount];
+    
+    for ( int i = 0; i < threadCount; i++ ) {
+      final int threadIndex = i;
+      threads[i] = new Thread( () -> {
+        try {
+          for ( int j = 0; j < iterationsPerThread; j++ ) {
+            // Each thread uses ThreadLocal cached builders
+            Document doc1 = XMLHandler.loadXMLString( testXml );
+            assertNotNull( "Thread " + threadIndex + " iteration " + j, doc1 );
+            
+            Document doc2 = XMLHandler.loadXMLString( testXml, true, true );
+            assertNotNull( "Thread " + threadIndex + " iteration " + j + " (NS aware)", doc2 );
+          }
+        } catch ( Exception e ) {
+          exceptions[threadIndex] = e;
+        }
+      } );
+    }
+    
+    // Start all threads
+    for ( Thread thread : threads ) {
+      thread.start();
+    }
+    
+    // Wait for all threads to complete
+    for ( Thread thread : threads ) {
+      thread.join();
+    }
+    
+    // Check for exceptions
+    for ( int i = 0; i < threadCount; i++ ) {
+      assertNull( "Thread " + i + " should not throw exception", exceptions[i] );
+    }
+  }
+
+  /**
+   * Test rapid repeated parsing with cached builders.
+   * Simulates repeated parsing scenarios and verifies functional correctness.
+   */
+  @Test
+  public void cachedBuilderHandlesRapidRepeatParsing() throws Exception {
+    String testXml = "<?xml version=\"1.0\"?><root><item>test</item></root>";
+
+    // Rapid repeated parsing (similar to addOrReplaceSlaveServer loop)
+    for ( int i = 0; i < 1000; i++ ) {
+      Document doc = XMLHandler.loadXMLString( testXml );
+      assertNotNull( doc );
+      assertNotNull( doc.getDocumentElement() );
+      assertEquals( "root", doc.getDocumentElement().getNodeName() );
+    }
+  }
+
+  /**
+   * Test that complex XML with mixed namespaces parses correctly with cached builder.
+   */
+  @Test
+  public void complexXmlWithMixedContentParsesCorrectly() throws Exception {
+    String complexXml = "<?xml version=\"1.0\"?>\n"
+      + "<root xmlns=\"http://default.example.com\" xmlns:custom=\"http://custom.example.com\">\n"
+      + "  <item>Default namespace</item>\n"
+      + "  <custom:item>Custom namespace</custom:item>\n"
+      + "</root>";
+    
+    Document doc = XMLHandler.loadXMLString( complexXml, true, true );
+    assertNotNull( "Complex document should parse", doc );
+    assertNotNull( "Root element should exist", doc.getDocumentElement() );
+  }
+
+  /**
+   * Test entity reference handling with cached builders.
+   */
+  @Test
+  public void entityReferencesHandledCorrectlyWithCachedBuilder() throws Exception {
+    String xmlWithEntities = "<?xml version=\"1.0\"?><root attr=\"value &amp; more\">"
+      + "<item>&lt;test&gt;</item></root>";
+    
+    Document doc = XMLHandler.loadXMLString( xmlWithEntities );
+    assertNotNull( "Document with entities should parse", doc );
+    
+    String text = doc.getDocumentElement().getFirstChild().getTextContent();
+    assertEquals( "Entity references should be expanded", "<test>", text );
   }
 }

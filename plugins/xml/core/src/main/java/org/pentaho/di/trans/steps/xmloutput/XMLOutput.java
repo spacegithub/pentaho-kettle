@@ -1,35 +1,29 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.xmloutput;
 
 import java.io.File;
 import java.io.OutputStream;
+import java.net.URI;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.vfs2.FileObject;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.row.value.ValueMetaBase;
@@ -52,7 +46,7 @@ import org.pentaho.di.trans.steps.xmloutput.XMLField.ContentType;
 
 /**
  * Converts input rows to one or more XML files.
- * 
+ *
  * @author Matt
  * @since 14-jan-2006
  */
@@ -120,7 +114,8 @@ public class XMLOutput extends BaseStep implements StepInterface {
     writeRowToFile( getInputRowMeta(), r );
 
     data.outputRowMeta = getInputRowMeta().clone();
-    meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+    meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+                    metaStore );
     putRow( data.outputRowMeta, r ); // in case we want it to go further...
 
     if ( checkFeedback( getLinesOutput() ) ) {
@@ -198,7 +193,7 @@ public class XMLOutput extends BaseStep implements StepInterface {
             }
 
             ValueMetaInterface valueMeta = data.formatRowMeta.getValueMeta( data.fieldnrs[i] );
-            Object valueData = r[data.fieldnrs[i]];
+            Object valueData = getNullIfValue( r[data.fieldnrs[i]], outputField.getNullString() );
 
             String elementName = outputField.getElementName();
             if ( Utils.isEmpty( elementName ) ) {
@@ -255,6 +250,22 @@ public class XMLOutput extends BaseStep implements StepInterface {
     return ValueMetaBase.convertStringToBoolean( Const.NVL( val, "N" ) ) && valueMetaType == ValueMetaInterface.TYPE_STRING;
   }
 
+  private boolean isNullIfFieldValueAllowed() {
+
+    //Check if retro compatibility is set or not, to guaranty compatibility with older versions.
+    //Value set to data if it is null, which is set under fields property for null
+    String val = getVariable( Const.KETTLE_COMPATIBILITY_XML_OUTPUT_NULL_IF_FIELD_VALUES, "N" );
+
+    return Boolean.TRUE.equals( ValueMetaBase.convertStringToBoolean( Const.NVL( val, "N" ) ) );
+  }
+
+  private Object getNullIfValue( Object valueData, String nullString ) {
+    if ( valueData == null && !Utils.isEmpty( nullString ) && isNullIfFieldValueAllowed() ) {
+      return nullString;
+    }
+    return valueData;
+  }
+
   private void writeField( ValueMetaInterface valueMeta, Object valueData, String element ) throws KettleStepException {
     try {
       String value = valueMeta.getString( valueData );
@@ -289,7 +300,8 @@ public class XMLOutput extends BaseStep implements StepInterface {
         data.writer.writeCharacters( EOL );
       } else {
 
-        FileObject file = KettleVFS.getFileObject( buildFilename( true ), getTransMeta() );
+        FileObject file = KettleVFS.getInstance( getTransMeta().getBowl() )
+          .getFileObject( buildFilename( true ), getTransMeta() );
 
         if ( meta.isAddToResultFiles() ) {
           // Add this to the result file names...
@@ -300,7 +312,7 @@ public class XMLOutput extends BaseStep implements StepInterface {
         }
 
         if ( meta.isZipped() ) {
-          OutputStream fos = KettleVFS.getOutputStream( file, false );
+          OutputStream fos = KettleVFS.getInstance( getTransMeta().getBowl() ).getOutputStream( file, false );
           data.zip = new ZipOutputStream( fos );
           File entry = new File( buildFilename( false ) );
           ZipEntry zipentry = new ZipEntry( entry.getName() );
@@ -308,7 +320,7 @@ public class XMLOutput extends BaseStep implements StepInterface {
           data.zip.putNextEntry( zipentry );
           outputStream = data.zip;
         } else {
-          outputStream = KettleVFS.getOutputStream( file, false );
+          outputStream = KettleVFS.getInstance( getTransMeta().getBowl() ).getOutputStream( file, false );
         }
         if ( meta.getEncoding() != null && meta.getEncoding().length() > 0 ) {
           logBasic( "Opening output stream in encoding: " + meta.getEncoding() );
@@ -325,25 +337,50 @@ public class XMLOutput extends BaseStep implements StepInterface {
       // OK, write the header & the parent element:
       data.writer.writeStartElement( meta.getMainElement() );
       // Add the name space if defined
-      if ( ( meta.getNameSpace() != null ) && ( !"".equals( meta.getNameSpace() ) ) ) {
-        data.writer.writeDefaultNamespace( meta.getNameSpace() );
+      String namespace = meta.getNameSpace();
+      if ( !Utils.isEmpty( namespace ) ) {
+        if ( isValidNamespace( namespace ) ) {
+          data.writer.writeDefaultNamespace( namespace );
+        } else {
+          throw new KettleException( "ERROR: There was an error opening the file, since the default namespace \""
+            + namespace + "\" is invalid." );
+        }
       }
       data.writer.writeCharacters( EOL );
 
       retval = true;
+    } catch ( KettleException e ) {
+      logError( e.toString() );
     } catch ( Exception e ) {
       logError( "Error opening new file : " + e.toString() );
     }
-    // System.out.println("end of newFile(), splitnr="+splitnr);
 
     data.splitnr++;
 
     return retval;
   }
 
+  /**
+   *
+   * @param ns - namespace string
+   * @return - true if ns is a valid URI, false otherwise
+   */
+  @SuppressWarnings( { "squid:S1854", "squid:S1481" } )
+  @VisibleForTesting
+  static boolean isValidNamespace( String ns ) {
+    try {
+      URI uri = new URI( ns );
+      return true;
+    } catch ( Exception e ) {
+      return false;
+    }
+  }
+
   void closeOutputStream( OutputStream stream ) {
     try {
-      stream.close();
+      if ( stream != null ) {
+        stream.close();
+      }
     } catch ( Exception e ) {
       logError( "Error closing output stream : " + e.toString() );
     }

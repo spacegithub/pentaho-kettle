@@ -1,35 +1,30 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step.mqtt;
 
+@SuppressWarnings( "all" )
 class MQTTConstants {
+  private MQTTConstants() { }
+
   static final String MQTT_SERVER = "MQTT_SERVER";
   static final String TOPICS = "TOPICS";
   static final String TOPIC = "TOPIC";
   static final String FIELD_TOPIC = "FIELD_TOPIC";
   static final String TOPIC_IN_FIELD = "TOPIC_IN_FIELD";
-  static final String MSG_OUTPUT_NAME = "MSG_OUTPUT_NAME";
-  static final String TOPIC_OUTPUT_NAME = "TOPIC_OUTPUT_NAME";
+  static final String MSG_OUTPUT_NAME = "Message";
+  static final String TOPIC_OUTPUT_NAME = "Topic name";
   static final String QOS = "QOS";
   static final String SSL_GROUP = "SSL";
   static final String USE_SSL = "USE_SSL";

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.autodoc;
 
@@ -86,13 +78,15 @@ public class AutoDoc extends BaseStep implements StepInterface {
 
       // End of the line, create the documentation...
       //
-      FileObject targetFile = KettleVFS.getFileObject( environmentSubstitute( meta.getTargetFilename() ) );
+      FileObject targetFile = KettleVFS.getInstance( getTransMeta().getBowl() )
+        .getFileObject( environmentSubstitute( meta.getTargetFilename() ) );
       String targetFilename = KettleVFS.getFilename( targetFile );
 
       // Create the report builder
       //
       KettleReportBuilder kettleReportBuilder =
-        new KettleReportBuilder( this, data.filenames, KettleVFS.getFilename( targetFile ), meta );
+        new KettleReportBuilder( getTransMeta().getBowl(), this, data.filenames, KettleVFS.getFilename( targetFile ),
+          meta );
 
       try {
         // Try to get the Classic Reporting Engine to boot inside of the plugin class loader...
@@ -138,7 +132,8 @@ public class AutoDoc extends BaseStep implements StepInterface {
       first = false;
 
       data.outputRowMeta = getInputRowMeta().clone();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
       // Get the filename field index...
       //
@@ -235,8 +230,8 @@ public class AutoDoc extends BaseStep implements StepInterface {
       switch ( location.getObjectType() ) {
         case TRANSFORMATION:
           TransformationInformation ti = TransformationInformation.getInstance();
-          TransMeta transMeta = ti.getTransMeta( location );
-          imageAreaList = ti.getImageAreaList( location );
+          TransMeta transMeta = ti.getTransMeta( getTransMeta().getBowl(), location );
+          imageAreaList = ti.getImageAreaList( getTransMeta().getBowl(), location );
 
           // TransMeta
           outputRow[outputIndex++] = transMeta;
@@ -244,8 +239,8 @@ public class AutoDoc extends BaseStep implements StepInterface {
 
         case JOB:
           JobInformation ji = JobInformation.getInstance();
-          JobMeta jobMeta = ji.getJobMeta( location );
-          imageAreaList = ji.getImageAreaList( location );
+          JobMeta jobMeta = ji.getJobMeta( getTransMeta().getBowl(), location );
+          imageAreaList = ji.getImageAreaList( getTransMeta().getBowl(), location );
 
           // TransMeta
           outputRow[outputIndex++] = jobMeta;
@@ -256,34 +251,34 @@ public class AutoDoc extends BaseStep implements StepInterface {
 
       // Name
       if ( meta.isIncludingName() ) {
-        outputRow[outputIndex++] = KettleFileTableModel.getName( location );
+        outputRow[outputIndex++] = KettleFileTableModel.getName( getTransMeta().getBowl(), location );
       }
 
       // Description
       if ( meta.isIncludingDescription() ) {
-        outputRow[outputIndex++] = KettleFileTableModel.getDescription( location );
+        outputRow[outputIndex++] = KettleFileTableModel.getDescription( getTransMeta().getBowl(), location );
       }
 
       // Extended Description
       if ( meta.isIncludingExtendedDescription() ) {
-        outputRow[outputIndex++] = KettleFileTableModel.getExtendedDescription( location );
+        outputRow[outputIndex++] = KettleFileTableModel.getExtendedDescription( getTransMeta().getBowl(), location );
       }
 
       // created
       if ( meta.isIncludingCreated() ) {
-        outputRow[outputIndex++] = KettleFileTableModel.getCreation( location );
+        outputRow[outputIndex++] = KettleFileTableModel.getCreation( getTransMeta().getBowl(), location );
       }
 
       // modified
       if ( meta.isIncludingModified() ) {
-        outputRow[outputIndex++] = KettleFileTableModel.getModification( location );
+        outputRow[outputIndex++] = KettleFileTableModel.getModification( getTransMeta().getBowl(), location );
       }
 
       // image
       if ( meta.isIncludingImage() ) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         try {
-          BufferedImage image = KettleFileTableModel.getImage( location );
+          BufferedImage image = KettleFileTableModel.getImage( getTransMeta().getBowl(), location );
           ImageIO.write( image, "png", outputStream );
 
           outputRow[outputIndex++] = outputStream.toByteArray();
@@ -299,11 +294,11 @@ public class AutoDoc extends BaseStep implements StepInterface {
       }
 
       if ( meta.isIncludingLoggingConfiguration() ) {
-        outputRow[outputIndex++] = KettleFileTableModel.getLogging( location );
+        outputRow[outputIndex++] = KettleFileTableModel.getLogging( getTransMeta().getBowl(), location );
       }
 
       if ( meta.isIncludingLastExecutionResult() ) {
-        outputRow[outputIndex++] = KettleFileTableModel.getLogging( location );
+        outputRow[outputIndex++] = KettleFileTableModel.getLogging( getTransMeta().getBowl(), location );
       }
 
       if ( meta.isIncludingImageAreaList() ) {

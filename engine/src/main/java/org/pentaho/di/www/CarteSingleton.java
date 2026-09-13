@@ -1,23 +1,13 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
 
 package org.pentaho.di.www;
@@ -95,9 +85,9 @@ public class CarteSingleton {
       //
       if ( config.isReportingToMasters() ) {
         String hostname = slaveServer.getHostname();
-        final SlaveServer client =
-          new SlaveServer( "Dynamic slave [" + hostname + ":" + port + "]", hostname, "" + port, slaveServer
-            .getUsername(), slaveServer.getPassword() );
+        final SlaveServer client
+          = new SlaveServer( "Dynamic slave [" + hostname + ":" + port + "]", hostname, "" + port, slaveServer
+          .getUsername(), slaveServer.getPassword() );
         for ( final SlaveServer master : config.getMasters() ) {
           // Here we use the username/password specified in the slave
           // server section of the configuration.
@@ -119,7 +109,7 @@ public class CarteSingleton {
   }
 
   public static void installPurgeTimer( final SlaveServerConfig config, final LogChannelInterface log,
-    final TransformationMap transformationMap, final JobMap jobMap ) {
+                                        final TransformationMap transformationMap, final JobMap jobMap ) {
 
     final int objectTimeout;
     String systemTimeout = EnvUtil.getSystemProperty( Const.KETTLE_CARTE_OBJECT_TIMEOUT_MINUTES, null );
@@ -141,13 +131,12 @@ public class CarteSingleton {
 
       log.logBasic( "Installing timer to purge stale objects after " + objectTimeout + " minutes." );
 
-      Timer timer = new Timer( true );
+      Timer timer = new Timer( "CartePurgeTimer", true );
 
       final AtomicBoolean busy = new AtomicBoolean( false );
       TimerTask timerTask = new TimerTask() {
         public void run() {
-          if ( !busy.get() ) {
-            busy.set( true );
+          if ( busy.compareAndSet( false, true ) ) {
 
             try {
               // Check all transformations...
@@ -160,19 +149,29 @@ public class CarteSingleton {
                 if ( trans != null && ( trans.isFinished() || trans.isStopped() ) && trans.getLogDate() != null ) {
                   // check the last log time
                   //
-                  int diffInMinutes =
-                    (int) Math.floor( ( System.currentTimeMillis() - trans.getLogDate().getTime() ) / 60000 );
+                  int diffInMinutes
+                    = ( int ) Math.floor( ( System.currentTimeMillis() - trans.getLogDate().getTime() ) / 60000 );
                   if ( diffInMinutes >= objectTimeout ) {
+
+                    // Clean up repository resources to prevent memory leaks
+                    // This is critical for releasing JackRabbit CachingHierarchyManager instances
+                    try {
+                      if ( trans.getRepository() != null ) {
+                        // Clear any cached repository metadata
+                        trans.getTransMeta().setRepository( null );
+                        log.logMinimal( "Cleaned any cached repository metadata" );
+                      }
+                      // Explicitly clear the repository reference to allow garbage collection
+                      trans.setRepository( null );
+                    } catch ( Exception e ) {
+                      log.logError( "Error cleaning up repository resources for transformation " + entry.getName(), e );
+                    }
+
                     // Let's remove this from the transformation map...
-                    //
                     transformationMap.removeTransformation( entry );
 
                     // Remove the logging information from the log registry & central log store
-                    //
-                    LoggingRegistry.getInstance().removeIncludingChildren( trans.getLogChannelId() );
                     KettleLogStore.discardLines( trans.getLogChannelId(), false );
-
-                    // transformationMap.deallocateServerSocketPorts(entry);
 
                     log.logMinimal( "Cleaned up transformation "
                       + entry.getName() + " with id " + entry.getId() + " from " + trans.getLogDate()
@@ -191,15 +190,32 @@ public class CarteSingleton {
                 if ( job != null && ( job.isFinished() || job.isStopped() ) && job.getLogDate() != null ) {
                   // check the last log time
                   //
-                  int diffInMinutes =
-                    (int) Math.floor( ( System.currentTimeMillis() - job.getLogDate().getTime() ) / 60000 );
+                  int diffInMinutes
+                    = ( int ) Math.floor( ( System.currentTimeMillis() - job.getLogDate().getTime() ) / 60000 );
                   if ( diffInMinutes >= objectTimeout ) {
                     // Let's remove this from the job map...
                     //
                     String id = jobMap.getJob( entry ).getLogChannelId();
                     LoggingRegistry.getInstance().removeLogChannelFileWriterBuffer( id );
 
+                    // Clean up repository resources to prevent memory leaks
+                    // This is critical for releasing JackRabbit CachingHierarchyManager instances
+                    try {
+                      if ( job.getRep() != null ) {
+                        // Clear any cached repository metadata
+                        job.getJobMeta().setRepository( null );
+                        log.logMinimal( "Cleaned any cached repository metadata" );
+                      }
+                      // Explicitly clear the repository reference to allow garbage collection
+                      job.setRepository( null );
+                    } catch ( Exception e ) {
+                      log.logError( "Error cleaning up repository resources for job " + entry.getName(), e );
+                    }
+
                     jobMap.removeJob( entry );
+
+                    // Remove the logging information from the log registry & central log store
+                    KettleLogStore.discardLines( job.getLogChannelId(), false );
 
                     log.logMinimal( "Cleaned up job "
                       + entry.getName() + " with id " + entry.getId() + " from " + job.getLogDate() );
@@ -232,8 +248,8 @@ public class CarteSingleton {
         carteSingleton = new CarteSingleton( slaveServerConfig );
 
         String carteObjectId = UUID.randomUUID().toString();
-        SimpleLoggingObject servletLoggingObject =
-          new SimpleLoggingObject( "CarteSingleton", LoggingObjectType.CARTE, null );
+        SimpleLoggingObject servletLoggingObject
+          = new SimpleLoggingObject( "CarteSingleton", LoggingObjectType.CARTE, null );
         servletLoggingObject.setContainerObjectId( carteObjectId );
         servletLoggingObject.setLogLevel( LogLevel.BASIC );
 

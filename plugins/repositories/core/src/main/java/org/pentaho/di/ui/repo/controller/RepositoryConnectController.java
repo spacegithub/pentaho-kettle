@@ -1,29 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.repo.controller;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.commons.lang.ClassUtils;
+import org.apache.commons.lang3.ClassUtils;
 import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Shell;
 import org.json.simple.JSONArray;
@@ -31,6 +23,8 @@ import org.json.simple.JSONObject;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.extension.ExtensionPointHandler;
+import org.pentaho.di.core.extension.KettleExtensionPoint;
 import org.pentaho.di.core.logging.KettleLogStore;
 import org.pentaho.di.core.logging.LogChannelInterface;
 import org.pentaho.di.core.plugins.PluginInterface;
@@ -65,6 +59,7 @@ import java.util.function.Supplier;
 
 /**
  * Created by bmorrise on 4/18/16.
+ * modified by amit kumar on 8/sep/22.
  */
 public class RepositoryConnectController implements IConnectedRepositoryInstance {
 
@@ -86,7 +81,7 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
     KettleLogStore.getLogChannelInterfaceFactory().create( RepositoryConnectController.class );
 
   public static final String HELP_URL =
-    Const.getDocUrl( BaseMessages.getString( PKG, "RepositoryDialog.Dialog.Help" ) );
+    Const.getDocUrl( "use-a-pentaho-repository-in-pdi" );
 
   private RepositoryMeta currentRepository;
   private RepositoryMeta connectedRepository;
@@ -95,6 +90,12 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
   private Supplier<Spoon> spoonSupplier;
   private List<RepositoryContollerListener> listeners = new ArrayList<>();
   private boolean relogin = false;
+  private Shell parentShell;
+  private static final RepositoryConnectController controller = new RepositoryConnectController();
+
+  public static RepositoryConnectController getInstance(){
+    return controller;
+  }
 
   public RepositoryConnectController( PluginRegistry pluginRegistry, Supplier<Spoon> spoonSupplier,
                                       RepositoriesMeta repositoriesMeta ) {
@@ -108,39 +109,40 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
     }
   }
 
-  public RepositoryConnectController() {
+  private RepositoryConnectController() {
     this( PluginRegistry.getInstance(), Spoon::getInstance, new RepositoriesMeta() );
   }
 
+  public void setParentShell( Shell shell ) {
+    this.parentShell = shell;
+  }
+
+  public Shell getParentShell( ) {
+    return this.parentShell;
+  }
+
   public boolean help() {
-    spoonSupplier.get().getShell().getDisplay().asyncExec( () -> {
-      Shell[] shells = spoonSupplier.get().getShell().getShells();
-      HelpUtils
-        .openHelpDialog( shells[ shells.length - 1 ], BaseMessages.getString( PKG, "RepositoryDialog.Dialog.Tile" ),
-          HELP_URL, BaseMessages.getString( PKG, "RepositoryDialog.Dialog.Header" ) );
-    } );
+    spoonSupplier.get().getShell().getDisplay().asyncExec( () ->
+      HelpUtils.openHelpDialog( this.parentShell,
+        BaseMessages.getString( PKG, "RepositoryDialog.Dialog.Tile" ),
+        HELP_URL, BaseMessages.getString( PKG, "RepositoryDialog.Dialog.Header" ) ) );
     return true;
   }
 
   public String createConnection() {
-    CompletableFuture<String> future = new CompletableFuture<>();
-    spoonSupplier.get().getShell().getDisplay().asyncExec( () -> {
-      DatabaseDialog databaseDialog = new DatabaseDialog( spoonSupplier.get().getShell(), new DatabaseMeta() );
-      databaseDialog.open();
-      DatabaseMeta databaseMeta = databaseDialog.getDatabaseMeta();
-      if ( databaseMeta != null ) {
-        if ( !isDatabaseWithNameExist( databaseMeta, true ) ) {
-          addDatabase( databaseMeta );
-          future.complete( databaseMeta.getName() );
-        } else {
-          DatabaseDialog.showDatabaseExistsDialog( spoonSupplier.get().getShell(), databaseMeta );
-        }
+    DatabaseDialog databaseDialog = new DatabaseDialog( spoonSupplier.get().getShell(), new DatabaseMeta() );
+    databaseDialog.open();
+    DatabaseMeta databaseMeta = databaseDialog.getDatabaseMeta();
+    if ( databaseMeta != null ) {
+      if ( !isDatabaseWithNameExist( databaseMeta, true ) ) {
+        addDatabase( databaseMeta );
+      } else {
+        DatabaseDialog.showDatabaseExistsDialog( spoonSupplier.get().getShell(), databaseMeta );
       }
-      future.complete( "None" );
-    } );
+    }
     JSONObject jsonObject = new JSONObject();
     try {
-      jsonObject.put( "name", future.get() );
+      jsonObject.put( "name", databaseMeta.getName() );
       return jsonObject.toJSONString();
     } catch ( Exception e ) {
       jsonObject.put( "name", "None" );
@@ -149,25 +151,20 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
   }
 
   public String editDatabaseConnection( String database ) {
-    CompletableFuture<String> future = new CompletableFuture<>();
-    spoonSupplier.get().getShell().getDisplay().asyncExec( () -> {
-      DatabaseMeta databaseMeta = getDatabase( database );
-      String originalName = databaseMeta.getName();
-      DatabaseDialog databaseDialog = new DatabaseDialog( spoonSupplier.get().getShell(), databaseMeta );
-      databaseDialog.open();
-      if ( !isDatabaseWithNameExist( databaseMeta, false ) ) {
-        save();
-        future.complete( databaseMeta.getName() );
-      } else {
-        DatabaseDialog.showDatabaseExistsDialog( spoonSupplier.get().getShell(), databaseMeta );
-        databaseMeta.setName( originalName );
-        databaseMeta.setDisplayName( originalName );
-        future.complete( originalName );
-      }
-    } );
+    DatabaseMeta databaseMeta = getDatabase( database );
+    String originalName = databaseMeta.getName();
+    DatabaseDialog databaseDialog = new DatabaseDialog( spoonSupplier.get().getShell(), databaseMeta );
+    databaseDialog.open();
+    if ( !isDatabaseWithNameExist( databaseMeta, false ) ) {
+      save();
+    } else {
+      DatabaseDialog.showDatabaseExistsDialog( spoonSupplier.get().getShell(), databaseMeta );
+      databaseMeta.setName( originalName );
+      databaseMeta.setDisplayName( originalName );
+    }
     JSONObject jsonObject = new JSONObject();
     try {
-      jsonObject.put( "name", future.get() );
+      jsonObject.put( "name", databaseMeta.getName() );
       return jsonObject.toJSONString();
     } catch ( Exception e ) {
       jsonObject.put( "name", "None" );
@@ -176,13 +173,9 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
   }
 
   public boolean deleteDatabaseConnection( String database ) {
-    CompletableFuture<Boolean> future = new CompletableFuture<>();
-    spoonSupplier.get().getShell().getDisplay().asyncExec( () -> {
-      removeDatabase( database );
-      future.complete( true );
-    } );
     try {
-      return future.get();
+      removeDatabase( database );
+      return true;
     } catch ( Exception e ) {
       return false;
     }
@@ -223,6 +216,7 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
     return list.toString();
   }
 
+  // Pentaho repository update
   public boolean updateRepository( String id, Map<String, Object> items ) {
     RepositoryMeta repositoryMeta = repositoriesMeta.findRepository( (String) items.get( ORIGINAL_NAME ) );
     boolean isConnected = repositoryMeta == connectedRepository;
@@ -254,6 +248,7 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
     return true;
   }
 
+  // Pentaho repository create
   public RepositoryMeta createRepository( String id, Map<String, Object> items ) {
     RepositoryMeta repositoryMeta;
     try {
@@ -283,8 +278,9 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
     return repo1.toJSONObject().equals( repo2.toJSONObject() );
   }
 
+  //Pentaho repositories
   @SuppressWarnings( "unchecked" )
-  public String getRepositories() {
+  public List<JSONObject> getRepositories() {
     String connected = null;
     if ( spoonSupplier.get() != null && spoonSupplier.get().rep != null ) {
       connected = spoonSupplier.get().rep.getName();
@@ -300,16 +296,16 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
         list.add( repoJson );
       }
     }
-    return list.toString();
+    return list;
   }
 
-  public String getRepository( String name ) {
+  public JSONObject getRepository( String name ) {
     RepositoryMeta repositoryMeta = repositoriesMeta.findRepository( name );
     if ( repositoryMeta != null ) {
       currentRepository = repositoryMeta;
-      return repositoryMeta.toJSONObject().toString();
+      return repositoryMeta.toJSONObject();
     }
-    return "";
+    return null;
   }
 
   public DatabaseMeta getDatabase( String name ) {
@@ -325,14 +321,14 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
   }
 
   @SuppressWarnings( "unchecked" )
-  public String getDatabases() {
+  public JSONArray getDatabases() {
     JSONArray list = new JSONArray();
     for ( int i = 0; i < repositoriesMeta.nrDatabases(); i++ ) {
       JSONObject databaseJSON = new JSONObject();
       databaseJSON.put( "name", repositoriesMeta.getDatabase( i ).getName() );
       list.add( databaseJSON );
     }
-    return list.toString();
+    return list;
   }
 
   public void connectToRepository() throws KettleException {
@@ -343,6 +339,13 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
     connectToRepository( repositoryMeta, null, null );
   }
 
+  /**
+   * @apiNote this method connects to existing repository.
+   * @param repositoryName
+   * @param username
+   * @param password
+   * @throws KettleException
+   */
   public void connectToRepository( String repositoryName, String username, String password ) throws KettleException {
     final RepositoryMeta repositoryMeta = repositoriesMeta.findRepository( repositoryName );
     if ( repositoryMeta != null ) {
@@ -353,25 +356,30 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
   public void connectToRepository( RepositoryMeta repositoryMeta, String username, String password ) throws KettleException {
     final Repository repository = loadRepositoryObject( repositoryMeta.getId() );
     repository.init( repositoryMeta );
-    repositoryConnect( repository, username, password );
+    repository.connect( username, password );
     if ( username != null ) {
       getPropsUI().setLastRepositoryLogin( username );
     }
     Spoon spoon = spoonSupplier.get();
-    Runnable execute = () -> {
-      if ( spoon.getRepository() != null ) {
+    if ( spoon.getRepository() != null ) {
         spoon.closeRepository();
-      } else {
-        spoon.closeAllJobsAndTransformations( true );
-      }
-      spoon.setRepository( repository );
-      setConnectedRepository( repositoryMeta );
-      fireListeners();
-    };
-    if ( spoon.getShell() != null ) {
-      spoon.getShell().getDisplay().asyncExec( execute );
+        callRepositoryChangingEP( repository );
     } else {
-      execute.run();
+        callRepositoryChangingEP( repository );
+        spoon.closeAllJobsAndTransformations( true );
+    }
+    spoon.setRepository( repository );
+    setConnectedRepository( repositoryMeta );
+    fireListeners();
+    spoon.forceRefreshTree();
+    spoon.clearRepositoryDirectory();
+  }
+
+  private void callRepositoryChangingEP( Repository rep ) {
+    try {
+      ExtensionPointHandler.callExtensionPoint( log, KettleExtensionPoint.RepositoryChanging.id, rep );
+    } catch ( Exception e ) {
+      log.logError( e.getLocalizedMessage(), e );
     }
   }
 
@@ -407,35 +415,10 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
       repository.disconnect();
     }
     repository.init( repositoryMeta );
-    repositoryConnect( repository, username, password );
+    repository.connect( username, password );
   }
 
-  private void repositoryConnect( Repository repository, String username, String password ) throws KettleException {
-    ExecutorService executorService = ExecutorUtil.getExecutor();
-    Future<KettleException> future = executorService.submit( () -> {
-      ClassLoader currentClassLoader = Thread.currentThread().getContextClassLoader();
-      try {
-        Thread.currentThread().setContextClassLoader( Trans.class.getClassLoader() );
-        repository.connect( username, password );
-      } catch ( KettleException e ) {
-        return e;
-      } finally {
-        Thread.currentThread().setContextClassLoader( currentClassLoader );
-      }
-      return null;
-    } );
-
-    try {
-      KettleException exception = future.get();
-      if ( exception != null ) {
-        throw exception;
-      }
-    } catch ( InterruptedException | ExecutionException e ) {
-      throw new KettleException();
-    }
-  }
-
-  private boolean testRepository( Repository repository ) {
+  public boolean testRepository( Repository repository ) {
     ExecutorService executorService = ExecutorUtil.getExecutor();
     Future<Boolean> future = executorService.submit( () -> {
       ClassLoader currentClassLoader = Thread.currentThread().getContextClassLoader();
@@ -454,6 +437,7 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
     }
   }
 
+  // Pentaho repository delete
   public boolean deleteRepository( String name ) {
     RepositoryMeta repositoryMeta = repositoriesMeta.findRepository( name );
     int index = repositoriesMeta.indexOfRepository( repositoryMeta );
@@ -501,6 +485,12 @@ public class RepositoryConnectController implements IConnectedRepositoryInstance
   public boolean clearDefaultRepository() {
     for ( int i = 0; i < repositoriesMeta.nrRepositories(); i++ ) {
       repositoriesMeta.getRepository( i ).setDefault( false );
+    }
+    try {
+      repositoriesMeta.writeData();
+    } catch ( KettleException ke ) {
+      log.logError( "Unable to set default repository", ke );
+      return false;
     }
     return true;
   }

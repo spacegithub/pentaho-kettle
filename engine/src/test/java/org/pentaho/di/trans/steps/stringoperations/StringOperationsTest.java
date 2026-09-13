@@ -1,28 +1,20 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.stringoperations;
 
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -54,8 +46,8 @@ public class StringOperationsTest {
   @Before
   public void setup() {
     smh =
-        new StepMockHelper<StringOperationsMeta, StringOperationsData>( "StringOperations", StringOperationsMeta.class,
-            StringOperationsData.class );
+      new StepMockHelper<>( "StringOperations", StringOperationsMeta.class,
+        StringOperationsData.class );
     when( smh.logChannelInterfaceFactory.create( any(), any( LoggingObjectInterface.class ) ) ).thenReturn(
         smh.logChannelInterface );
     when( smh.trans.isRunning() ).thenReturn( true );
@@ -84,15 +76,15 @@ public class StringOperationsTest {
     StringOperationsMeta meta = mock( StringOperationsMeta.class );
     doReturn( new String[] { "Value" } ).when( meta ).getFieldInStream();
     doReturn( new String[] { "" } ).when( meta ).getFieldOutStream();
-    doReturn( new int[] { StringOperationsMeta.TRIM_BOTH } ).when( meta ).getTrimType();
-    doReturn( new int[] { StringOperationsMeta.LOWER_UPPER_NONE } ).when( meta ).getLowerUpper();
-    doReturn( new int[] { StringOperationsMeta.PADDING_NONE } ).when( meta ).getPaddingType();
+    doReturn( new String[] { StringOperationsMeta.trimTypeCode[StringOperationsMeta.TRIM_BOTH] } ).when( meta ).getTrimType();
+    doReturn( new String[] { StringOperationsMeta.lowerUpperCode[StringOperationsMeta.LOWER_UPPER_NONE] } ).when( meta ).getLowerUpper();
+    doReturn( new String[] { StringOperationsMeta.paddingCode[StringOperationsMeta.PADDING_NONE] } ).when( meta ).getPaddingType();
     doReturn( new String[] { "" } ).when( meta ).getPadChar();
     doReturn( new String[] { "" } ).when( meta ).getPadLen();
-    doReturn( new int[] { StringOperationsMeta.INIT_CAP_NO } ).when( meta ).getInitCap();
-    doReturn( new int[] { StringOperationsMeta.MASK_NONE } ).when( meta ).getMaskXML();
-    doReturn( new int[] { StringOperationsMeta.DIGITS_NONE } ).when( meta ).getDigits();
-    doReturn( new int[] { StringOperationsMeta.REMOVE_SPECIAL_CHARACTERS_NONE } ).when( meta ).getRemoveSpecialCharacters();
+    doReturn( new String[] { StringOperationsMeta.initCapCode[StringOperationsMeta.INIT_CAP_NO] } ).when( meta ).getInitCap();
+    doReturn( new String[] { StringOperationsMeta.maskXMLCode[StringOperationsMeta.MASK_NONE] } ).when( meta ).getMaskXML();
+    doReturn( new String[] { StringOperationsMeta.digitsCode[StringOperationsMeta.DIGITS_NONE] } ).when( meta ).getDigits();
+    doReturn( new String[] { StringOperationsMeta.removeSpecialCharactersCode[StringOperationsMeta.REMOVE_SPECIAL_CHARACTERS_NONE] } ).when( meta ).getRemoveSpecialCharacters();
 
     return meta;
   }

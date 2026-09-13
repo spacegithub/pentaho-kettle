@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.sftp;
 
@@ -26,16 +18,27 @@ import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
+import com.jcraft.jsch.SftpATTRS;
+
+import org.apache.commons.vfs2.FileObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.pentaho.di.core.bowl.DefaultBowl;
+import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleJobException;
+import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.junit.rules.RestorePDIEngineEnvironment;
 
+import java.io.OutputStream;
 import java.net.InetAddress;
+import java.util.Vector;
 
-import static org.mockito.Matchers.anyString;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -47,13 +50,13 @@ public class SFTPClientTest {
   @ClassRule
   public static RestorePDIEngineEnvironment env = new RestorePDIEngineEnvironment();
 
-  private int port = 22;
-  private String username = "admin";
-  private String password = "password";
-  private Session session = mock( Session.class );
-  private ChannelSftp channel = mock( ChannelSftp.class );
-  private InetAddress server = mock( InetAddress.class );
-  private JSch jSch = mock( JSch.class );
+  private final int port = 22;
+  private final String username = "admin";
+  private final String password = "password";
+  private final Session session = mock( Session.class );
+  private final ChannelSftp channel = mock( ChannelSftp.class );
+  private final InetAddress server = mock( InetAddress.class );
+  private final JSch jSch = mock( JSch.class );
 
   @Before
   public void setUp() throws JSchException {
@@ -77,7 +80,7 @@ public class SFTPClientTest {
    */
   @Test
   public void shouldExcludeGssapiFromPreferredAuthenticationsByDefault() throws Exception {
-    new SFTPClient( server, port, username ) {
+    new SFTPClient( DefaultBowl.getInstance(), server, port, username ) {
       @Override
       JSch createJSch() {
         return jSch;
@@ -99,7 +102,7 @@ public class SFTPClientTest {
   public void shouldIncludeGssapiToPreferredAuthenticationsIfSpecified() throws Exception {
     System.setProperty( SFTPClient.ENV_PARAM_USERAUTH_GSSAPI, "true" );
 
-    new SFTPClient( server, port, username ) {
+    new SFTPClient( DefaultBowl.getInstance(), server, port, username ) {
       @Override
       JSch createJSch() {
         return jSch;
@@ -121,7 +124,7 @@ public class SFTPClientTest {
   public void shouldIncludeGssapiToPreferredAuthenticationsIfOnlySpecifiedCorrectly() throws Exception {
     System.setProperty( SFTPClient.ENV_PARAM_USERAUTH_GSSAPI, "yes" );
 
-    new SFTPClient( server, port, username ) {
+    new SFTPClient( DefaultBowl.getInstance(), server, port, username ) {
       @Override
       JSch createJSch() {
         return jSch;
@@ -138,7 +141,7 @@ public class SFTPClientTest {
   @Test( expected = KettleJobException.class )
   public void folderCreationEmptyTest() throws Exception {
     System.setProperty( SFTPClient.ENV_PARAM_USERAUTH_GSSAPI, "yes" );
-    SFTPClient client = new SFTPClient( server, port, username ) {
+    SFTPClient client = new SFTPClient( DefaultBowl.getInstance(), server, port, username ) {
       @Override
       JSch createJSch() {
         return jSch;
@@ -155,7 +158,7 @@ public class SFTPClientTest {
   @Test
   public void folderCreation_Relative_Simple() throws Exception {
     System.setProperty( SFTPClient.ENV_PARAM_USERAUTH_GSSAPI, "yes" );
-    SFTPClient client = spy( new SFTPClient( server, port, username ) {
+    SFTPClient client = spy( new SFTPClient( DefaultBowl.getInstance(), server, port, username ) {
       @Override
       JSch createJSch() {
         return jSch;
@@ -177,7 +180,7 @@ public class SFTPClientTest {
   @Test
   public void folderCreation_Relative_Nested() throws Exception {
     System.setProperty( SFTPClient.ENV_PARAM_USERAUTH_GSSAPI, "yes" );
-    SFTPClient client = spy( new SFTPClient( server, port, username ) {
+    SFTPClient client = spy( new SFTPClient( DefaultBowl.getInstance(), server, port, username ) {
       @Override
       JSch createJSch() {
         return jSch;
@@ -201,7 +204,7 @@ public class SFTPClientTest {
   @Test
   public void folderCreation_Absolute_Simple() throws Exception {
     System.setProperty( SFTPClient.ENV_PARAM_USERAUTH_GSSAPI, "yes" );
-    SFTPClient client = spy( new SFTPClient( server, port, username ) {
+    SFTPClient client = spy( new SFTPClient( DefaultBowl.getInstance(), server, port, username ) {
       @Override
       JSch createJSch() {
         return jSch;
@@ -225,7 +228,7 @@ public class SFTPClientTest {
   @Test
   public void folderCreation_Absolute_TrailingSlash() throws Exception {
     System.setProperty( SFTPClient.ENV_PARAM_USERAUTH_GSSAPI, "yes" );
-    SFTPClient client = spy( new SFTPClient( server, port, username ) {
+    SFTPClient client = spy( new SFTPClient( DefaultBowl.getInstance(), server, port, username ) {
       @Override
       JSch createJSch() {
         return jSch;
@@ -248,7 +251,7 @@ public class SFTPClientTest {
   @Test
   public void folderCreation_Absolute_Nested() throws Exception {
     System.setProperty( SFTPClient.ENV_PARAM_USERAUTH_GSSAPI, "yes" );
-    SFTPClient client = spy( new SFTPClient( server, port, username ) {
+    SFTPClient client = spy( new SFTPClient( DefaultBowl.getInstance(), server, port, username ) {
       @Override
       JSch createJSch() {
         return jSch;
@@ -265,5 +268,75 @@ public class SFTPClientTest {
     verify( channel, times( 1 ) ).mkdir( "/var/ftproot/myfolder" );
     verify( channel, times( 1 ) ).mkdir( "/var/ftproot/myfolder/subfolder" );
     verify( channel, times( 1 ) ).mkdir( "/var/ftproot/myfolder/subfolder/finalfolder" );
+  }
+
+  @Test
+  public void testDir() throws Exception {
+    Vector<ChannelSftp.LsEntry> files = new Vector<>();
+    files.add( mockLsEntry("file_1", false ) );
+    files.add( mockLsEntry("a_dir", true ) );
+
+    when( channel.ls( anyString() ) ).thenReturn( files );
+
+    SFTPClient client = spyClient();
+    client.login( password );
+
+    String[] dirs = client.dir();
+
+    assertEquals( 1, dirs.length );
+    assertEquals( "file_1", dirs[0] );
+  }
+
+  @Test
+  public void testDirNoFiles() throws Exception {
+    Vector<ChannelSftp.LsEntry> files = new Vector<>();
+    files.add( mockLsEntry("a_dir", true ) );
+
+    when( channel.ls( anyString() ) ).thenReturn( files );
+
+    SFTPClient client = spyClient();
+    client.login( password );
+
+    assertNull( client.dir() );
+  }
+
+
+  @Test
+  public void testReadKeyFile() throws Exception {
+    FileObject pk = KettleVFS.getInstance( DefaultBowl.getInstance() ).createTempFile( "pk", KettleVFS.Suffix.TMP );
+    try {
+      byte[] pk_bytes = new byte[] { 1, 3, 1 };
+      try ( OutputStream out = pk.getContent().getOutputStream() ) {
+        out.write( pk_bytes );
+      }
+
+      // just call ctor
+      spyClient( pk.getName().getPath() );
+      verify( jSch ).addIdentity( username, pk_bytes, null, new byte[0] );
+    } finally {
+      pk.delete();
+    }
+  }
+
+  private SFTPClient spyClient() throws KettleException {
+    return spyClient( null );
+  }
+
+  private SFTPClient spyClient( String privateKeyFilename ) throws KettleException {
+    return spy( new SFTPClient( DefaultBowl.getInstance(), server, port, username, privateKeyFilename ) {
+      @Override
+      JSch createJSch() {
+        return jSch;
+      }
+    } );
+  }
+
+  private static ChannelSftp.LsEntry mockLsEntry( String fileName, boolean isDir ) {
+    SftpATTRS attr =  mock( SftpATTRS.class );
+    when( attr.isDir() ).thenReturn( isDir );
+    ChannelSftp.LsEntry entry = mock( ChannelSftp.LsEntry.class );
+    when( entry.getAttrs() ).thenReturn( attr );
+    when( entry.getFilename() ).thenReturn( fileName );
+    return entry;
   }
 }

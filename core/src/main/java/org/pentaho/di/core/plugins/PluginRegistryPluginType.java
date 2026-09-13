@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.plugins;
 
@@ -30,6 +22,9 @@ import java.util.Map;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.exception.KettlePluginException;
 import org.pentaho.di.core.gui.GUIOption;
+import org.pentaho.di.core.util.Utils;
+
+import static java.lang.System.getProperty;
 
 /**
  * Plugins of this type can extend to capabilities of the PluginRegistry
@@ -54,6 +49,11 @@ public class PluginRegistryPluginType extends BasePluginType implements PluginTy
 
   @Override
   protected String getXmlPluginFile() {
+    // This property is set by the import-export.bat/sh command line script to disable this native resource file from
+    // processing.
+    if ( !Utils.isEmpty( getProperty( "pentaho.disable.karaf", "" ) ) ) {
+      return "KettleFileDisabled.xmldisabledxyzabc";  //we return a file that does not exist to suppress exceptions.
+    }
     return Const.XML_FILE_KETTLE_REGISTRY_EXTENSIONS;
   }
 

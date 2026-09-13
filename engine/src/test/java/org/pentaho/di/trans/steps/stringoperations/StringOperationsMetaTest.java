@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.stringoperations;
 
@@ -48,8 +40,6 @@ import org.pentaho.di.trans.steps.loadsave.LoadSaveTester;
 import org.pentaho.di.trans.steps.loadsave.initializer.InitializerInterface;
 import org.pentaho.di.trans.steps.loadsave.validator.ArrayLoadSaveValidator;
 import org.pentaho.di.trans.steps.loadsave.validator.FieldLoadSaveValidator;
-import org.pentaho.di.trans.steps.loadsave.validator.IntLoadSaveValidator;
-import org.pentaho.di.trans.steps.loadsave.validator.PrimitiveIntArrayLoadSaveValidator;
 import org.pentaho.di.trans.steps.loadsave.validator.StringLoadSaveValidator;
 
 
@@ -77,19 +67,19 @@ public class StringOperationsMetaTest implements InitializerInterface<StepMetaIn
     attrValidatorMap.put( "fieldInStream", stringArrayLoadSaveValidator );
     attrValidatorMap.put( "fieldOutStream", stringArrayLoadSaveValidator );
     attrValidatorMap.put( "trimType",
-        new PrimitiveIntArrayLoadSaveValidator( new IntLoadSaveValidator( 4 ), 5 ) );
+      new ArrayLoadSaveValidator<String>( new StringLoadSaveValidator(), 5 ) );
     attrValidatorMap.put( "lowerUpper",
-        new PrimitiveIntArrayLoadSaveValidator( new IntLoadSaveValidator( StringOperationsMeta.lowerUpperCode.length ), 5 ) );
+      new ArrayLoadSaveValidator<String>( new StringLoadSaveValidator(), 5 ) );
     attrValidatorMap.put( "initCap",
-        new PrimitiveIntArrayLoadSaveValidator( new IntLoadSaveValidator( StringOperationsMeta.initCapCode.length ), 5 ) );
+      new ArrayLoadSaveValidator<String>( new StringLoadSaveValidator(), 5 ) );
     attrValidatorMap.put( "maskXML",
-        new PrimitiveIntArrayLoadSaveValidator( new IntLoadSaveValidator( StringOperationsMeta.maskXMLCode.length ), 5 ) );
+      new ArrayLoadSaveValidator<String>( new StringLoadSaveValidator(), 5 ) );
     attrValidatorMap.put( "digits",
-        new PrimitiveIntArrayLoadSaveValidator( new IntLoadSaveValidator( StringOperationsMeta.digitsCode.length ), 5 ) );
+      new ArrayLoadSaveValidator<String>( new StringLoadSaveValidator(), 5 ) );
     attrValidatorMap.put( "removeSpecialCharacters",
-        new PrimitiveIntArrayLoadSaveValidator( new IntLoadSaveValidator( StringOperationsMeta.removeSpecialCharactersCode.length ), 5 ) );
+      new ArrayLoadSaveValidator<String>( new StringLoadSaveValidator(), 5 ) );
     attrValidatorMap.put( "paddingType",
-        new PrimitiveIntArrayLoadSaveValidator( new IntLoadSaveValidator( StringOperationsMeta.paddingCode.length ), 5 ) );
+      new ArrayLoadSaveValidator<String>( new StringLoadSaveValidator(), 5 ) );
 
     Map<String, FieldLoadSaveValidator<?>> typeValidatorMap = new HashMap<String, FieldLoadSaveValidator<?>>();
 
@@ -124,7 +114,7 @@ public class StringOperationsMetaTest implements InitializerInterface<StepMetaIn
     rowMetaInterface.addValueMeta( valueMeta );
 
     VariableSpace space = mock( VariableSpace.class );
-    meta.getFields( rowMetaInterface, "STRING_OPERATIONS", null, null, space, null, null );
+    meta.getFields( null, rowMetaInterface, "STRING_OPERATIONS", null, null, space, null, null );
     RowMetaInterface expectedRowMeta = new RowMeta();
     expectedRowMeta.addValueMeta( new ValueMetaString( "field1" ) );
     assertEquals( expectedRowMeta.toString(), rowMetaInterface.toString() );

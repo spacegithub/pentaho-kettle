@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.core.dialog;
 
@@ -35,6 +27,8 @@ import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.ShellAdapter;
 import org.eclipse.swt.events.ShellEvent;
 import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.FormAttachment;
 import org.eclipse.swt.layout.FormData;
 import org.eclipse.swt.layout.FormLayout;
@@ -65,6 +59,8 @@ public class ShowMessageDialog extends Dialog {
     buttonTextByFlagDefaults.put( SWT.CANCEL, BaseMessages.getString( PKG, "System.Button.Cancel" ) );
     buttonTextByFlagDefaults.put( SWT.YES, BaseMessages.getString( PKG, "System.Button.Yes" ) );
     buttonTextByFlagDefaults.put( SWT.NO, BaseMessages.getString( PKG, "System.Button.No" ) );
+    buttonTextByFlagDefaults.put( SWT.IGNORE, BaseMessages.getString( PKG, "System.Button.Continue" ) );
+    buttonTextByFlagDefaults.put( SWT.SAVE, BaseMessages.getString( PKG, "System.Button.SaveAs" ) );
   }
 
   private String title, message;
@@ -82,6 +78,7 @@ public class ShowMessageDialog extends Dialog {
 
   private boolean scroll;
   private boolean hasIcon;
+  private boolean isCentered;
 
   /** Timeout of dialog in seconds */
   private int timeOut;
@@ -248,7 +245,6 @@ public class ShowMessageDialog extends Dialog {
         buttons.add( button );
       }
     }
-
     setLayoutAccordingToType();
 
     // Detect [X] or ALT-F4 or something that kills this window...
@@ -268,6 +264,9 @@ public class ShowMessageDialog extends Dialog {
     final String ok = button.getText();
     long startTime = new Date().getTime();
 
+    if ( isCentered ) {
+      setPositionCenter();
+    }
     shell.open();
     while ( !shell.isDisposed() ) {
       if ( !display.readAndDispatch() ) {
@@ -318,6 +317,13 @@ public class ShowMessageDialog extends Dialog {
         BaseStepDialog.positionBottomButtons( shell, buttons.toArray( new Button[buttons.size()] ), 0,
           BaseStepDialog.BUTTON_ALIGNMENT_RIGHT, wlDesc );
         break;
+      case Const.SHOW_FATAL_ERROR:
+        formLayout.marginWidth = 15;
+        formLayout.marginHeight = 15;
+        setFdlDesc( margin * 3, 0, 0, margin );
+        BaseStepDialog.positionBottomButtons( shell, buttons.toArray( new Button[buttons.size()] ), Const.FORM_MARGIN,
+          BaseStepDialog.BUTTON_ALIGNMENT_RIGHT, wlDesc );
+        break;
       default:
         formLayout.marginWidth = Const.FORM_MARGIN;
         formLayout.marginHeight = Const.FORM_MARGIN;
@@ -337,6 +343,14 @@ public class ShowMessageDialog extends Dialog {
     }
   }
 
+  // If we want to center dialog on parent
+  private void setPositionCenter() {
+    Rectangle shellBounds = getParent().getBounds();
+    Point dialogSize = shell.getSize();
+    shell.setLocation( shellBounds.x + ( shellBounds.width - dialogSize.x ) / 2, shellBounds.y
+      + ( shellBounds.height - dialogSize.y ) / 2 );
+  }
+
   /**
    * @return the timeOut
    */
@@ -354,5 +368,13 @@ public class ShowMessageDialog extends Dialog {
 
   public void setType( int type ) {
     this.type = type;
+  }
+
+  public boolean isCentered() {
+    return isCentered;
+  }
+
+  public void setCentered( boolean centered ) {
+    isCentered = centered;
   }
 }

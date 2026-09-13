@@ -1,30 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.calculator;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleFileNotFoundException;
 import org.pentaho.di.core.exception.KettleStepException;
@@ -82,7 +73,8 @@ public class Calculator extends BaseStep implements StepInterface {
     if ( first ) {
       first = false;
       data.setOutputRowMeta( getInputRowMeta().clone() );
-      meta.getFields( data.getOutputRowMeta(), getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.getOutputRowMeta(), getStepname(), null, null, this, repository,
+        metaStore );
 
       // get all metadata, including source rows and temporary fields.
       data.setCalcRowMeta( meta.getAllFields( getInputRowMeta() ) );
@@ -205,14 +197,18 @@ public class Calculator extends BaseStep implements StepInterface {
         ValueMetaInterface targetMeta = data.getCalcRowMeta().getValueMeta( index );
 
         // Get the metadata & the data...
-        // ValueMetaInterface metaTarget = data.calcRowMeta.getValueMeta(i);
 
         ValueMetaInterface metaA = null;
         Object dataA = null;
 
         if ( data.getFieldIndexes()[i].indexA >= 0 ) {
           metaA = data.getCalcRowMeta().getValueMeta( data.getFieldIndexes()[ i ].indexA );
-          dataA = calcData[ data.getFieldIndexes()[i].indexA];
+          dataA = metaA.convertToNormalStorageType( calcData[ data.getFieldIndexes()[i].indexA] );
+          // We changed the storage type of the data and, thus, we need meta to have that information
+          // We can't change the original meta as it refers to the original data!
+          // So we clone and change the new one.
+          metaA = metaA.clone();
+          metaA.setStorageType( ValueMetaInterface.STORAGE_TYPE_NORMAL );
         }
 
         ValueMetaInterface metaB = null;
@@ -220,7 +216,12 @@ public class Calculator extends BaseStep implements StepInterface {
 
         if ( data.getFieldIndexes()[i].indexB >= 0 ) {
           metaB = data.getCalcRowMeta().getValueMeta( data.getFieldIndexes()[ i ].indexB );
-          dataB = calcData[ data.getFieldIndexes()[i].indexB];
+          dataB = metaB.convertToNormalStorageType( calcData[ data.getFieldIndexes()[i].indexB] );
+          // We changed the storage type of the data and, thus, we need meta to have that information
+          // We can't change the original meta as it refers to the original data!
+          // So we clone and change the new one.
+          metaB = metaB.clone();
+          metaB.setStorageType( ValueMetaInterface.STORAGE_TYPE_NORMAL );
         }
 
         ValueMetaInterface metaC = null;
@@ -273,7 +274,7 @@ public class Calculator extends BaseStep implements StepInterface {
             }
             break;
           case CalculatorMetaFunction.CALC_DIVIDE: // A / B
-            calcData[index] = ValueDataUtil.divide( metaA, dataA, metaB, dataB );
+            calcData[index] = ValueDataUtil.divide( metaA, dataA, metaB, dataB, this );
             break;
           case CalculatorMetaFunction.CALC_SQUARE: // A * A
             calcData[index] = ValueDataUtil.multiply( metaA, dataA, metaA, dataA );
@@ -282,13 +283,13 @@ public class Calculator extends BaseStep implements StepInterface {
             calcData[index] = ValueDataUtil.sqrt( metaA, dataA );
             break;
           case CalculatorMetaFunction.CALC_PERCENT_1: // 100 * A / B
-            calcData[index] = ValueDataUtil.percent1( metaA, dataA, metaB, dataB );
+            calcData[index] = ValueDataUtil.percent1( metaA, dataA, metaB, dataB, this );
             break;
           case CalculatorMetaFunction.CALC_PERCENT_2: // A - ( A * B / 100 )
-            calcData[index] = ValueDataUtil.percent2( metaA, dataA, metaB, dataB );
+            calcData[index] = ValueDataUtil.percent2( metaA, dataA, metaB, dataB, this );
             break;
           case CalculatorMetaFunction.CALC_PERCENT_3: // A + ( A * B / 100 )
-            calcData[index] = ValueDataUtil.percent3( metaA, dataA, metaB, dataB );
+            calcData[index] = ValueDataUtil.percent3( metaA, dataA, metaB, dataB, this );
             break;
           case CalculatorMetaFunction.CALC_COMBINATION_1: // A + B * C
             calcData[index] = ValueDataUtil.combination1( metaA, dataA, metaB, dataB, metaC, dataC );
@@ -390,19 +391,23 @@ public class Calculator extends BaseStep implements StepInterface {
             resultType = CalculatorMetaFunction.calcDefaultResultType[calcType];
             break;
           case CalculatorMetaFunction.CALC_CRC32: // CRC32
-            calcData[index] = ValueDataUtil.checksumCRC32( metaA, dataA, meta.isFailIfNoFile() );
+            calcData[index] = ValueDataUtil.checksumCRC32( getTransMeta().getBowl(), metaA, dataA,
+                                                           meta.isFailIfNoFile() );
             resultType = CalculatorMetaFunction.calcDefaultResultType[calcType];
             break;
           case CalculatorMetaFunction.CALC_ADLER32: // ADLER32
-            calcData[index] = ValueDataUtil.checksumAdler32( metaA, dataA, meta.isFailIfNoFile() );
+            calcData[index] = ValueDataUtil.checksumAdler32( getTransMeta().getBowl(), metaA, dataA,
+                                                             meta.isFailIfNoFile() );
             resultType = CalculatorMetaFunction.calcDefaultResultType[calcType];
             break;
           case CalculatorMetaFunction.CALC_MD5: // MD5
-            calcData[index] = ValueDataUtil.createChecksum( metaA, dataA, "MD5", meta.isFailIfNoFile() );
+            calcData[index] = ValueDataUtil.createChecksum( getTransMeta().getBowl(), metaA, dataA, "MD5",
+                                                            meta.isFailIfNoFile() );
             resultType = CalculatorMetaFunction.calcDefaultResultType[calcType];
             break;
           case CalculatorMetaFunction.CALC_SHA1: // SHA-1
-            calcData[index] = ValueDataUtil.createChecksum( metaA, dataA, "SHA-1", meta.isFailIfNoFile() );
+            calcData[index] = ValueDataUtil.createChecksum( getTransMeta().getBowl(), metaA, dataA, "SHA-1",
+                                                            meta.isFailIfNoFile() );
             resultType = CalculatorMetaFunction.calcDefaultResultType[calcType];
             break;
           case CalculatorMetaFunction.CALC_LEVENSHTEIN_DISTANCE: // LEVENSHTEIN DISTANCE
@@ -482,7 +487,8 @@ public class Calculator extends BaseStep implements StepInterface {
             resultType = CalculatorMetaFunction.calcDefaultResultType[calcType];
             break;
           case CalculatorMetaFunction.CALC_LOAD_FILE_CONTENT_BINARY: // LOAD CONTENT OF A FILE A IN A BLOB
-            calcData[index] = ValueDataUtil.loadFileContentInBinary( metaA, dataA, meta.isFailIfNoFile() );
+            calcData[index] = ValueDataUtil.loadFileContentInBinary( getTransMeta().getBowl(), metaA, dataA,
+                                                                     meta.isFailIfNoFile() );
             resultType = CalculatorMetaFunction.calcDefaultResultType[calcType];
             break;
           case CalculatorMetaFunction.CALC_ADD_TIME_TO_DATE: // Add time B to a date A
@@ -522,7 +528,8 @@ public class Calculator extends BaseStep implements StepInterface {
             resultType = CalculatorMetaFunction.calcDefaultResultType[calcType];
             break;
           case CalculatorMetaFunction.CALC_CHECK_XML_FILE_WELL_FORMED: // Check if file A is well formed
-            calcData[index] = ValueDataUtil.isXMLFileWellFormed( metaA, dataA, meta.isFailIfNoFile() );
+            calcData[index] = ValueDataUtil.isXMLFileWellFormed( getTransMeta().getBowl(), metaA, dataA,
+                                                                 meta.isFailIfNoFile() );
             resultType = CalculatorMetaFunction.calcDefaultResultType[calcType];
             break;
           case CalculatorMetaFunction.CALC_CHECK_XML_WELL_FORMED: // Check if xml A is well formed
@@ -530,7 +537,8 @@ public class Calculator extends BaseStep implements StepInterface {
             resultType = CalculatorMetaFunction.calcDefaultResultType[calcType];
             break;
           case CalculatorMetaFunction.CALC_GET_FILE_ENCODING: // Get file encoding from a file A
-            calcData[index] = ValueDataUtil.getFileEncoding( metaA, dataA, meta.isFailIfNoFile() );
+            calcData[index] = ValueDataUtil.getFileEncoding( getTransMeta().getBowl(), metaA, dataA,
+                                                             meta.isFailIfNoFile() );
             resultType = CalculatorMetaFunction.calcDefaultResultType[calcType];
             break;
           case CalculatorMetaFunction.CALC_DAMERAU_LEVENSHTEIN: // DAMERAULEVENSHTEIN DISTANCE

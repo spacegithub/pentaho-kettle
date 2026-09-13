@@ -1,26 +1,40 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
 
+
+
 package org.pentaho.di.core.row;
+
+import com.wcohen.ss.NeedlemanWunsch;
+import org.apache.commons.codec.language.DoubleMetaphone;
+import org.apache.commons.codec.language.Metaphone;
+import org.apache.commons.codec.language.RefinedSoundex;
+import org.apache.commons.codec.language.Soundex;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.commons.vfs2.FileObject;
+import org.apache.commons.vfs2.FileSystemException;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.Const;
+import org.pentaho.di.core.exception.KettleFileNotFoundException;
+import org.pentaho.di.core.exception.KettleValueException;
+import org.pentaho.di.core.fileinput.CharsetToolkit;
+import org.pentaho.di.core.util.PentahoJaroWinklerDistance;
+import org.pentaho.di.core.util.Utils;
+import org.pentaho.di.core.variables.VariableSpace;
+import org.pentaho.di.core.vfs.KettleVFS;
+import org.pentaho.di.core.xml.XMLCheck;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -34,27 +48,6 @@ import java.util.Locale;
 import java.util.zip.Adler32;
 import java.util.zip.CRC32;
 import java.util.zip.CheckedInputStream;
-
-import org.apache.commons.codec.language.DoubleMetaphone;
-import org.apache.commons.codec.language.Metaphone;
-import org.apache.commons.codec.language.RefinedSoundex;
-import org.apache.commons.codec.language.Soundex;
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.commons.vfs2.FileObject;
-import org.apache.commons.vfs2.FileSystemException;
-import org.pentaho.di.core.Const;
-import org.pentaho.di.core.exception.KettleFileNotFoundException;
-import org.pentaho.di.core.exception.KettleValueException;
-import org.pentaho.di.core.fileinput.CharsetToolkit;
-import org.pentaho.di.core.util.PentahoJaroWinklerDistance;
-import org.pentaho.di.core.util.Utils;
-import org.pentaho.di.core.vfs.KettleVFS;
-import org.pentaho.di.core.xml.XMLCheck;
-
-import com.wcohen.ss.NeedlemanWunsch;
 
 public class ValueDataUtil {
 
@@ -377,10 +370,10 @@ public class ValueDataUtil {
    * @deprecated Use {@link ValueDataUtil#createChecksum(ValueMetaInterface, Object, String, boolean)} instead
    */
   @Deprecated
-  public static String createChecksum( ValueMetaInterface metaA, Object dataA, String type ) {
+  public static String createChecksum( Bowl bowl, ValueMetaInterface metaA, Object dataA, String type ) {
     String checksum = null;
     try {
-      checksum = createChecksum( metaA, dataA, type, false );
+      checksum = createChecksum( bowl, metaA, dataA, type, false );
     } catch ( KettleFileNotFoundException e ) {
       // Ignore
     }
@@ -400,7 +393,8 @@ public class ValueDataUtil {
    * @return File's checksum
    * @throws KettleFileNotFoundException
    */
-  public static String createChecksum( ValueMetaInterface metaA, Object dataA, String type, boolean failIfNoFile )
+  public static String createChecksum( Bowl bowl, ValueMetaInterface metaA, Object dataA, String type,
+                                       boolean failIfNoFile )
           throws KettleFileNotFoundException {
     if ( dataA == null ) {
       return null;
@@ -410,7 +404,7 @@ public class ValueDataUtil {
     FileObject file = null;
     InputStream in = null;
     try {
-      file = KettleVFS.getFileObject( dataA.toString() );
+      file = KettleVFS.getInstance( bowl ).getFileObject( dataA.toString() );
       throwsErrorOnFileNotFound( file );
       in = KettleVFS.getInputStream( file );
       int bytes = in.available();
@@ -444,10 +438,10 @@ public class ValueDataUtil {
    * @deprecated Use {@link ValueDataUtil#checksumCRC32(ValueMetaInterface, Object, boolean)} instead
    */
   @Deprecated
-  public static Long ChecksumCRC32( ValueMetaInterface metaA, Object dataA ) {
+  public static Long ChecksumCRC32( Bowl bowl, ValueMetaInterface metaA, Object dataA ) {
     long checksum = 0;
     try {
-      checksum = checksumCRC32( metaA, dataA, false );
+      checksum = checksumCRC32( bowl, metaA, dataA, false );
     } catch ( KettleFileNotFoundException e ) {
       // Ignore
     }
@@ -465,7 +459,7 @@ public class ValueDataUtil {
    * @return File's CRC32 checksum
    * @throws KettleFileNotFoundException
    */
-  public static Long checksumCRC32( ValueMetaInterface metaA, Object dataA, boolean failIfNoFile )
+  public static Long checksumCRC32( Bowl bowl, ValueMetaInterface metaA, Object dataA, boolean failIfNoFile )
           throws KettleFileNotFoundException {
     long checksum = 0;
 
@@ -476,7 +470,7 @@ public class ValueDataUtil {
     FileObject file = null;
     CheckedInputStream cis = null;
     try {
-      file = KettleVFS.getFileObject( dataA.toString() );
+      file = KettleVFS.getInstance( bowl ).getFileObject( dataA.toString() );
       throwsErrorOnFileNotFound( file );
       cis = null;
 
@@ -508,10 +502,10 @@ public class ValueDataUtil {
    * @deprecated Use {@link ValueDataUtil#checksumAdler32(ValueMetaInterface, Object, boolean)} instead
    */
   @Deprecated
-  public static Long ChecksumAdler32( ValueMetaInterface metaA, Object dataA ) {
+  public static Long ChecksumAdler32( Bowl bowl, ValueMetaInterface metaA, Object dataA ) {
     long checksum = 0;
     try {
-      checksum = checksumAdler32( metaA, dataA, false );
+      checksum = checksumAdler32( bowl, metaA, dataA, false );
     } catch ( KettleFileNotFoundException e ) {
       // Ignore
     }
@@ -529,7 +523,7 @@ public class ValueDataUtil {
    * @return File's Adler32 checksum
    * @throws KettleFileNotFoundException
    */
-  public static Long checksumAdler32( ValueMetaInterface metaA, Object dataA, boolean failIfNoFile )
+  public static Long checksumAdler32( Bowl bowl, ValueMetaInterface metaA, Object dataA, boolean failIfNoFile )
           throws KettleFileNotFoundException {
     long checksum = 0;
 
@@ -540,7 +534,7 @@ public class ValueDataUtil {
     FileObject file = null;
     CheckedInputStream cis = null;
     try {
-      file = KettleVFS.getFileObject( dataA.toString() );
+      file = KettleVFS.getInstance( bowl ).getFileObject( dataA.toString() );
       throwsErrorOnFileNotFound( file );
       cis = null;
 
@@ -671,10 +665,11 @@ public class ValueDataUtil {
    * @deprecated Use {@link ValueDataUtil#loadFileContentInBinary(ValueMetaInterface, Object, boolean)} instead
    */
   @Deprecated
-  public static Object loadFileContentInBinary( ValueMetaInterface metaA, Object dataA ) throws KettleValueException {
+  public static Object loadFileContentInBinary( Bowl bowl, ValueMetaInterface metaA, Object dataA )
+    throws KettleValueException {
     Object content = null;
     try {
-      content = loadFileContentInBinary( metaA, dataA, true );
+      content = loadFileContentInBinary( bowl, metaA, dataA, true );
     } catch ( KettleFileNotFoundException e ) {
       throw new KettleValueException();
     }
@@ -693,8 +688,8 @@ public class ValueDataUtil {
    * @throws KettleValueException
    * @throws KettleFileNotFoundException
    */
-  public static byte[] loadFileContentInBinary( ValueMetaInterface metaA, Object dataA, boolean failIfNoFile )
-          throws KettleValueException, KettleFileNotFoundException {
+  public static byte[] loadFileContentInBinary( Bowl bowl, ValueMetaInterface metaA, Object dataA,
+    boolean failIfNoFile ) throws KettleValueException, KettleFileNotFoundException {
     if ( dataA == null ) {
       return null;
     }
@@ -704,7 +699,7 @@ public class ValueDataUtil {
     InputStream is = null;
 
     try {
-      file = KettleVFS.getFileObject( dataA.toString() );
+      file = KettleVFS.getInstance( bowl ).getFileObject( dataA.toString() );
       throwsErrorOnFileNotFound( file );
       is = KettleVFS.getInputStream( file );
       int fileSize = (int) file.getContent().getSize();
@@ -788,20 +783,19 @@ public class ValueDataUtil {
   }
 
   // If decimal part has only zeros, remove it. Otherwise scale it to maxScale
-  private static BigDecimal removeTrailingZeroFractionOrScale( BigDecimal a, int maxScale ) {
+  private static BigDecimal removeTrailingZeroFractionOrScale( BigDecimal a ) {
     if ( a.remainder( BigDecimal.ONE ).compareTo( BigDecimal.ZERO ) == 0 ) {
       return a.setScale( 0 );
     }
-
-    return a.setScale( maxScale, RoundingMode.HALF_EVEN );
+    return a;
   }
 
   public static BigDecimal multiplyBigDecimals( BigDecimal a, BigDecimal b, MathContext mc ) {
     if ( mc == null ) {
-      mc = new MathContext( getMaxPrecision( a, b ), RoundingMode.HALF_EVEN );
+      mc = MathContext.UNLIMITED;
     }
 
-    return removeTrailingZeroFractionOrScale( a.multiply( b, mc ), getMaxScale( a, b ) );
+    return removeTrailingZeroFractionOrScale( a.multiply( b, mc ) );
   }
 
   protected static Object multiplyString( ValueMetaInterface metaA, Object dataA, ValueMetaInterface metaB,
@@ -830,6 +824,7 @@ public class ValueDataUtil {
     return s.toString();
   }
 
+  @Deprecated
   public static Object divide( ValueMetaInterface metaA, Object dataA, ValueMetaInterface metaB, Object dataB ) throws KettleValueException {
     if ( dataA == null || dataB == null ) {
       return null;
@@ -841,7 +836,25 @@ public class ValueDataUtil {
       case ValueMetaInterface.TYPE_INTEGER:
         return divideLongs( metaA.getInteger( dataA ), metaB.getInteger( dataB ) );
       case ValueMetaInterface.TYPE_BIGNUMBER:
-        return divideBigDecimals( metaA.getBigNumber( dataA ), metaB.getBigNumber( dataB ), null );
+        return divideBigDecimals( metaA.getBigNumber( dataA ), metaB.getBigNumber( dataB ), (MathContext) null );
+
+      default:
+        throw new KettleValueException( "The 'divide' function only works on numeric data." );
+    }
+  }
+
+  public static Object divide( ValueMetaInterface metaA, Object dataA, ValueMetaInterface metaB, Object dataB, VariableSpace space ) throws KettleValueException {
+    if ( dataA == null || dataB == null ) {
+      return null;
+    }
+
+    switch ( metaA.getType() ) {
+      case ValueMetaInterface.TYPE_NUMBER:
+        return divideDoubles( metaA.getNumber( dataA ), metaB.getNumber( dataB ) );
+      case ValueMetaInterface.TYPE_INTEGER:
+        return divideLongs( metaA.getInteger( dataA ), metaB.getInteger( dataB ) );
+      case ValueMetaInterface.TYPE_BIGNUMBER:
+        return divideBigDecimals( metaA.getBigNumber( dataA ), metaB.getBigNumber( dataB ), space );
 
       default:
         throw new KettleValueException( "The 'divide' function only works on numeric data." );
@@ -856,13 +869,50 @@ public class ValueDataUtil {
     return new Long( a.longValue() / b.longValue() );
   }
 
+  @Deprecated
   public static BigDecimal divideBigDecimals( BigDecimal a, BigDecimal b, MathContext mc ) {
-    if ( mc == null ) {
-      mc = new MathContext( getMaxPrecision( a, b ), RoundingMode.HALF_EVEN );
+    mc = mc != null ? mc : MathContext.UNLIMITED;
+    BigDecimal result;
+    try {
+      result = a.divide( b, mc );
+    } catch ( ArithmeticException ae ) {
+      // Repeating decimal, we have to bound it if we supplied the MathContext
+      result = a.divide( b, MathContext.DECIMAL128 );
     }
+    return removeTrailingZeroFractionOrScale( result );
+  }
 
-    BigDecimal result = a.divide( b, mc );
-    return removeTrailingZeroFractionOrScale( result, result.scale() );
+  public static BigDecimal divideBigDecimals( BigDecimal a, BigDecimal b, VariableSpace space ) {
+    MathContext mc = buildMathContext( space );
+    BigDecimal result;
+    try {
+      result = a.divide( b, mc );
+    } catch ( ArithmeticException ae ) {
+      // Repeating decimal, we have to bound it if we supplied the MathContext
+      result = a.divide( b, MathContext.DECIMAL128 );
+    }
+    return removeTrailingZeroFractionOrScale( result );
+  }
+
+  private static MathContext buildMathContext( VariableSpace space ) {
+    String precisionString = space.getVariable( Const.KETTLE_BIGDECIMAL_DIVISION_PRECISION );
+    String roundingModeString = space.getVariable( Const.KETTLE_BIGDECIMAL_DIVISION_ROUNDING_MODE );
+
+    if ( precisionString != null ) {
+      RoundingMode roundingMode;
+      try {
+        roundingMode = RoundingMode.valueOf( roundingModeString );
+      } catch ( IllegalArgumentException | NullPointerException e ) {
+        roundingMode = RoundingMode.HALF_EVEN;
+      }
+      int precision = Integer.parseInt( precisionString );
+      if ( precision < 0 ) {
+        return MathContext.UNLIMITED;
+      } else {
+        return new MathContext( precision, roundingMode );
+      }
+    }
+    return MathContext.UNLIMITED;
   }
 
   public static Object sqrt( ValueMetaInterface metaA, Object dataA ) throws KettleValueException {
@@ -870,17 +920,36 @@ public class ValueDataUtil {
       return null;
     }
 
+    Double num;
+
     switch ( metaA.getType() ) {
       case ValueMetaInterface.TYPE_NUMBER:
-        return new Double( Math.sqrt( metaA.getNumber( dataA ).doubleValue() ) );
+        num = metaA.getNumber( dataA );
+        if ( num >= 0 ) {
+          return new Double( Math.sqrt( num.doubleValue() ) );
+        }
+        throw new KettleValueException( valueNotNegative( num ) );
       case ValueMetaInterface.TYPE_INTEGER:
-        return new Long( Math.round( Math.sqrt( metaA.getNumber( dataA ).doubleValue() ) ) );
+        num = metaA.getNumber( dataA );
+        if ( num >= 0 ) {
+          return new Long( Math.round( Math.sqrt( num.doubleValue() ) ) );
+        }
+        throw new KettleValueException( valueNotNegative( num ) );
       case ValueMetaInterface.TYPE_BIGNUMBER:
-        return BigDecimal.valueOf( Math.sqrt( metaA.getNumber( dataA ).doubleValue() ) );
+        num = metaA.getNumber( dataA );
+        if ( num >= 0 ) {
+          return BigDecimal.valueOf( Math.sqrt( num.doubleValue() ) );
+        }
+        throw new KettleValueException( valueNotNegative( num ) );
 
       default:
         throw new KettleValueException( "The 'sqrt' function only works on numeric data." );
     }
+  }
+
+  private static String valueNotNegative( final Double num ) {
+    return "The value: [" + num + "] is a negative number. "
+      + "The 'sqrt' function only works with non-negative numbers.";
   }
 
   /**
@@ -893,6 +962,7 @@ public class ValueDataUtil {
    * @return
    * @throws KettleValueException
    */
+  @Deprecated
   public static Object percent1( ValueMetaInterface metaA, Object dataA, ValueMetaInterface metaB, Object dataB ) throws KettleValueException {
     if ( dataA == null || dataB == null ) {
       return null;
@@ -906,7 +976,27 @@ public class ValueDataUtil {
       case ValueMetaInterface.TYPE_BIGNUMBER:
         return divideBigDecimals(
           multiplyBigDecimals( metaA.getBigNumber( dataA ), new BigDecimal( 100 ), null ), metaB
-            .getBigNumber( dataB ), null );
+            .getBigNumber( dataB ), (MathContext) null );
+
+      default:
+        throw new KettleValueException( "The 'A/B in %' function only works on numeric data" );
+    }
+  }
+
+  public static Object percent1( ValueMetaInterface metaA, Object dataA, ValueMetaInterface metaB, Object dataB, VariableSpace space ) throws KettleValueException {
+    if ( dataA == null || dataB == null ) {
+      return null;
+    }
+
+    switch ( metaA.getType() ) {
+      case ValueMetaInterface.TYPE_NUMBER:
+        return divideDoubles( multiplyDoubles( 100.0D, metaA.getNumber( dataA ) ), metaB.getNumber( dataB ) );
+      case ValueMetaInterface.TYPE_INTEGER:
+        return divideLongs( multiplyLongs( 100L, metaA.getInteger( dataA ) ), metaB.getInteger( dataB ) );
+      case ValueMetaInterface.TYPE_BIGNUMBER:
+        return divideBigDecimals(
+          multiplyBigDecimals( metaA.getBigNumber( dataA ), new BigDecimal( 100 ), null ), metaB
+            .getBigNumber( dataB ), space );
 
       default:
         throw new KettleValueException( "The 'A/B in %' function only works on numeric data" );
@@ -923,6 +1013,7 @@ public class ValueDataUtil {
    * @return
    * @throws KettleValueException
    */
+  @Deprecated
   public static Object percent2( ValueMetaInterface metaA, Object dataA, ValueMetaInterface metaB, Object dataB ) throws KettleValueException {
     if ( dataA == null || dataB == null ) {
       return null;
@@ -938,7 +1029,29 @@ public class ValueDataUtil {
       case ValueMetaInterface.TYPE_BIGNUMBER:
         return metaA.getBigNumber( dataA ).subtract(
           divideBigDecimals( multiplyBigDecimals(
-            metaB.getBigNumber( dataB ), metaA.getBigNumber( dataA ), null ), new BigDecimal( 100 ), null ) );
+            metaB.getBigNumber( dataB ), metaA.getBigNumber( dataA ), null ), new BigDecimal( 100 ),
+            (MathContext) null ) );
+      default:
+        throw new KettleValueException( "The 'A-B%' function only works on numeric data" );
+    }
+  }
+
+  public static Object percent2( ValueMetaInterface metaA, Object dataA, ValueMetaInterface metaB, Object dataB, VariableSpace space ) throws KettleValueException {
+    if ( dataA == null || dataB == null ) {
+      return null;
+    }
+
+    switch ( metaA.getType() ) {
+      case ValueMetaInterface.TYPE_NUMBER:
+        return new Double( metaA.getNumber( dataA ).doubleValue()
+          - divideDoubles( multiplyDoubles( metaA.getNumber( dataA ), metaB.getNumber( dataB ) ), 100.0D ) );
+      case ValueMetaInterface.TYPE_INTEGER:
+        return new Long( metaA.getInteger( dataA ).longValue()
+          - divideLongs( multiplyLongs( metaA.getInteger( dataA ), metaB.getInteger( dataB ) ), 100L ) );
+      case ValueMetaInterface.TYPE_BIGNUMBER:
+        return metaA.getBigNumber( dataA ).subtract(
+          divideBigDecimals( multiplyBigDecimals(
+            metaB.getBigNumber( dataB ), metaA.getBigNumber( dataA ), null ), new BigDecimal( 100 ), space ) );
       default:
         throw new KettleValueException( "The 'A-B%' function only works on numeric data" );
     }
@@ -954,6 +1067,7 @@ public class ValueDataUtil {
    * @return
    * @throws KettleValueException
    */
+  @Deprecated
   public static Object percent3( ValueMetaInterface metaA, Object dataA, ValueMetaInterface metaB, Object dataB ) throws KettleValueException {
     if ( dataA == null || dataB == null ) {
       return null;
@@ -969,7 +1083,29 @@ public class ValueDataUtil {
       case ValueMetaInterface.TYPE_BIGNUMBER:
         return metaA.getBigNumber( dataA ).add(
           divideBigDecimals( multiplyBigDecimals(
-            metaB.getBigNumber( dataB ), metaA.getBigNumber( dataA ), null ), new BigDecimal( 100 ), null ) );
+            metaB.getBigNumber( dataB ), metaA.getBigNumber( dataA ), null ), new BigDecimal( 100 ),
+            (MathContext) null ) );
+      default:
+        throw new KettleValueException( "The 'A+B%' function only works on numeric data" );
+    }
+  }
+
+  public static Object percent3( ValueMetaInterface metaA, Object dataA, ValueMetaInterface metaB, Object dataB, VariableSpace space ) throws KettleValueException {
+    if ( dataA == null || dataB == null ) {
+      return null;
+    }
+
+    switch ( metaA.getType() ) {
+      case ValueMetaInterface.TYPE_NUMBER:
+        return new Double( metaA.getNumber( dataA ).doubleValue()
+          + divideDoubles( multiplyDoubles( metaA.getNumber( dataA ), metaB.getNumber( dataB ) ), 100.0D ) );
+      case ValueMetaInterface.TYPE_INTEGER:
+        return new Long( metaA.getInteger( dataA ).longValue()
+          + divideLongs( multiplyLongs( metaA.getInteger( dataA ), metaB.getInteger( dataB ) ), 100L ) );
+      case ValueMetaInterface.TYPE_BIGNUMBER:
+        return metaA.getBigNumber( dataA ).add(
+          divideBigDecimals( multiplyBigDecimals(
+            metaB.getBigNumber( dataB ), metaA.getBigNumber( dataA ), null ), new BigDecimal( 100 ), space ) );
       default:
         throw new KettleValueException( "The 'A+B%' function only works on numeric data" );
     }
@@ -1031,7 +1167,7 @@ public class ValueDataUtil {
       case ValueMetaInterface.TYPE_INTEGER:
         return new Long( Math.round( Math.sqrt( metaA.getInteger( dataA ).longValue()
           * metaA.getInteger( dataA ).longValue() + metaB.getInteger( dataB ).longValue()
-          / metaB.getInteger( dataB ).longValue() ) ) );
+          * metaB.getInteger( dataB ).longValue() ) ) );
 
       case ValueMetaInterface.TYPE_BIGNUMBER:
         return BigDecimal.valueOf( Math.sqrt( metaA.getNumber( dataA ).doubleValue()
@@ -1087,14 +1223,24 @@ public class ValueDataUtil {
     if ( dataA == null ) {
       return null;
     }
+    boolean isUnnecessary = roundingMode == BigDecimal.ROUND_UNNECESSARY;
 
     switch ( metaA.getType() ) {
     // Use overloaded Const.round(value, precision, mode)
       case ValueMetaInterface.TYPE_NUMBER:
+        if ( isUnnecessary ) {
+          return metaA.getNumber( dataA );
+        }
         return new Double( Const.round( metaA.getNumber( dataA ), 0, roundingMode ) );
       case ValueMetaInterface.TYPE_INTEGER:
+        if ( isUnnecessary ) {
+          return metaA.getInteger( dataA );
+        }
         return new Long( Const.round( metaA.getInteger( dataA ), 0, roundingMode ) );
       case ValueMetaInterface.TYPE_BIGNUMBER:
+        if ( isUnnecessary ) {
+          return metaA.getBigNumber( dataA );
+        }
         return Const.round( metaA.getBigNumber( dataA ), 0, roundingMode );
       default:
         throw new KettleValueException( "The 'round' function only works on numeric data" );
@@ -1233,7 +1379,7 @@ public class ValueDataUtil {
       case ValueMetaInterface.TYPE_INTEGER:
         return metaA.getInteger( Math.abs( metaA.getNumber( dataA ).longValue() ) );
       case ValueMetaInterface.TYPE_BIGNUMBER:
-        return new BigDecimal( Math.abs( metaA.getNumber( dataA ).doubleValue() ) );
+        return metaA.getBigNumber( dataA ).abs();
 
       default:
         throw new KettleValueException( "The 'abs' function only works on numeric data" );
@@ -1265,8 +1411,8 @@ public class ValueDataUtil {
       case ValueMetaInterface.TYPE_BIGNUMBER:
         BigDecimal aValue = metaA.getBigNumber( dataA );
         BigDecimal bValue = metaA.getBigNumber( dataB );
-        BigDecimal result = aValue.remainder( bValue, new MathContext( getMaxPrecision( aValue, bValue ),  RoundingMode.HALF_EVEN ) );
-        return removeTrailingZeroFractionOrScale( result, result.scale() );
+        BigDecimal result = aValue.remainder( bValue, MathContext.UNLIMITED );
+        return removeTrailingZeroFractionOrScale( result );
       default:
         throw new KettleValueException( "The 'remainder' function only works on numeric data" );
     }
@@ -1972,10 +2118,10 @@ public class ValueDataUtil {
    * @deprecated Use {@link ValueDataUtil#isXMLFileWellFormed(ValueMetaInterface, Object, boolean)} instead
    */
   @Deprecated
-  public static boolean isXMLFileWellFormed( ValueMetaInterface metaA, Object dataA ) {
+  public static boolean isXMLFileWellFormed( Bowl bowl, ValueMetaInterface metaA, Object dataA ) {
     boolean xmlWellFormed = false;
     try {
-      xmlWellFormed = isXMLFileWellFormed( metaA, dataA, false );
+      xmlWellFormed = isXMLFileWellFormed( bowl, metaA, dataA, false );
     } catch ( KettleFileNotFoundException e ) {
       // Ignore
     }
@@ -1994,7 +2140,7 @@ public class ValueDataUtil {
    * @return true if the file is well formed.
    * @throws KettleFileNotFoundException
    */
-  public static boolean isXMLFileWellFormed( ValueMetaInterface metaA, Object dataA, boolean failIfNoFile )
+  public static boolean isXMLFileWellFormed( Bowl bowl, ValueMetaInterface metaA, Object dataA, boolean failIfNoFile )
           throws KettleFileNotFoundException {
     if ( dataA == null ) {
       return false;
@@ -2003,7 +2149,7 @@ public class ValueDataUtil {
     String filename = dataA.toString();
     FileObject file = null;
     try {
-      file = KettleVFS.getFileObject( filename );
+      file = KettleVFS.getInstance( bowl ).getFileObject( filename );
       throwsErrorOnFileNotFound( file );
       return XMLCheck.isXMLFileWellFormed( file );
     } catch ( KettleFileNotFoundException e ) {
@@ -2051,10 +2197,11 @@ public class ValueDataUtil {
    * @deprecated Use {@link ValueDataUtil#getFileEncoding(ValueMetaInterface, Object, boolean)} instead
    */
   @Deprecated
-  public static String getFileEncoding( ValueMetaInterface metaA, Object dataA ) throws KettleValueException {
+  public static String getFileEncoding( Bowl bowl, ValueMetaInterface metaA, Object dataA )
+    throws KettleValueException {
     String encoding = null;
     try {
-      encoding = getFileEncoding( metaA, dataA, true );
+      encoding = getFileEncoding( bowl, metaA, dataA, true );
     } catch ( KettleFileNotFoundException e ) {
       throw new KettleValueException();
     }
@@ -2074,7 +2221,7 @@ public class ValueDataUtil {
    * @throws KettleFileNotFoundException
    * @throws KettleValueException
    */
-  public static String getFileEncoding( ValueMetaInterface metaA, Object dataA, boolean failIfNoFile )
+  public static String getFileEncoding( Bowl bowl, ValueMetaInterface metaA, Object dataA, boolean failIfNoFile )
           throws KettleValueException, KettleFileNotFoundException {
     if ( dataA == null ) {
       return null;
@@ -2083,7 +2230,7 @@ public class ValueDataUtil {
     String encoding = null;
     FileObject file = null;
     try {
-      file = KettleVFS.getFileObject( metaA.getString( dataA ) );
+      file = KettleVFS.getInstance( bowl ).getFileObject( metaA.getString( dataA ) );
       throwsErrorOnFileNotFound( file );
       encoding = CharsetToolkit.guessEncodingName( file );
     } catch ( KettleFileNotFoundException e ) {

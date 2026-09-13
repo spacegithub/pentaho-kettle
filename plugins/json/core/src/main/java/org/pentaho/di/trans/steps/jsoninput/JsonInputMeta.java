@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.jsoninput;
 
@@ -33,6 +25,7 @@ import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.annotations.Step;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
@@ -58,6 +51,7 @@ import org.pentaho.di.resource.ResourceNamingInterface;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.StepDataInterface;
+import org.pentaho.di.trans.step.StepHelperInterface;
 import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepMetaInterface;
@@ -71,7 +65,7 @@ import org.w3c.dom.Node;
  * Store run-time data on the JsonInput step.
  */
 @Step( id = "JsonInput", image = "JSI.svg", i18nPackageName = "org.pentaho.di.trans.steps.jsoninput",
-    documentationUrl = "Products/Data_Integration/Transformation_Step_Reference/JSON_Input", name = "JsonInput.name",
+    documentationUrl = "pdi-transformation-steps-reference-overview/json-input", name = "JsonInput.name",
     description = "JsonInput.description", categoryDescription = "JsonInput.category" )
 @InjectionSupported( localizationPrefix = "JsonInput.Injection.", groups = { "FILENAME_LINES", "FIELDS" }, hide = {
   "ACCEPT_FILE_NAMES", "ACCEPT_FILE_STEP", "PASS_THROUGH_FIELDS", "ACCEPT_FILE_FIELD", "ADD_FILES_TO_RESULT",
@@ -85,6 +79,8 @@ public class JsonInputMeta extends
 
   public static final String[] RequiredFilesDesc = new String[] {
     BaseMessages.getString( PKG, "System.Combo.No" ), BaseMessages.getString( PKG, "System.Combo.Yes" ) };
+
+  private static final String INCLUDE_NULLS = "includeNulls";
 
   // TextFileInputMeta.Content.includeFilename
   /** Flag indicating that we should include the filename in the output */
@@ -236,6 +232,8 @@ public class JsonInputMeta extends
 
   private boolean defaultPathLeafToNull;
 
+  private boolean includeNulls;
+
   public JsonInputMeta() {
     additionalOutputFields = new JsonInputMeta.AdditionalFileOutputFields();
     inputFiles = new JsonInputMeta.InputFiles();
@@ -254,6 +252,20 @@ public class JsonInputMeta extends
    */
   public void setDefaultPathLeafToNull( boolean defaultPathLeafToNull ) {
     this.defaultPathLeafToNull = defaultPathLeafToNull;
+  }
+
+  /** Returns the includeNulls boolean
+   * @return includeNulls
+   */
+  public boolean isIncludeNulls() {
+    return includeNulls;
+  }
+
+  /** Sets the includeNulls boolean
+   * @param includeNulls the includeNulls to set
+   */
+  public void setIncludeNulls( boolean includeNulls ) {
+    this.includeNulls = includeNulls;
   }
 
   /**
@@ -625,6 +637,7 @@ public class JsonInputMeta extends
     retval.append( "    " + XMLHandler.addTagValue( "doNotFailIfNoFile", doNotFailIfNoFile ) );
     retval.append( "    " + XMLHandler.addTagValue( "ignoreMissingPath", ignoreMissingPath ) );
     retval.append( "    " + XMLHandler.addTagValue( "defaultPathLeafToNull", defaultPathLeafToNull ) );
+    retval.append( "    " + XMLHandler.addTagValue( INCLUDE_NULLS, includeNulls ) );
     retval.append( "    " ).append( XMLHandler.addTagValue( "rownum_field", rowNumberField ) );
 
     retval.append( "    <file>" ).append( Const.CR );
@@ -684,6 +697,7 @@ public class JsonInputMeta extends
       isIgnoreEmptyFile = "Y".equalsIgnoreCase( XMLHandler.getTagValue( stepnode, "IsIgnoreEmptyFile" ) );
       ignoreMissingPath = "Y".equalsIgnoreCase( XMLHandler.getTagValue( stepnode, "ignoreMissingPath" ) );
       defaultPathLeafToNull = getDefaultPathLeafToNull( stepnode );
+      includeNulls = getincludeNulls( stepnode );
       doNotFailIfNoFile = "Y".equalsIgnoreCase( XMLHandler.getTagValue( stepnode, "doNotFailIfNoFile" ) );
       includeRowNumber = "Y".equalsIgnoreCase( XMLHandler.getTagValue( stepnode, "rownum" ) );
       rowNumberField = XMLHandler.getTagValue( stepnode, "rownum_field" );
@@ -745,6 +759,20 @@ public class JsonInputMeta extends
     return result;
   }
 
+  // For backward compatibility: if "includeNulls" tag is absent in the step node at all, then we set
+  // includeNulls default if KETTLE_JSON_INPUT_INCLUDE_NULLS is set to "Y" in kettle.properties
+  // as seen in PDI-19138
+  private static boolean getincludeNulls( Node stepnode ) {
+    boolean result;
+    List<Node> nodes = XMLHandler.getNodes( stepnode, INCLUDE_NULLS );
+    if ( nodes != null && !nodes.isEmpty() ) {
+      result = "Y".equalsIgnoreCase( XMLHandler.getTagValue( stepnode, INCLUDE_NULLS ) );
+    } else {
+      result = getIncludeNullsProperty();
+    }
+    return result;
+  }
+
   @Deprecated //?needs to be public?
   public void allocate( int nrFiles, int nrFields ) {
     initArrayFields( nrFiles, nrFields );
@@ -763,6 +791,7 @@ public class JsonInputMeta extends
     isIgnoreEmptyFile = false;
     ignoreMissingPath = true;
     defaultPathLeafToNull = true;
+    includeNulls = getIncludeNullsProperty();
     doNotFailIfNoFile = true;
     includeFilename = false;
     filenameField = "";
@@ -792,7 +821,7 @@ public class JsonInputMeta extends
   }
 
   @Override
-  public void getFields( RowMetaInterface rowMeta, String name, RowMetaInterface[] info, StepMeta nextStep,
+  public void getFields( Bowl bowl, RowMetaInterface rowMeta, String name, RowMetaInterface[] info, StepMeta nextStep,
       VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
 
     if ( inFields && removeSourceField && !Utils.isEmpty( valueField ) ) {
@@ -846,6 +875,7 @@ public class JsonInputMeta extends
       isIgnoreEmptyFile = rep.getStepAttributeBoolean( id_step, "IsIgnoreEmptyFile" );
       ignoreMissingPath = rep.getStepAttributeBoolean( id_step, "ignoreMissingPath" );
       defaultPathLeafToNull = rep.getStepAttributeBoolean( id_step, 0, "defaultPathLeafToNull", true );
+      includeNulls = rep.getStepAttributeBoolean( id_step, 0, INCLUDE_NULLS, getIncludeNullsProperty() );
 
       doNotFailIfNoFile = rep.getStepAttributeBoolean( id_step, "doNotFailIfNoFile" );
 
@@ -917,6 +947,7 @@ public class JsonInputMeta extends
       rep.saveStepAttribute( id_transformation, id_step, "IsIgnoreEmptyFile", isIgnoreEmptyFile );
       rep.saveStepAttribute( id_transformation, id_step, "ignoreMissingPath", ignoreMissingPath );
       rep.saveStepAttribute( id_transformation, id_step, "defaultPathLeafToNull", defaultPathLeafToNull );
+      rep.saveStepAttribute( id_transformation, id_step, INCLUDE_NULLS, includeNulls );
 
       rep.saveStepAttribute( id_transformation, id_step, "doNotFailIfNoFile", doNotFailIfNoFile );
 
@@ -966,9 +997,10 @@ public class JsonInputMeta extends
     }
   }
 
-  public FileInputList getFiles( VariableSpace space ) {
+  public FileInputList getFiles( Bowl bowl, VariableSpace space ) {
     return FileInputList.createFileList(
-      space, getFileName(), getFileMask(), getExcludeFileMask(), getFileRequired(), inputFiles.includeSubFolderBoolean() );
+      bowl, space, getFileName(), getFileMask(), getExcludeFileMask(), getFileRequired(),
+      inputFiles.includeSubFolderBoolean() );
   }
 
   @Override
@@ -1012,7 +1044,7 @@ public class JsonInputMeta extends
         remarks.add( cr );
       }
     } else {
-      FileInputList fileInputList = getFiles( transMeta );
+      FileInputList fileInputList = getFiles( transMeta.getBowl(), transMeta );
       // String files[] = getFiles();
       if ( fileInputList == null || fileInputList.getFiles().size() == 0 ) {
         cr =
@@ -1050,6 +1082,11 @@ public class JsonInputMeta extends
    * For now, we'll simply turn it into an absolute path and pray that the file is on a shared drive or something like
    * that.
    *
+   * @param executionBowl
+   *          For file access
+   * @param globalManagementBowl
+   *          if needed for access to the current "global" (System or Repository) level config for export. If null, no
+   *          global config will be exported.
    * @param space
    *          the variable space to use
    * @param definitions
@@ -1062,8 +1099,9 @@ public class JsonInputMeta extends
    * @return the filename of the exported resource
    */
   @Override
-  public String exportResources( VariableSpace space, Map<String, ResourceDefinition> definitions,
-    ResourceNamingInterface resourceNamingInterface, Repository repository, IMetaStore metaStore ) throws KettleException {
+  public String exportResources( Bowl executionBowl, Bowl globalManagementBowl, VariableSpace space,
+      Map<String, ResourceDefinition> definitions, ResourceNamingInterface namingInterface,
+      Repository repository, IMetaStore metaStore ) throws KettleException {
     try {
       // The object that we're modifying here is a copy of the original!
       // So let's change the filename from relative to absolute by grabbing the file object...
@@ -1072,7 +1110,7 @@ public class JsonInputMeta extends
       List<String> newFilenames = new ArrayList<String>();
 
       if ( !isInFields() ) {
-        FileInputList fileList = getFiles( space );
+        FileInputList fileList = getFiles( executionBowl, space );
         if ( fileList.getFiles().size() > 0 ) {
           for ( FileObject fileObject : fileList.getFiles() ) {
             // From : ${Internal.Transformation.Filename.Directory}/../foo/bar.xml
@@ -1104,6 +1142,15 @@ public class JsonInputMeta extends
   @Override
   public String getEncoding() {
     return "UTF-8";
+  }
+  @Override
+  public StepHelperInterface getStepHelperInterface() {
+    return new JsonInputHelper();
+  }
+
+  // Needed for PDI-19138 purposes
+  public static boolean getIncludeNullsProperty() {
+    return "Y".equalsIgnoreCase( System.getProperty( Const.KETTLE_JSON_INPUT_INCLUDE_NULLS, "N" ) );
   }
 
 }

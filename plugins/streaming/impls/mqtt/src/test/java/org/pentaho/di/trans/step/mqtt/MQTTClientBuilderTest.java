@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step.mqtt;
 
@@ -27,14 +19,14 @@ import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
-import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
+import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.pentaho.di.core.logging.LogChannelInterface;
 import org.pentaho.di.core.util.StringUtil;
 import org.pentaho.di.core.variables.VariableSpace;
@@ -53,8 +45,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -78,7 +70,6 @@ public class MQTTClientBuilderTest {
   public void before() throws MqttException {
     when( factory.getClient( any(), clientIdCapture.capture(), any() ) )
       .thenReturn( client );
-    when( step.getParentVariableSpace() ).thenReturn( space );
     when( step.getLogChannel() ).thenReturn( logger );
     when( step.getStepMeta() ).thenReturn( meta );
     when( step.getStepMeta().getName() ).thenReturn( "Step Name" );
@@ -108,7 +99,7 @@ public class MQTTClientBuilderTest {
       .withAutomaticReconnect( "false" )
       .buildAndConnect();
     verify( client ).setCallback( callback );
-    verify( factory ).getClient( anyString(), anyString(), any( MemoryPersistence.class ) );
+    verify( factory ).getClient( anyString(), anyString(), any( MqttDefaultFilePersistence.class ) );
     verify( client ).connect( connectOptsCapture.capture() );
 
     MqttConnectOptions opts = connectOptsCapture.getValue();
@@ -117,13 +108,13 @@ public class MQTTClientBuilderTest {
     Properties props = opts.getSSLProperties();
     assertThat( props.size(), equalTo( 1 ) );
     assertThat( props.getProperty( "com.ibm.ssl.trustStore" ), equalTo( "/some/path" ) );
-    assertEquals( opts.getKeepAliveInterval(), 1000 );
-    assertEquals( opts.getMaxInflight(), 2000 );
-    assertEquals( opts.getConnectionTimeout(), 3000 );
-    assertEquals( opts.isCleanSession(), true );
-    assertArrayEquals( opts.getServerURIs(), new String[] { "ssl://127.0.0.1:3000" } );
-    assertEquals( opts.getMqttVersion(), 3 );
-    assertEquals( opts.isAutomaticReconnect(), false );
+    assertEquals( 1000, opts.getKeepAliveInterval() );
+    assertEquals( 2000, opts.getMaxInflight() );
+    assertEquals( 3000, opts.getConnectionTimeout() );
+    assertEquals( true, opts.isCleanSession() );
+    assertArrayEquals( new String[] { "ssl://127.0.0.1:3000" }, opts.getServerURIs() );
+    assertEquals( 3, opts.getMqttVersion() );
+    assertEquals( false, opts.isAutomaticReconnect() );
   }
 
   @Test

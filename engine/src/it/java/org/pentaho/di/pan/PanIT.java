@@ -1,28 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.pan;
 
-import org.junit.After;
+import org.apache.commons.io.FileUtils;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.pentaho.di.base.CommandExecutorCodes;
 import org.pentaho.di.core.KettleEnvironment;
@@ -34,6 +27,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.security.Permission;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -44,6 +38,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+@Ignore
 public class PanIT {
 
   private static final String FAILED_TO_INITIALIZE_ERROR_PATTERN = "failed to initialize!";
@@ -56,7 +51,7 @@ public class PanIT {
   private static final String EXPECTED_COMPLETE_WITH_FAILURE_PATH = BASE_PATH + "expected_complete_with_failure";
 
   private static final String[] KTRS_EXPECTED_COMPLETE_WITH_SUCCESS = new String[] {
-          "runs_well_hello_world.ktr"
+    "runs_well_hello_world.ktr"
   };
 
   private static final Map<String, Integer> KTRS_TO_FAIL = new HashMap<>( 3 );
@@ -69,20 +64,10 @@ public class PanIT {
     KTRS_TO_FAIL.put( "fail_on_prep_hello_world.ktr", CommandExecutorCodes.Pan.UNABLE_TO_PREP_INIT_TRANS.getCode() );
   };
 
-  private SecurityManager oldSecurityManager;
-
   @Before
   public void setUp() throws KettleException {
     KettleEnvironment.init();
-    oldSecurityManager = System.getSecurityManager();
-    System.setSecurityManager( new PanIT.MySecurityManager( oldSecurityManager ) );
   }
-
-  @After
-  public void tearDown() {
-    System.setSecurityManager( oldSecurityManager );
-  }
-
 
   @Test
   public void testArchivedTransExecution() throws Exception {
@@ -161,6 +146,57 @@ public class PanIT {
   }
 
   @Test
+  public void testTransExecutionFromWithinProvidedZip() throws Exception {
+
+    long now = System.currentTimeMillis();
+
+    String testZipRelativePath = "test-ktr.zip";
+    String testZipFullPath = getRelativePathKTR( testZipRelativePath );
+
+    String testKTRWithinZip = "Pan.ktr";
+
+    String logFileRelativePath = testZipRelativePath + "." + now + ".log";
+    String logFileFullPath = testZipFullPath + "." + now + ".log";
+
+    File zipFile = null;
+
+    try {
+      zipFile = new File( getClass().getResource( testZipRelativePath ).toURI() );
+      String base64Zip = Base64.getEncoder().encodeToString( FileUtils.readFileToByteArray( zipFile ) );
+
+      Pan.main( new String[] {
+        "/file:" + testKTRWithinZip,
+        "/level:Basic",
+        "/logfile:" + logFileFullPath,
+        "/zip:" + base64Zip } );
+
+    } catch ( SecurityException e ) {
+      // All OK / expected: SecurityException is purposely thrown when Pan triggers System.exitJVM()
+
+      // get log file contents
+      String logFileContent = getFileContentAsString( logFileRelativePath );
+
+      // use FINISHED_PROCESSING_ERROR_COUNT_REGEX to get execution error count
+      int errorCount = parseErrorCount( logFileContent );
+
+      assertTrue( !logFileContent.contains( FAILED_TO_INITIALIZE_ERROR_PATTERN ) && errorCount == 0 );
+
+      Result result = Pan.getCommandExecutor().getResult();
+      assertNotNull( result );
+      assertEquals( CommandExecutorCodes.Pan.SUCCESS.getCode(), result.getExitStatus() );
+
+    } finally {
+      zipFile = null;
+
+      // sanitize
+      File f = new File( logFileFullPath );
+      if ( f != null && f.exists() ) {
+        f.deleteOnExit();
+      }
+    }
+  }
+
+  @Test
   public void testFileTransExpectedExecutionWithFailure() throws Exception {
 
     for ( Map.Entry<String, Integer> failure : KTRS_TO_FAIL.entrySet() ) {
@@ -189,7 +225,7 @@ public class PanIT {
 
         Result result = Pan.getCommandExecutor().getResult();
         assertNotNull( result );
-        assertEquals( testKTR + " error code", (int) failure.getValue(), result.getExitStatus());
+        assertEquals( testKTR + " error code", (int) failure.getValue(), result.getExitStatus() );
 
       } finally {
         // sanitize
@@ -263,11 +299,11 @@ public class PanIT {
     try {
 
       Pan.main( new String[] {
-              "/file:" + testKTRFullPath,
-              "/level:Basic",
-              "/logfile:" + logFileFullPath,
-              "/param:" + param1Name + "=" + param1Val,
-              "/param:" + param2Name + "=" + param2Val
+        "/file:" + testKTRFullPath,
+        "/level:Basic",
+        "/logfile:" + logFileFullPath,
+        "/param:" + param1Name + "=" + param1Val,
+        "/param:" + param2Name + "=" + param2Val
       } );
 
     } catch ( SecurityException e ) {

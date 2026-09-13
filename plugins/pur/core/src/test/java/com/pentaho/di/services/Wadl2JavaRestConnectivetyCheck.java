@@ -1,19 +1,16 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package com.pentaho.di.services;
 
 import java.net.MalformedURLException;
@@ -25,10 +22,10 @@ import org.pentaho.di.repository.pur.PurRepositoryRestService;
 import org.pentaho.di.repository.pur.WebServiceManager;
 import org.pentaho.platform.plugin.services.importexport.InitializationException;
 
-import com.sun.jersey.api.client.Client;
-import com.sun.jersey.api.client.config.ClientConfig;
-import com.sun.jersey.api.client.config.DefaultClientConfig;
-import com.sun.jersey.api.client.filter.HTTPBasicAuthFilter;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.client.ClientBuilder;
+import org.glassfish.jersey.client.ClientConfig;
+import org.glassfish.jersey.client.authentication.HttpAuthenticationFeature;
 
 /**
  * This class is an integrated test, not a unit test. Assuming there is a running pdi/merges server on localhost, this
@@ -62,9 +59,10 @@ public class Wadl2JavaRestConnectivetyCheck {
     String username = "admin";
     String password = "password";
 
-    ClientConfig clientConfig = new DefaultClientConfig();
-    client = Client.create( clientConfig );
-    client.addFilter( new HTTPBasicAuthFilter( username, password ) );
+    ClientConfig clientConfig = new ClientConfig();
+    client = ClientBuilder.newClient( clientConfig );
+    HttpAuthenticationFeature feature = HttpAuthenticationFeature.basic( username, password );
+    client.register( feature );
 
     URI baseUri = null;
     try {

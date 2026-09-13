@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.script;
 
@@ -37,6 +29,8 @@ import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
 
 import org.pentaho.di.compatibility.Value;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
@@ -278,7 +272,8 @@ public class ScriptMeta extends BaseStepMeta implements StepMetaInterface {
     }
   }
 
-  public void getFields( RowMetaInterface row, String originStepname, RowMetaInterface[] info, StepMeta nextStep,
+  @Override
+  public void getFields( Bowl bowl, RowMetaInterface row, String originStepname, RowMetaInterface[] info, StepMeta nextStep,
     VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
     for ( int i = 0; i < fieldname.length; i++ ) {
       if ( !Utils.isEmpty( fieldname[i] ) ) {
@@ -809,7 +804,9 @@ public class ScriptMeta extends BaseStepMeta implements StepMetaInterface {
     try {
       Properties sysprops = System.getProperties();
       String strActPath = sysprops.getProperty( "user.dir" );
-      Document dom = XMLHandler.loadXMLFile( strActPath + "/plugins/steps/ScriptValues_mod/plugin.xml" );
+      // user directory should always be local. Use DefaultBowl
+      Document dom = XMLHandler.loadXMLFile( DefaultBowl.getInstance(),
+                                             strActPath + "/plugins/steps/ScriptValues_mod/plugin.xml" );
       Node stepnode = dom.getDocumentElement();
       Node libraries = XMLHandler.getSubNode( stepnode, "js_libraries" );
       int nbOfLibs = XMLHandler.countNodes( libraries, "js_lib" );

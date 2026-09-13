@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.spoon.trans;
 
@@ -52,6 +44,7 @@ import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
+import org.pentaho.di.core.Const;
 import org.pentaho.di.core.gui.Point;
 import org.pentaho.di.core.logging.LoggingObjectInterface;
 import org.pentaho.di.core.logging.LoggingRegistry;
@@ -191,7 +184,7 @@ public class TransMetricsDelegate extends SpoonDelegate {
         if ( transGraph.trans != null && transGraph.trans.isFinished() ) {
           refreshImage( event.gc );
 
-          if ( image != null && !image.isDisposed() ) {
+          if ( !Const.isRunningOnWebspoonMode() && image != null && !image.isDisposed() ) {
             event.gc.drawImage( image, 0, 0 );
           }
         } else {
@@ -228,6 +221,16 @@ public class TransMetricsDelegate extends SpoonDelegate {
         timer.cancel();
       }
     } );
+
+    if ( Const.isRunningOnWebspoonMode() ) {
+      // When the browser tab/window is closed, we remove the update timer
+      transGraph.getDisplay().disposeExec( new Runnable() {
+        @Override
+        public void run() {
+          timer.cancel();
+        }
+      } );
+    }
 
     // Show tool tips with details...
     //
@@ -282,6 +285,9 @@ public class TransMetricsDelegate extends SpoonDelegate {
   }
 
   public void updateGraph() {
+    if ( Const.isRunningOnWebspoonMode() && transGraph.getDisplay().isDisposed() ) {
+      return;
+    }
 
     transGraph.getDisplay().asyncExec( new Runnable() {
       public void run() {
@@ -349,12 +355,17 @@ public class TransMetricsDelegate extends SpoonDelegate {
     bounds.height = Math.max( durations.size() * height, bounds.height );
     canvas.setSize( bounds.width, bounds.height );
 
-    SWTGC gc =
-      new SWTGC( Display.getCurrent(), new Point( bounds.width, bounds.height ), PropsUI
-        .getInstance().getIconSize() );
+    SWTGC gc;
+    if ( Const.isRunningOnWebspoonMode() ) {
+      gc = new SWTGC( canvasGc, new Point( bounds.width, bounds.height ), PropsUI.getInstance().getIconSize() );
+    } else {
+      gc = new SWTGC( Display.getCurrent(), new Point( bounds.width, bounds.height ), PropsUI.getInstance().getIconSize() );
+    }
     MetricsPainter painter = new MetricsPainter( gc, height );
     drawAreas = painter.paint( durations );
-    image = (Image) gc.getImage();
+    if ( !Const.isRunningOnWebspoonMode() ) {
+      image = (Image) gc.getImage();
+    }
 
     // refresh the scrolled composite
     //
@@ -364,7 +375,9 @@ public class TransMetricsDelegate extends SpoonDelegate {
 
     // Draw the image on the canvas...
     //
-    canvas.redraw();
+    if ( !Const.isRunningOnWebspoonMode() ) {
+      canvas.redraw();
+    }
 
     // close shop on the SWT GC side.
     //

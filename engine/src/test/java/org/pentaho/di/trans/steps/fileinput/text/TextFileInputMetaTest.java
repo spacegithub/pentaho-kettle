@@ -1,31 +1,24 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.fileinput.text;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -35,11 +28,14 @@ import static org.mockito.Mockito.verify;
 import org.apache.commons.vfs2.FileObject;
 import org.junit.Before;
 import org.junit.Test;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.util.StringUtil;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.resource.ResourceNamingInterface;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.StepMeta;
+import org.pentaho.di.trans.steps.file.BaseFileField;
 import org.pentaho.di.trans.steps.file.BaseFileInputFiles;
 import org.pentaho.di.trans.steps.named.cluster.NamedClusterEmbedManager;
 
@@ -69,7 +65,7 @@ public class TextFileInputMetaTest {
     doReturn( "<def>" ).when( variableSpace ).environmentSubstitute( anyString() );
     doReturn( FILE_NAME_VALID_PATH ).when( variableSpace ).environmentSubstitute( FILE_NAME_VALID_PATH );
     FileObject mockedFileObject = mock( FileObject.class );
-    doReturn( mockedFileObject ).when( inputMeta ).getFileObject( anyString(), eq( variableSpace ) );
+    doReturn( mockedFileObject ).when( inputMeta ).getFileObject( any( Bowl.class ), anyString(), eq( variableSpace ) );
   }
 
   @Test
@@ -79,15 +75,16 @@ public class TextFileInputMetaTest {
     inputMeta.inputFiles.fileMask =
       new String[] { StringUtil.EMPTY_STRING, StringUtil.EMPTY_STRING, StringUtil.EMPTY_STRING };
 
-    inputMeta.exportResources( variableSpace, null, mock( ResourceNamingInterface.class ), null, null );
+    inputMeta.exportResources( DefaultBowl.getInstance(), null, variableSpace, null,
+      mock( ResourceNamingInterface.class ), null, null );
 
-    verify( inputMeta ).getFileObject( FILE_NAME_VALID_PATH, variableSpace );
-    verify( inputMeta, never() ).getFileObject( FILE_NAME_NULL, variableSpace );
-    verify( inputMeta, never() ).getFileObject( FILE_NAME_EMPTY, variableSpace );
+    verify( inputMeta ).getFileObject( DefaultBowl.getInstance(), FILE_NAME_VALID_PATH, variableSpace );
+    verify( inputMeta, never() ).getFileObject( DefaultBowl.getInstance(), FILE_NAME_NULL, variableSpace );
+    verify( inputMeta, never() ).getFileObject( DefaultBowl.getInstance(), FILE_NAME_EMPTY, variableSpace );
   }
 
   @Test
-  public void testGetXmlWorksIfWeUpdateOnlyPartOfInputFilesInformation() throws Exception {
+  public void testGetXmlWorksIfWeUpdateOnlyPartOfInputFilesInformation() {
     inputMeta.inputFiles = new BaseFileInputFiles();
     inputMeta.inputFiles.fileName = new String[] { FILE_NAME_VALID_PATH };
 
@@ -100,7 +97,7 @@ public class TextFileInputMetaTest {
   }
 
   @Test
-  public void testClonelWorksIfWeUpdateOnlyPartOfInputFilesInformation() throws Exception {
+  public void testClonelWorksIfWeUpdateOnlyPartOfInputFilesInformation() {
     inputMeta.inputFiles = new BaseFileInputFiles();
     inputMeta.inputFiles.fileName = new String[] { FILE_NAME_VALID_PATH };
 
@@ -116,6 +113,17 @@ public class TextFileInputMetaTest {
 
     assertEquals( cloned.inputFields.length, inputMeta.inputFields.length );
     assertEquals( cloned.getFilter().length, inputMeta.getFilter().length );
+  }
+
+  @Test
+  public void testSetFields() {
+    inputMeta.inputFiles = new BaseFileInputFiles();
+    inputMeta.inputFiles.fileName = new String[] { FILE_NAME_VALID_PATH };
+    BaseFileField[] expectedInputFields = new BaseFileField[ 2 ];
+
+    inputMeta.setFields(new String[]{"field1", "field2"});
+
+    assertEquals( expectedInputFields.length, inputMeta.inputFields.length );
   }
 
 }

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.dbproc;
 
@@ -166,7 +158,7 @@ public class DBProcDialog extends BaseStepDialog implements StepDialogInterface 
 
     // Connection line
     wConnection = addConnectionLine( shell, wStepname, middle, margin );
-    if ( input.getDatabase() == null && transMeta.nrDatabases() == 1 ) {
+    if ( input.getDatabaseMeta() == null && transMeta.nrDatabases() == 1 ) {
       wConnection.select( 0 );
     }
     wConnection.addModifyListener( lsMod );
@@ -207,7 +199,7 @@ public class DBProcDialog extends BaseStepDialog implements StepDialogInterface 
               BaseMessages.getString( PKG, "DBProcDialog.ErrorGettingProceduresList.DialogTitle" ),
               BaseMessages.getString( PKG, "DBProcDialog.ErrorGettingProceduresList.DialogMessage" ), dbe );
           } finally {
-            db.disconnect();
+            db.close();
           }
         }
       }
@@ -405,7 +397,9 @@ public class DBProcDialog extends BaseStepDialog implements StepDialogInterface 
         wFields.redraw();
       }
     };
-    shell.addListener( SWT.Resize, lsResize );
+    if ( !Const.isRunningOnWebspoonMode() ) {
+      shell.addListener( SWT.Resize, lsResize );
+    }
 
     // Set the shell size, based upon previous time...
     setSize();
@@ -459,8 +453,8 @@ public class DBProcDialog extends BaseStepDialog implements StepDialogInterface 
       }
     }
 
-    if ( input.getDatabase() != null ) {
-      wConnection.setText( input.getDatabase().getName() );
+    if ( input.getDatabaseMeta() != null ) {
+      wConnection.setText( input.getDatabaseMeta().getName() );
     } else if ( transMeta.nrDatabases() == 1 ) {
       wConnection.setText( transMeta.getDatabase( 0 ).getName() );
     }
@@ -507,7 +501,7 @@ public class DBProcDialog extends BaseStepDialog implements StepDialogInterface 
       input.getArgumentType()[i] = ValueMetaFactory.getIdForValueMeta( item.getText( 3 ) );
     }
 
-    input.setDatabase( transMeta.findDatabase( wConnection.getText() ) );
+    input.setDatabaseMeta( transMeta.findDatabase( wConnection.getText() ) );
     input.setProcedure( wProcName.getText() );
     input.setResultName( wResult.getText() );
     input.setResultType( ValueMetaFactory.getIdForValueMeta( wResultType.getText() ) );
@@ -515,7 +509,7 @@ public class DBProcDialog extends BaseStepDialog implements StepDialogInterface 
 
     stepname = wStepname.getText(); // return value
 
-    if ( input.getDatabase() == null ) {
+    if ( input.getDatabaseMeta() == null ) {
       MessageBox mb = new MessageBox( shell, SWT.OK | SWT.ICON_ERROR );
       mb.setMessage( BaseMessages.getString( PKG, "DBProcDialog.InvalidConnection.DialogMessage" ) );
       mb.setText( BaseMessages.getString( PKG, "DBProcDialog.InvalidConnection.DialogTitle" ) );

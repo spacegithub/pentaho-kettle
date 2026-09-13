@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step.jms.context;
 
@@ -26,7 +18,7 @@ package org.pentaho.di.trans.step.jms.context;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.pentaho.di.trans.step.jms.JmsDelegate;
 
 import javax.jms.Destination;
@@ -41,7 +33,7 @@ import static org.pentaho.di.trans.step.jms.context.JmsProvider.ConnectionType.W
 import static org.pentaho.di.trans.step.jms.context.JmsProvider.DestinationType.QUEUE;
 import static org.pentaho.di.trans.step.jms.context.JmsProvider.DestinationType.TOPIC;
 
-@RunWith ( MockitoJUnitRunner.class )
+@RunWith ( MockitoJUnitRunner.StrictStubs.class )
 public class WebsphereMQProviderTest {
 
 
@@ -66,6 +58,8 @@ public class WebsphereMQProviderTest {
   private static final String FIPS_REQUIRED_VAL = "FIPS_REQUIRED_VAL";
   private static final String IBM_USERNAME_VAL = "IBM_USERNAME_VAL";
   private static final String IBM_PASSWORD_VAL = "IBM_PASSWORD_VAL";
+  private static final String PASSWORD_MASK = "********";
+  private static final boolean USE_DEFAULT_SSL_CONTEXT_VAL = true;
 
   private JmsProvider jmsProvider = new WebsphereMQProvider();
   @Mock private JmsDelegate jmsDelegate;
@@ -124,15 +118,16 @@ public class WebsphereMQProviderTest {
     jmsDelegate.sslCipherSuite = ENABLED_CIPHER_SUITES_VAL;
     jmsDelegate.sslContextAlgorithm = ENABLED_PROTOCOLS_VAL;
     jmsDelegate.ibmSslFipsRequired = FIPS_REQUIRED_VAL;
+    jmsDelegate.sslUseDefaultContext = USE_DEFAULT_SSL_CONTEXT_VAL;
 
     String debugString = jmsProvider.getConnectionDetails( jmsDelegate );
 
     assertTrue( "Missing trust store path", debugString.contains( "Trust Store: " + TRUST_STORE_PATH_VAL ) );
-    assertTrue( "Missing trust store password", debugString.contains( "Trust Store Pass: " + TRUST_STORE_PASS_VAL ) );
+    assertTrue( "Missing trust store password", debugString.contains( "Trust Store Pass: " + PASSWORD_MASK ) );
     assertTrue( "Missing trust store type", debugString.contains( "Trust Store Type: " + TRUST_STORE_TYPE_VAL ) );
 
     assertTrue( "Missing key store path", debugString.contains( "Key Store: " + KEY_STORE_PATH_VAL ) );
-    assertTrue( "Missing key store password", debugString.contains( "Key Store Pass: " + KEY_STORE_PASS_VAL ) );
+    assertTrue( "Missing key store password", debugString.contains( "Key Store Pass: " + PASSWORD_MASK ) );
     assertTrue( "Missing key store type", debugString.contains( "Key Store Type: " + KEY_STORE_TYPE_VAL ) );
 
     assertTrue( "Missing cipher suite", debugString.contains( "Cipher Suite: " + ENABLED_CIPHER_SUITES_VAL ) );
@@ -143,7 +138,9 @@ public class WebsphereMQProviderTest {
     assertTrue( "Missing channel", debugString.contains( "Channel: " + CHANNEL_VAL ) );
     assertTrue( "Missing queue manager", debugString.contains( "QueueManager: " + QUEUE_MANAGER_VAL ) );
     assertTrue( "Missing username", debugString.contains( "User Name: " + IBM_USERNAME_VAL ) );
-    assertTrue( "Missing password", debugString.contains( "Password: " + IBM_PASSWORD_VAL ) );
+    assertTrue( "Missing password", debugString.contains( "Password: " + PASSWORD_MASK ) );
+    assertTrue( "Missing use default SSL context",
+      debugString.contains( "Use Default SSL Context:" + USE_DEFAULT_SSL_CONTEXT_VAL ) );
 
 
   }

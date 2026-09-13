@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.formula;
 
@@ -42,6 +34,8 @@ import org.pentaho.reporting.libraries.formula.operators.OperatorFactory;
 import org.pentaho.reporting.libraries.formula.typing.Type;
 import org.pentaho.reporting.libraries.formula.typing.TypeRegistry;
 import org.pentaho.reporting.libraries.formula.typing.coretypes.AnyType;
+import org.pentaho.reporting.libraries.formula.typing.coretypes.NumberType;
+import org.pentaho.reporting.libraries.formula.typing.coretypes.TextType;
 
 public class RowForumulaContext implements FormulaContext {
   private RowMetaInterface rowMeta;
@@ -53,10 +47,25 @@ public class RowForumulaContext implements FormulaContext {
     this.formulaContext = new DefaultFormulaContext();
     this.rowMeta = row;
     this.rowData = null;
-    this.valueIndexMap = new Hashtable<String, Integer>();
+    this.valueIndexMap = new Hashtable<>();
   }
 
   public Type resolveReferenceType( Object name ) {
+    if ( name instanceof String ) {
+      ValueMetaInterface valueMeta = this.rowMeta.searchValueMeta( (String) name );
+      if ( valueMeta != null ) {
+        switch ( valueMeta.getType() ) {
+          case ValueMetaInterface.TYPE_STRING:
+            return TextType.TYPE;
+          case ValueMetaInterface.TYPE_INTEGER:
+          case ValueMetaInterface.TYPE_BIGNUMBER:
+          case ValueMetaInterface.TYPE_NUMBER:
+            return NumberType.GENERIC_NUMBER;
+          default:
+            return AnyType.TYPE;
+        }
+      }
+    }
     return AnyType.TYPE;
   }
 
@@ -159,8 +168,9 @@ public class RowForumulaContext implements FormulaContext {
         return valueMeta.getInteger( valueData );
       case ValueMetaInterface.TYPE_NUMBER:
         return valueMeta.getNumber( valueData );
-        // case ValueMetaInterface.TYPE_SERIALIZABLE: return valueMeta.(valueData);
       case ValueMetaInterface.TYPE_STRING:
+        return valueMeta.getString( valueData );
+      case ValueMetaInterface.TYPE_TIMESTAMP:
         return valueMeta.getString( valueData );
       default:
         return null;
@@ -181,7 +191,6 @@ public class RowForumulaContext implements FormulaContext {
         return Long.class;
       case ValueMetaInterface.TYPE_NUMBER:
         return Double.class;
-        // case Value.VALUE_TYPE_SERIALIZABLE: return Serializable.class;
       case ValueMetaInterface.TYPE_STRING:
         return String.class;
       default:

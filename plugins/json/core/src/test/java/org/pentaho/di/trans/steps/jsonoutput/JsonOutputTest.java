@@ -1,42 +1,29 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.jsonoutput;
 
-import java.io.File;
-import java.io.Writer;
-import java.util.ArrayList;
-import java.util.List;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import junit.framework.TestCase;
-
 import org.apache.commons.io.FileUtils;
+import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.junit.Assert;
+import org.junit.Test;
 import org.pentaho.di.TestUtilities;
-import org.pentaho.di.core.util.Utils;
+import org.pentaho.di.core.Const;
 import org.pentaho.di.core.KettleEnvironment;
 import org.pentaho.di.core.RowMetaAndData;
 import org.pentaho.di.core.logging.LoggingObjectInterface;
@@ -47,6 +34,7 @@ import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaInteger;
 import org.pentaho.di.core.row.value.ValueMetaString;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.trans.RowStepCollector;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransHopMeta;
@@ -56,9 +44,27 @@ import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.steps.dummytrans.DummyTransMeta;
 import org.pentaho.di.trans.steps.mock.StepMockHelper;
 import org.pentaho.di.trans.steps.rowgenerator.RowGeneratorMeta;
+import org.springframework.test.util.ReflectionTestUtils;
 
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.*;
+import java.io.File;
+import java.io.Writer;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.UUID;
+import java.util.Map;
+import java.util.HashMap;
+import java.lang.reflect.Method;
+
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * This class was a "copy and modification" of Kettle's JsonOutputTests.
@@ -423,5 +429,70 @@ public class JsonOutputTest extends TestCase {
     JsonNode parsedJson1 = om.readTree( json1 );
     JsonNode parsedJson2 = om.readTree( json2 );
     return parsedJson1.equals( parsedJson2 );
+  }
+
+  @Test
+  public void testBuildFilenameWithForceSameOutputFile() {
+
+    StepMeta stepMeta = mock( StepMeta.class );
+    JsonOutputData jsonOutputData = mock( JsonOutputData.class );
+    JsonOutputMeta jsonOutputMeta = mock( JsonOutputMeta.class );
+    int copyNr = 1;
+    TransMeta transMeta = mock( TransMeta.class );
+    Trans trans = mock( Trans.class );
+    RowMetaInterface rowMetaInterface = mock( RowMetaInterface.class );
+
+    when( stepMeta.getName() ).thenReturn( UUID.randomUUID().toString() );
+    when( stepMeta.hasTerminator() ).thenReturn( false );
+    when( transMeta.findStep( any( String.class ) ) ).thenReturn( stepMeta );
+    when( stepMeta.getStepMetaInterface() ).thenReturn( jsonOutputMeta );
+
+    JsonOutput jsonOutput = spy( new JsonOutput( stepMeta, jsonOutputData, copyNr, transMeta, trans ) );
+    ReflectionTestUtils.setField( jsonOutput, "meta", jsonOutputMeta );
+
+    System.setProperty( Const.KETTLE_JSON_OUTPUT_FORCE_SAME_OUTPUT_FILE, "Y" );
+    jsonOutput.buildFilename();
+
+    verify( jsonOutputMeta, times( 1 ) ).buildFilename( any(), any() );
+  }
+
+  @Test
+  public void testBuildFilenameWithoutForceSameOutputFile() {
+
+    StepMeta stepMeta = mock( StepMeta.class );
+    JsonOutputData jsonOutputData = mock( JsonOutputData.class );
+    JsonOutputMeta jsonOutputMeta = mock( JsonOutputMeta.class );
+    int copyNr = 1;
+    TransMeta transMeta = mock( TransMeta.class );
+    Trans trans = mock( Trans.class );
+    RowMetaInterface rowMetaInterface = mock( RowMetaInterface.class );
+
+    when( stepMeta.getName() ).thenReturn( UUID.randomUUID().toString() );
+    when( stepMeta.hasTerminator() ).thenReturn( false );
+    when( transMeta.findStep( any( String.class ) ) ).thenReturn( stepMeta );
+    when( stepMeta.getStepMetaInterface() ).thenReturn( jsonOutputMeta );
+    when( jsonOutputMeta.getParentStepMeta() ).thenReturn( stepMeta );
+
+    JsonOutput jsonOutput = spy( new JsonOutput( stepMeta, jsonOutputData, copyNr, transMeta, trans ) );
+    ReflectionTestUtils.setField( jsonOutput, "meta", jsonOutputMeta );
+    ReflectionTestUtils.setField( jsonOutput, "data", jsonOutputData );
+
+    System.setProperty( Const.KETTLE_JSON_OUTPUT_FORCE_SAME_OUTPUT_FILE, "N" );
+    jsonOutput.buildFilename();
+
+    verify( jsonOutputMeta, times( 0 ) ).buildFilename( anyString(), any( Date.class ) );
+  }
+
+  private JsonOutput setupOutput() {
+    StepMockHelper<JsonOutputMeta, JsonOutputData> mockHelper =
+            new StepMockHelper<>( "jsonOutput", JsonOutputMeta.class, JsonOutputData.class );
+
+    when( mockHelper.logChannelInterfaceFactory.create( any(), any( LoggingObjectInterface.class ) ) )
+            .thenReturn( mockHelper.logChannelInterface );
+    when( mockHelper.trans.isRunning() ).thenReturn( true );
+    when( mockHelper.stepMeta.getStepMetaInterface() ).thenReturn( new JsonOutputMeta() );
+
+    return new JsonOutput( mockHelper.stepMeta, mockHelper.stepDataInterface, 0,
+            mockHelper.transMeta, mockHelper.trans );
   }
 }

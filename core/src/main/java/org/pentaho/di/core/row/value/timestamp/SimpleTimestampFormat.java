@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.row.value.timestamp;
 
@@ -81,12 +73,6 @@ public class SimpleTimestampFormat extends SimpleDateFormat {
    */
   private static final String DEFAULT_TIMESTAMP_FORMAT_FOR_TIMESTAMP = "yyyy-MM-dd HH:mm:ss";
   private static final String DEFAULT_MILLISECOND_DATE_FORMAT = "SSS";
-
-  private static final SimpleDateFormat defaultTimestampFormat =
-    new SimpleDateFormat( DEFAULT_TIMESTAMP_FORMAT_FOR_TIMESTAMP, Locale.US );
-
-  private static final SimpleDateFormat defaultMillisecondDateFormat =
-    new SimpleDateFormat( DEFAULT_MILLISECOND_DATE_FORMAT, Locale.US );
 
   /**
    * Nanoseconds placeholder to specify unformatted nanoseconds position after formatting <code>Date</code> part part of
@@ -247,9 +233,12 @@ public class SimpleTimestampFormat extends SimpleDateFormat {
    */
   @Override
   public StringBuffer format( Date timestamp, StringBuffer toAppendTo, FieldPosition pos ) {
+
     if ( compatibleToSuperPattern ) {
       return super.format( timestamp, toAppendTo, pos );
     }
+
+    SimpleDateFormat defaultMillisecondDateFormat = new SimpleDateFormat( DEFAULT_MILLISECOND_DATE_FORMAT, Locale.US );
 
     StringBuffer dateBuffer;
     String nan;
@@ -340,6 +329,9 @@ public class SimpleTimestampFormat extends SimpleDateFormat {
    */
   @Override
   public Date parse( String text, ParsePosition pos ) {
+
+    SimpleDateFormat defaultTimestampFormat = new SimpleDateFormat( DEFAULT_TIMESTAMP_FORMAT_FOR_TIMESTAMP, Locale.US );
+
     String timestampFormatDate;
     Date tempDate;
     if ( compatibleToSuperPattern ) {

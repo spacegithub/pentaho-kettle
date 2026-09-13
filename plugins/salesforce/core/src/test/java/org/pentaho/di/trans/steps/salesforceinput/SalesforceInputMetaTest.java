@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.salesforceinput;
 
@@ -37,6 +29,7 @@ import java.util.UUID;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
@@ -118,12 +111,12 @@ public class SalesforceInputMetaTest {
     SalesforceInputMeta meta = new SalesforceInputMeta();
     meta.setDefault();
     RowMetaInterface r = new RowMeta();
-    meta.getFields( r, "thisStep", null, null, new Variables(), null, null );
+    meta.getFields( DefaultBowl.getInstance(), r, "thisStep", null, null, new Variables(), null, null );
     assertEquals( 0, r.size() );
 
     meta.setInputFields( new SalesforceInputField[]{ new SalesforceInputField( "field1" ) } );
     r.clear();
-    meta.getFields( r, "thisStep", null, null, new Variables(), null, null );
+    meta.getFields( DefaultBowl.getInstance(), r, "thisStep", null, null, new Variables(), null, null );
     assertEquals( 1, r.size() );
 
     meta.setIncludeDeletionDate( true );
@@ -139,7 +132,7 @@ public class SalesforceInputMetaTest {
     meta.setIncludeTimestamp( true );
     meta.setTimestampField( "TS" );
     r.clear();
-    meta.getFields( r, "thisStep", null, null, new Variables(), null, null );
+    meta.getFields( DefaultBowl.getInstance(), r, "thisStep", null, null, new Variables(), null, null );
     assertEquals( 7, r.size() );
     assertTrue( r.indexOfValue( "field1" ) >= 0 );
     assertTrue( r.indexOfValue( "DeletionDate" ) >= 0 );

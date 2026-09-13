@@ -1,32 +1,27 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.core.database.dialog;
 
 import java.util.ArrayList;
+import java.util.Objects;
 
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.MessageBox;
+import org.eclipse.swt.widgets.Monitor;
 import org.eclipse.swt.widgets.Shell;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.RowMetaAndData;
@@ -34,11 +29,14 @@ import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.database.DatabaseTestResults;
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.i18n.BaseMessages;
+import org.pentaho.di.ui.core.database.dialog.tags.ExtMenuList;
 import org.pentaho.di.ui.core.database.dialog.tags.ExtTextbox;
 import org.pentaho.di.ui.core.dialog.ErrorDialog;
 import org.pentaho.di.ui.core.dialog.PreviewRowsDialog;
 import org.pentaho.di.ui.core.dialog.ShowMessageDialog;
+import org.pentaho.di.ui.util.DialogUtils;
 import org.pentaho.ui.database.event.DataHandler;
+import org.pentaho.ui.xul.components.XulMenuList;
 import org.pentaho.ui.xul.components.XulTextbox;
 import org.pentaho.ui.xul.containers.XulTree;
 
@@ -53,6 +51,18 @@ public class DataOverrideHandler extends DataHandler {
 
   @Override
   public void onOK() {
+    // check for duplicates before closing the dialog.
+    if ( databases != null ) {
+      DatabaseMeta database = new DatabaseMeta();
+      this.getInfo( database );
+      if ( ! Objects.equals( database.getName(), originalName ) ) {
+        DialogUtils.removeMatchingObject( originalName, databases );
+        if ( DialogUtils.objectWithTheSameNameExists( database, databases ) ) {
+          DatabaseDialog.showDatabaseExistsDialog( getShell(), database );
+          return;
+        }
+      }
+    }
     super.onOK();
     this.cancelPressed = false;
   }
@@ -147,7 +157,7 @@ public class DataOverrideHandler extends DataHandler {
       new XulTextbox[] {
         hostNameBox, databaseNameBox, portNumberBox, userNameBox, passwordBox, customDriverClassBox,
         customUrlBox, dataTablespaceBox, indexTablespaceBox, poolSizeBox, maxPoolSizeBox, languageBox,
-        systemNumberBox, clientBox };
+        systemNumberBox, clientBox, serverInstanceBox, warehouseBox };
 
     for ( int i = 0; i < boxes.length; i++ ) {
       XulTextbox xulTextbox = boxes[i];
@@ -163,6 +173,16 @@ public class DataOverrideHandler extends DataHandler {
       XulTree xulTree = trees[i];
       if ( xulTree != null ) {
         xulTree.setData( databaseMeta );
+      }
+    }
+
+    XulMenuList[] menus = new XulMenuList[] { namedClusterList };
+
+    for ( int i = 0; i < menus.length; i++ ) {
+      XulMenuList xulMenu = menus[i];
+      if ( xulMenu != null && xulMenu instanceof ExtMenuList ) {
+        ExtMenuList ext = (ExtMenuList) xulMenu;
+        ext.setVariableSpace( databaseMeta );
       }
     }
   }
@@ -187,20 +207,50 @@ public class DataOverrideHandler extends DataHandler {
 
   @Override
   protected void showMessage( DatabaseTestResults databaseTestResults ) {
-    Shell parent = getShell();
-    String message = databaseTestResults.getMessage();
-    boolean success = databaseTestResults.isSuccess();
-    String title = success ? BaseMessages.getString( PKG, "DatabaseDialog.DatabaseConnectionTestSuccess.title" )
-      : BaseMessages.getString( PKG, "DatabaseDialog.DatabaseConnectionTest.title" );
-    if ( success && message.contains( Const.CR ) ) {
-      message = message.substring( 0, message.indexOf( Const.CR ) )
-        + Const.CR + message.substring( message.indexOf( Const.CR ) );
-      message = message.substring( 0, message.lastIndexOf( Const.CR ) );
+    String title = "";
+    String message = "";
+
+    if ( databaseTestResults.isSuccess() ) {
+      title = BaseMessages.getString( PKG, "DatabaseDialog.DatabaseConnectionTestSuccess.title" );
+      message = databaseTestResults.getMessage();
+
+      if ( message.contains( Const.CR ) ) {
+        message = message.substring( 0, message.indexOf( Const.CR ) ) + Const.CR + message.substring( message.indexOf( Const.CR ) );
+        message = message.substring( 0, message.lastIndexOf( Const.CR ) );
+      }
+
+      ShowMessageDialog msgDialog = new ShowMessageDialog( getShell(), SWT.ICON_INFORMATION | SWT.OK, title, message, message.length() > 300 );
+      msgDialog.setType( Const.SHOW_MESSAGE_DIALOG_DB_TEST_SUCCESS );
+      msgDialog.open();
+    } else {
+      Exception exception = databaseTestResults.getException();
+
+      title = BaseMessages.getString( PKG, "DatabaseDialog.DatabaseConnectionTest.title" );
+      message = exception != null ? exception.getMessage() : "";
+
+      if ( message.contains( Const.CR ) ) {
+        message = message.trim().split( Const.CR )[0];
+      }
+
+      new ErrorDialog( getCenteredShell( getShell() ), title, message, exception );
     }
-    ShowMessageDialog msgDialog = new ShowMessageDialog( parent, SWT.ICON_INFORMATION | SWT.OK,
-      title, message, message.length() > 300 );
-    msgDialog.setType( success ? Const.SHOW_MESSAGE_DIALOG_DB_TEST_SUCCESS
-      : Const.SHOW_MESSAGE_DIALOG_DB_TEST_DEFAULT );
-    msgDialog.open();
+  }
+
+  private Shell getCenteredShell( Shell shell ) {
+    Rectangle shellBounds = shell.getBounds();
+    Monitor monitor = shell.getDisplay().getPrimaryMonitor();
+
+    if ( shell.getParent() != null ) {
+      monitor = shell.getParent().getMonitor();
+    }
+
+    Rectangle monitorClientArea = monitor.getClientArea();
+
+    int middleX = monitorClientArea.x + ( monitorClientArea.width - shellBounds.width ) / 2;
+    int middleY = monitorClientArea.y + ( monitorClientArea.height - shellBounds.height ) / 2;
+
+    shell.setLocation( middleX, middleY );
+
+    return shell;
   }
 }

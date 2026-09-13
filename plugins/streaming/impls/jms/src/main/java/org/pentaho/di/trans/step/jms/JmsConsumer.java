@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step.jms;
 
@@ -43,7 +35,7 @@ public class JmsConsumer extends BaseStreamStep {
     super( stepMeta, stepDataInterface, copyNr, transMeta, trans );
   }
 
-  public boolean init( StepMetaInterface stepMetaInterface, StepDataInterface stepDataInterface ) {
+  @Override public boolean init( StepMetaInterface stepMetaInterface, StepDataInterface stepDataInterface ) {
     boolean superStatus = super.init( stepMetaInterface, stepDataInterface );
 
     JmsConsumerMeta jmsConsumerMeta = (JmsConsumerMeta) this.variablizedStepMeta;
@@ -56,21 +48,21 @@ public class JmsConsumer extends BaseStreamStep {
       + jmsConsumerMeta.jmsDelegate.getJmsProvider().getConnectionDetails( jmsConsumerMeta.jmsDelegate ) );
 
     window = new FixedTimeStreamWindow<>(
-      subtransExecutor, jmsConsumerMeta.jmsDelegate.getRowMeta(), getDuration(), getBatchSize() );
+      getSubtransExecutor(), jmsConsumerMeta.getRowMeta(), getDuration(), getBatchSize(), getParallelism() );
     source = new JmsStreamSource( this, requireNonNull( jmsConsumerMeta.jmsDelegate ), getReceiverTimeout( jmsConsumerMeta ) );
     return superStatus;
   }
 
-  public int getReceiverTimeout( JmsConsumerMeta meta ) {
+  private int getReceiverTimeout( JmsConsumerMeta meta ) {
     try {
-      return Integer.parseInt( meta.jmsDelegate.receiveTimeout );
+      return Integer.parseInt( meta.receiveTimeout );
     } catch ( NumberFormatException nfe ) {
       logError( getString( PKG, "JmsConsumer.ReceiveTimeoutInvalid" ) );
     }
     return -1;
   }
 
-  public boolean validateParams( JmsConsumerMeta meta ) {
+  private boolean validateParams( JmsConsumerMeta meta ) {
     return getReceiverTimeout( meta ) > -1;
   }
 

@@ -1,27 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.core.widget;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -46,7 +40,7 @@ import org.eclipse.swt.widgets.Label;
 import org.pentaho.di.ui.core.gui.GUIResource;
 
 public class CheckBoxToolTip extends ToolTip {
-  private String message;
+  private String message = "";
   private String title;
   private Image image;
   private String checkBoxMessage;
@@ -204,6 +198,14 @@ public class CheckBoxToolTip extends ToolTip {
    */
   public void setTitle( String title ) {
     this.title = title;
+    try {
+      Method setText = super.getClass().getMethod( "setText", String.class );
+      setText.invoke( this, title );
+    } catch ( NoSuchMethodException e ) {
+      // For Webspoon: No need to call method if it doesn't exist.
+    } catch ( InvocationTargetException | IllegalAccessException e )  {
+      e.printStackTrace();
+    }
   }
 
   /**

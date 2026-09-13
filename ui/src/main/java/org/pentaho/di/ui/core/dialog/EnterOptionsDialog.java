@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.core.dialog;
 
@@ -160,8 +152,6 @@ public class EnterOptionsDialog extends Dialog {
   private Button wOpenLast;
 
   private Button wAutoSave;
-
-  private Button wOnlyActiveFile;
 
   private Button wDBConnXML;
 
@@ -938,6 +928,7 @@ public class EnterOptionsDialog extends Dialog {
     wlDefaultLocale.setLayoutData( fdlDefaultLocale );
     wDefaultLocale = new Combo( wLookComp, SWT.SINGLE | SWT.READ_ONLY | SWT.LEFT | SWT.BORDER );
     wDefaultLocale.setItems( GlobalMessages.localeDescr );
+    wDefaultLocale.setEnabled( !Const.isRunningOnWebspoonMode() );
     props.setLook( wDefaultLocale );
     FormData fdDefaultLocale = new FormData();
     fdDefaultLocale.left = new FormAttachment( middle, 0 );
@@ -1137,31 +1128,13 @@ public class EnterOptionsDialog extends Dialog {
     fdAutoSave.right = new FormAttachment( 100, 0 );
     wAutoSave.setLayoutData( fdAutoSave );
 
-    // Auto save changed files?
-    Label wlOnlyActiveFile = new Label( wGeneralComp, SWT.RIGHT );
-    wlOnlyActiveFile.setText( BaseMessages.getString( PKG, "EnterOptionsDialog.OnlyActiveFile.Label" ) );
-    props.setLook( wlOnlyActiveFile );
-    FormData fdlOnlyActiveFile = new FormData();
-    fdlOnlyActiveFile.left = new FormAttachment( 0, 0 );
-    fdlOnlyActiveFile.top = new FormAttachment( wAutoSave, margin );
-    fdlOnlyActiveFile.right = new FormAttachment( middle, -margin );
-    wlOnlyActiveFile.setLayoutData( fdlOnlyActiveFile );
-    wOnlyActiveFile = new Button( wGeneralComp, SWT.CHECK );
-    props.setLook( wOnlyActiveFile );
-    wOnlyActiveFile.setSelection( props.isOnlyActiveFileShownInTree() );
-    FormData fdOnlyActiveFile = new FormData();
-    fdOnlyActiveFile.left = new FormAttachment( middle, 0 );
-    fdOnlyActiveFile.top = new FormAttachment( wAutoSave, margin );
-    fdOnlyActiveFile.right = new FormAttachment( 100, 0 );
-    wOnlyActiveFile.setLayoutData( fdOnlyActiveFile );
-
     // Only save used connections to XML?
     Label wlDBConnXML = new Label( wGeneralComp, SWT.RIGHT );
     wlDBConnXML.setText( BaseMessages.getString( PKG, "EnterOptionsDialog.OnlySaveUsedConnections.Label" ) );
     props.setLook( wlDBConnXML );
     FormData fdlDBConnXML = new FormData();
     fdlDBConnXML.left = new FormAttachment( 0, 0 );
-    fdlDBConnXML.top = new FormAttachment( wOnlyActiveFile, margin );
+    fdlDBConnXML.top = new FormAttachment( wAutoSave, margin );
     fdlDBConnXML.right = new FormAttachment( middle, -margin );
     wlDBConnXML.setLayoutData( fdlDBConnXML );
     wDBConnXML = new Button( wGeneralComp, SWT.CHECK );
@@ -1169,7 +1142,7 @@ public class EnterOptionsDialog extends Dialog {
     wDBConnXML.setSelection( props.areOnlyUsedConnectionsSavedToXML() );
     FormData fdDBConnXML = new FormData();
     fdDBConnXML.left = new FormAttachment( middle, 0 );
-    fdDBConnXML.top = new FormAttachment( wOnlyActiveFile, margin );
+    fdDBConnXML.top = new FormAttachment( wAutoSave, margin );
     fdDBConnXML.right = new FormAttachment( 100, 0 );
     wDBConnXML.setLayoutData( fdDBConnXML );
 
@@ -1601,7 +1574,6 @@ public class EnterOptionsDialog extends Dialog {
     props.setUseDBCache( wUseCache.getSelection() );
     props.setOpenLastFile( wOpenLast.getSelection() );
     props.setAutoSave( wAutoSave.getSelection() );
-    props.setOnlyActiveFileShownInTree( wOnlyActiveFile.getSelection() );
     props.setOnlyUsedConnectionsSavedToXML( wDBConnXML.getSelection() );
     props.setAskAboutReplacingDatabaseConnections( wAskReplaceDB.getSelection() );
     props.setReplaceDatabaseConnections( wReplaceDB.getSelection() );

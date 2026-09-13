@@ -1,42 +1,45 @@
 // CHECKSTYLE:FileLength:OFF
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
+
 
 package org.pentaho.di.core;
 
-import org.apache.commons.lang.StringEscapeUtils;
-import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang.text.StrBuilder;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.text.StringEscapeUtils;
+
+import org.apache.commons.vfs2.FileName;
+import org.apache.commons.vfs2.FileSystemException;
+import org.apache.commons.vfs2.provider.UriParser;
+import org.apache.http.conn.util.InetAddressUtils;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.util.EnvUtil;
 import org.pentaho.di.core.util.Utils;
+import org.pentaho.di.core.vfs.IKettleVFS;
+import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.laf.BasePropertyHandler;
 import org.pentaho.di.version.BuildVersion;
+import org.pentaho.support.encryption.Encr;
 
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
@@ -47,6 +50,7 @@ import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.Paths;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.text.NumberFormat;
@@ -63,6 +67,7 @@ import java.util.Locale;
 import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 
 /**
@@ -196,6 +201,7 @@ public class Const {
 
   public static String JNDI_DIRECTORY = NVL( System.getProperty( "KETTLE_JNDI_ROOT" ), System
     .getProperty( "org.osjava.sj.root" ) );
+
 
   /*
    * The images directory
@@ -376,6 +382,11 @@ public class Const {
   private static String[] dateFormats;
 
   /**
+   * An array of date (timeless) conversion formats
+   */
+  private static String[] dateTimelessFormats;
+
+  /**
    * An array of number conversion formats
    */
   private static String[] numberFormats;
@@ -492,8 +503,11 @@ public class Const {
    * */
   public static final String[] DEPRECATED_VARIABLES = new String[] {
     Const.INTERNAL_VARIABLE_TRANSFORMATION_FILENAME_DIRECTORY,
-    Const.INTERNAL_VARIABLE_TRANSFORMATION_FILENAME_NAME, Const.INTERNAL_VARIABLE_TRANSFORMATION_NAME,
-    Const.INTERNAL_VARIABLE_TRANSFORMATION_REPOSITORY_DIRECTORY
+    Const.INTERNAL_VARIABLE_TRANSFORMATION_FILENAME_NAME,
+    Const.INTERNAL_VARIABLE_TRANSFORMATION_REPOSITORY_DIRECTORY,
+    Const.INTERNAL_VARIABLE_JOB_FILENAME_DIRECTORY,
+    Const.INTERNAL_VARIABLE_JOB_FILENAME_NAME,
+    Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY
   };
 
   /** The transformation filename directory */
@@ -574,6 +588,8 @@ public class Const {
   public static final int SHOW_MESSAGE_DIALOG_DB_TEST_DEFAULT = 0;
 
   public static final int SHOW_MESSAGE_DIALOG_DB_TEST_SUCCESS = 1;
+
+  public static final int SHOW_FATAL_ERROR = 2;
 
   /**
    * The margin between the text of a note and its border.
@@ -734,6 +750,35 @@ public class Const {
   public static final String KETTLE_EMPTY_STRING_DIFFERS_FROM_NULL = "KETTLE_EMPTY_STRING_DIFFERS_FROM_NULL";
 
   /**
+   * System wide flag to allow the Filter step to treat nulls as not being 0 for CUST-270
+   */
+  public static final String KETTLE_FILTER_TREAT_NULLS_AS_NOT_ZERO = "KETTLE_FILTER_TREAT_NULLS_AS_NOT_ZERO";
+
+  /**
+   * This flag will prevent Kettle from converting {@code null} strings to empty strings in {@link org.pentaho.di.core.row.value.ValueMetaBase}
+   * The default value is {@code false}.
+   */
+  public static final String KETTLE_DO_NOT_NORMALIZE_NULL_STRING_TO_EMPTY = "KETTLE_DO_NOT_NORMALIZE_NULL_STRING_TO_EMPTY";
+
+
+  /**
+   * This flag will force to return the original string with only spaces instead of an empty string.
+   */
+  public static final String KETTLE_DO_NOT_NORMALIZE_SPACES_ONLY_STRING_TO_EMPTY = "KETTLE_DO_NOT_NORMALIZE_SPACES_ONLY_STRING_TO_EMPTY";
+
+  /**
+   * This flag will prevent Kettle from yielding {@code null} as the value of an empty XML tag in {@link org.pentaho.di.core.xml.XMLHandler}
+   * The default value is {@code false} and an empty XML tag will produce a {@code null} value.
+   */
+  public static final String KETTLE_XML_EMPTY_TAG_YIELDS_EMPTY_VALUE = "KETTLE_XML_EMPTY_TAG_YIELDS_EMPTY_VALUE";
+
+  /**
+   * This flag will cause the "Get XML data" step to yield null values on missing elements and empty values on empty elements when set to "Y".
+   * By default, both empty elements and missing elements will yield empty values.
+   */
+  public static final String KETTLE_XML_MISSING_TAG_YIELDS_NULL_VALUE = "KETTLE_XML_MISSING_TAG_YIELDS_NULL_VALUE";
+
+  /**
    * System wide flag to allow non-strict string to number conversion for backward compatibility. If this setting is set
    * to "Y", an string starting with digits will be converted successfully into a number. (example: 192.168.1.1 will be
    * converted into 192 or 192.168 depending on the decimal symbol). The default (N) will be to throw an error if
@@ -746,6 +791,20 @@ public class Const {
    * System wide flag to ignore timezone while writing date/timestamp value to the database. See PDI-10749 for details.
    */
   public static final String KETTLE_COMPATIBILITY_DB_IGNORE_TIMEZONE = "KETTLE_COMPATIBILITY_DB_IGNORE_TIMEZONE";
+
+  /**
+   * When set to {@code Y}, enables the JVM-wide {@link org.pentaho.di.core.database.DynamicDriverCache}
+   * for dynamic JDBC driver loading. The cache reuses the same {@link java.sql.Driver} instance and
+   * its classloader across connections, avoiding repeated JAR reads (especially costly on NFS/SMB).
+   *
+   * <p>When absent or set to any value other than {@code Y} (the default), a fresh
+   * {@link org.pentaho.di.core.database.ChildFirstURLClassLoader} is created for each connection
+   * and closed on disconnect — no JVM-wide state is shared.
+   *
+   * <p>Set in {@code kettle.properties} or as a JVM system property:
+   * {@code -DKETTLE_DYNAMIC_DRIVER_CACHE_ENABLED=Y}
+   */
+  public static final String KETTLE_DYNAMIC_DRIVER_CACHE_ENABLED = "KETTLE_DYNAMIC_DRIVER_CACHE_ENABLED";
 
   /**
    * System wide flag to use the root path prefix for a directory reference. See PDI-6779 for details.
@@ -781,6 +840,21 @@ public class Const {
     "KETTLE_COMPATIBILITY_MEMORY_GROUP_BY_SUM_AVERAGE_RETURN_NUMBER_TYPE";
 
   /**
+   * System wide flag to control behavior of the ExecuteTransformationStep and ExecuteJobStep when a file is specified.
+   * This only is used when PDI is connected to repository
+   * 'Y' It is possible specify a file with the extension or not that is saved in repository
+   * 'N' Should not be specified the extension, in other words, should be specified the name of file saved in repository.
+   */
+  public static final String KETTLE_COMPATIBILITY_INVOKE_FILES_WITH_OR_WITHOUT_FILE_EXTENSION =
+    "KETTLE_COMPATIBILITY_INVOKE_FILES_WITH_OR_WITHOUT_FILE_EXTENSION";
+
+  /**
+   * System-wide flag to keep legacy behavior on json input step. See PDI-19445 and PDI-18521 for details.
+   */
+  public static final String KETTLE_COMPATIBILITY_JSON_INPUT_LEGACY_MODE = "KETTLE_COMPATIBILITY_JSON_INPUT_LEGACY_MODE";
+
+
+  /**
    * You can use this variable to speed up hostname lookup.
    * Hostname lookup is performed by Kettle so that it is capable of logging the server on which a job or transformation is executed.
    */
@@ -797,6 +871,14 @@ public class Const {
    * to keep all rows indefinitely (default)
    */
   public static final String KETTLE_MAX_LOG_TIMEOUT_IN_MINUTES = "KETTLE_MAX_LOG_TIMEOUT_IN_MINUTES";
+
+  /**
+   * Flag to set the maximum size (in MB) of the Result log buffer to prevent OutOfMemoryError (default: -1).
+   * Any value less than 0 or non-numeric will not add any log restriction.
+   * Setting the value to 0 means no log generation.
+   * Positive values apply size limit in megabytes.
+   */
+  public static final String KETTLE_MAX_LOG_BUFFER_SIZE_MB = "KETTLE_MAX_LOG_BUFFER_SIZE_MB";
 
   /**
    * System wide flag to determine whether standard error will be redirected to Kettle logging facilities. Will redirect
@@ -836,6 +918,11 @@ public class Const {
    * A variable to configure the maximum number of logging registry entries kept in memory for logging purposes.
    */
   public static final String KETTLE_MAX_LOGGING_REGISTRY_SIZE = "KETTLE_MAX_LOGGING_REGISTRY_SIZE";
+
+  /**
+   * A variable to configure the logging registry's purge timer which will trigger the registry to cleanup entries.
+   */
+  public static final String KETTLE_LOGGING_REGISTRY_PURGE_TIMEOUT = "KETTLE_LOGGING_REGISTRY_PURGE_TIMEOUT";
 
   /**
    * A variable to configure the kettle log tab refresh delay.
@@ -918,7 +1005,8 @@ public class Const {
   /**
    * The XML file that contains the list of native Kettle two-way password encoder plugins
    */
-  public static final String XML_FILE_KETTLE_PASSWORD_ENCODER_PLUGINS = "kettle-password-encoder-plugins.xml";
+  @SuppressWarnings( "squid:S2068" )
+  public static final String XML_FILE_KETTLE_PASSWORD_ENCODER_PLUGINS = Encr.XML_FILE_KETTLE_PASSWORD_ENCODER_PLUGINS;
 
   /**
    * The name of the environment variable that will contain the alternative location of the kettle-valuemeta-plugins.xml
@@ -929,18 +1017,21 @@ public class Const {
   /**
    * Specifies the password encoding plugin to use by ID (Kettle is the default).
    */
-  public static final String KETTLE_PASSWORD_ENCODER_PLUGIN = "KETTLE_PASSWORD_ENCODER_PLUGIN";
+  @SuppressWarnings( "squid:S2068" )
+  public static final String KETTLE_PASSWORD_ENCODER_PLUGIN = Encr.KETTLE_PASSWORD_ENCODER_PLUGIN;
 
   /**
    * The name of the environment variable that will contain the alternative location of the kettle-password-encoder-plugins.xml
    * file
    */
-  public static final String KETTLE_PASSWORD_ENCODER_PLUGINS_FILE = "KETTLE_PASSWORD_ENCODER_PLUGINS_FILE";
+  @SuppressWarnings( "squid:S2068" )
+  public static final String KETTLE_PASSWORD_ENCODER_PLUGINS_FILE = Encr.KETTLE_PASSWORD_ENCODER_PLUGINS_FILE;
 
   /**
    * The name of the Kettle encryption seed environment variable for the KettleTwoWayPasswordEncoder class
    */
-  public static final String KETTLE_TWO_WAY_PASSWORD_ENCODER_SEED = "KETTLE_TWO_WAY_PASSWORD_ENCODER_SEED";
+  @SuppressWarnings( "squid:S2068" )
+  public static final String KETTLE_TWO_WAY_PASSWORD_ENCODER_SEED = Encr.KETTLE_TWO_WAY_PASSWORD_ENCODER_SEED;
 
   /**
    * The XML file that contains the list of native Kettle logging plugins
@@ -1003,6 +1094,7 @@ public class Const {
   /**
    * Set this variable to with the intended password to pass as repository credentials
    */
+  @SuppressWarnings( "squid:S2068" )
   public static final String KETTLE_PASSWORD = "KETTLE_PASSWORD";
 
   /**
@@ -1101,6 +1193,11 @@ public class Const {
   public static final String KETTLE_GLOBAL_LOG_VARIABLES_CLEAR_ON_EXPORT = "KETTLE_GLOBAL_LOG_VARIABLES_CLEAR_ON_EXPORT";
 
   /**
+   * Property controls the capacity of the transFinishedBlockingQueue in Trans.
+   */
+  public static final String KETTLE_TRANS_FINISHED_BLOCKING_QUEUE_SIZE = "KETTLE_TRANS_FINISHED_BLOCKING_QUEUE_SIZE";
+
+  /**
    * Compatibility settings for {@link org.pentaho.di.core.row.ValueDataUtil#hourOfDay(ValueMetaInterface, Object)}.
    *
    * Switches off the fix for calculation of timezone decomposition.
@@ -1123,6 +1220,33 @@ public class Const {
 
   // See PDI-17203 for details
   public static final String KETTLE_COMPATIBILITY_XML_OUTPUT_NULL_VALUES = "KETTLE_COMPATIBILITY_XML_OUTPUT_NULL_VALUES";
+
+  // See PDI-19254 for details
+  public static final String KETTLE_COMPATIBILITY_XML_OUTPUT_NULL_IF_FIELD_VALUES = "KETTLE_COMPATIBILITY_XML_OUTPUT_NULL_IF_FIELD_VALUES";
+
+  // See PDI-17980 for details
+  public static final String KETTLE_COMPATIBILITY_USE_JDBC_METADATA = "KETTLE_COMPATIBILITY_USE_JDBC_METADATA";
+
+  // See PDI-18470 for details
+  public static final String KETTLE_COMPATIBILITY_DB_LOOKUP_USE_FIELDS_RETURN_TYPE_CHOSEN_IN_UI = "KETTLE_COMPATIBILITY_DB_LOOKUP_USE_FIELDS_RETURN_TYPE_CHOSEN_IN_UI";
+
+  // See PDI-PDI-18739 for details
+  public static final String KETTLE_COMPATIBILITY_TEXT_FILE_INPUT_USE_LENIENT_ENCLOSURE_HANDLING = "KETTLE_COMPATIBILITY_TEXT_FILE_INPUT_USE_LENIENT_ENCLOSURE_HANDLING";
+
+  // See PDI-18810 for details
+  public static final String KETTLE_COMPATIBILITY_MDI_INJECTED_FILE_ALWAYS_IN_FILESYSTEM = "KETTLE_COMPATIBILITY_MDI_INJECTED_FILE_ALWAYS_IN_FILESYSTEM";
+
+  // See PDI-19138 for details
+  public static final String KETTLE_JSON_INPUT_INCLUDE_NULLS = "KETTLE_JSON_INPUT_INCLUDE_NULLS";
+
+  // See PDI-17309 for details
+  public static final String KETTLE_COMPATIBILITY_CONCAT_FIELDS_SPLIT_ROWS_HEADER_OFFSET = "KETTLE_COMPATIBILITY_CONCAT_FIELDS_SPLIT_ROWS_HEADER_OFFSET";
+
+  /**
+   * This property when set to Y force the same output file even when splits is required.
+   * See PDI-19064 for details
+   */
+  public static final String KETTLE_JSON_OUTPUT_FORCE_SAME_OUTPUT_FILE = "KETTLE_JSON_OUTPUT_FORCE_SAME_OUTPUT_FILE";
 
   /**
    * The XML file that contains the list of native import rules
@@ -1184,10 +1308,26 @@ public class Const {
   public static final String KETTLE_MAX_TAB_LENGTH = "KETTLE_MAX_TAB_LENGTH";
 
   /**
+   * A variable to log log info of logobjecttype GENERAL"
+   */
+  public static final String KETTLE_LOG_GENERAL_OBJECTS_TO_DI_LOGGER = "KETTLE_LOG_GENERAL_OBJECTS_TO_DI_LOGGER";
+
+
+  /**
    * A variable to configure VFS USER_DIR_IS_ROOT option: should be "true" or "false"
    * {@linkplain org.apache.commons.vfs2.provider.sftp.SftpFileSystemConfigBuilder#USER_DIR_IS_ROOT}
    */
   public static final String VFS_USER_DIR_IS_ROOT = "vfs.sftp.userDirIsRoot";
+
+  /**
+   * A variable to configure environment variables to ignore when initializing shell step
+   * */
+  public static final String SHELL_STEP_ENVIRONMENT_VARIABLES_TO_IGNORE = "SHELL_STEP_ENVIRONMENT_VARIABLES_TO_IGNORE";
+
+  /**
+   * The default value for the variable to configure environment variables to ignore when initializing shell step
+   * */
+  public static final String SHELL_STEP_ENVIRONMENT_VARIABLES_TO_IGNORE_DEFAULT = "";
 
   /**
    * <p>A variable to configure the minimum allowed ratio between de- and inflated bytes to detect a zipbomb.</p>
@@ -1277,6 +1417,351 @@ public class Const {
    */
   public static final String KETTLE_ZIP_MAX_TEXT_SIZE_DEFAULT_STRING =
     String.valueOf( KETTLE_ZIP_MAX_TEXT_SIZE_DEFAULT );
+
+  /**
+   * <p>The default value for the {@link #KETTLE_ZIP_NEGATIVE_MIN_INFLATE} as a Double.</p>
+   * <p>Check PDI-18489 for more details.</p>
+   */
+  public static final Double KETTLE_ZIP_NEGATIVE_MIN_INFLATE = -1.0d;
+
+  /**
+   * <p>This environment variable is used to define whether the check of xlsx zip bomb is performed. This is set to false by default.</p>
+   */
+  public static final String KETTLE_XLSX_ZIP_BOMB_CHECK = "KETTLE_XLSX_ZIP_BOMB_CHECK";
+  private static final String KETTLE_XLSX_ZIP_BOMB_CHECK_DEFAULT = "false";
+  public static boolean checkXlsxZipBomb() {
+    String checkZipBomb = System.getProperty( KETTLE_XLSX_ZIP_BOMB_CHECK, KETTLE_XLSX_ZIP_BOMB_CHECK_DEFAULT );
+    return Boolean.valueOf( checkZipBomb );
+  }
+
+  /**
+   * <p>A variable to configure if the S3 input / output steps should use the Amazon Default Credentials Provider Chain
+   * even if access credentials are specified within the transformation.</p>
+   */
+  public static final String KETTLE_USE_AWS_DEFAULT_CREDENTIALS = "KETTLE_USE_AWS_DEFAULT_CREDENTIALS";
+
+  /**
+   * This environment variable allows to enable s3 legacy URI. Please check: PDI-19732.
+   */
+  public static final String KETTLE_COMPATIBILITY_ALLOW_S3_LEGACY_URI = "KETTLE_COMPATIBILITY_ALLOW_S3_LEGACY_URI";
+  /**
+   * <p>This environment variable is used by streaming consumer steps to limit the total of concurrent batches across transformations.</p>
+   */
+  public static final String SHARED_STREAMING_BATCH_POOL_SIZE = "SHARED_STREAMING_BATCH_POOL_SIZE";
+
+  /**
+   * <p>This environment variable is used by the Kinesis consumer to control the number of records retrieved
+   * by the PollingConfig, if used.  Ignored with Enhanced Fan Out./p>
+   */
+  public static final String KINESIS_POLLING_CONFIG_MAX_RECORDS = "KINESIS_POLLING_CONFIG_MAX_RECORDS";
+
+  /**
+   * <p>This environment variable is used to specify a location used to deploy a shim driver into PDI.</p>
+   */
+  public static final String SHIM_DRIVER_DEPLOYMENT_LOCATION = "SHIM_DRIVER_DEPLOYMENT_LOCATION";
+  private static final String DEFAULT_DRIVERS_DIR = "DEFAULT";
+  public static String getShimDriverDeploymentLocation() {
+
+    String driversLocation = System.getProperty( Const.SHIM_DRIVER_DEPLOYMENT_LOCATION, DEFAULT_DRIVERS_DIR );
+    if ( driversLocation.equals( DEFAULT_DRIVERS_DIR ) ) {
+      String karafDir = System.getProperty( "karaf.home" );
+      return Paths.get( karafDir ).getParent().getParent().toString() + File.separator + "drivers";
+    }
+    return driversLocation;
+  }
+
+  /**
+   * File used to prevent multiple instances of kettle from starting at the same time to avoid file
+   * system contention when building karaf sys/cache directories.
+   */
+  public static final String KARAF_BOOT_LOCK_FILE = "karaf.boot.lock";
+  public static final String KARAF_BOOT_LOCK_WAIT_TIME = "KARAF_BOOT_LOCK_WAIT_TIME";
+  /**
+   * Flag to indicate whether to check for and set a boot lock file when starting karaf, or proceed without the lock.
+   * Default behavior is to not use a lock file and boot without checking or waiting.
+   */
+  public static final String KARAF_WAIT_FOR_BOOT_LOCK_FILE = "KARAF_WAIT_FOR_BOOT_LOCK_FILE";
+
+  /**
+   * Determines whether failure to find the HDFS file system is a fatal error in Hadoop File Input step.
+   * Default (legacy) behavior is false.
+   */
+  public static final String KETTLE_FATAL_ERROR_ON_HDFS_NOT_FOUND = "KETTLE_FATAL_ERROR_ON_HDFS_NOT_FOUND";
+  public static final String KETTLE_FATAL_ERROR_ON_HDFS_NOT_FOUND_DEFAULT = "N";
+
+  /**
+   * <p>This environment is used to specify how many attempts before failing to read an XML from within a Zip file
+   * while multy-thread execution and using XMLHandler.</p>
+   */
+  public static final String KETTLE_RETRY_OPEN_XML_STREAM = "KETTLE_RETRY_OPEN_XML_STREAM";
+
+  /**
+   * <p>This environment variable is used by XSD validation steps to enable or disable external entities.</p>
+   * <p>By default external entities are allowed.</p>
+   */
+  public static final String ALLOW_EXTERNAL_ENTITIES_FOR_XSD_VALIDATION = "ALLOW_EXTERNAL_ENTITIES_FOR_XSD_VALIDATION";
+  public static final String ALLOW_EXTERNAL_ENTITIES_FOR_XSD_VALIDATION_DEFAULT = "true";
+
+  /**
+   * <p>This environment variable is used to define the default division result precision between BigDecimals.</p>
+   * <p>By default, and when precision is -1, precision is unlimited.</p>
+   */
+  public static final String KETTLE_BIGDECIMAL_DIVISION_PRECISION = "KETTLE_BIGDECIMAL_DIVISION_PRECISION";
+  public static final String KETTLE_BIGDECIMAL_DIVISION_PRECISION_DEFAULT = "-1";
+
+  /**
+   * <p>This environment variable is used to define the default division result rounding mode between BigDecimals.</p>
+   * <p>By default, rouding mode is half even.</p>
+   */
+  public static final String KETTLE_BIGDECIMAL_DIVISION_ROUNDING_MODE = "KETTLE_BIGDECIMAL_DIVISION_ROUNDING_MODE";
+  public static final String KETTLE_BIGDECIMAL_DIVISION_ROUNDING_MODE_DEFAULT = "HALF_EVEN";
+
+  /**
+   * <p>This environment variable is used to define how Timestamp should be converted to a number and vice-versa.</p>
+   * <p>Three options exist:</p>
+   * <ul>
+   *   <li>{@link #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_LEGACY}: converting a Timestamp to a number uses
+   *   milliseconds but converting a number to Timestamp assumes the value is in nanoseconds</li>
+   *   <li>{@link #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_MILLISECONDS}: both Timestamp to number and number to
+   *   Timestamp use milliseconds</li>
+   *   <li>{@link #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_NANOSECONDS}: both Timestamp to number and number to
+   *   Timestamp use nanoseconds</li>
+   * </ul>
+   * <p>The default is {@value #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_DEFAULT}.</p>
+   *
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_DEFAULT
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_LEGACY
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_MILLISECONDS
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_NANOSECONDS
+   */
+  public static final String KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE = "KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE";
+
+  /**
+   * <p>The value to use for setting the {@link #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE} as it behaved on former
+   * versions.</p>
+   *
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_MILLISECONDS
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_NANOSECONDS
+   */
+  public static final String KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_LEGACY = "LEGACY";
+
+  /**
+   * <p>The value to use for setting the {@link #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE} to use milliseconds.</p>
+   *
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_LEGACY
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_NANOSECONDS
+   */
+  public static final String KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_MILLISECONDS = "MILLISECONDS";
+
+  /**
+   * <p>The value to use for setting the {@link #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE} to use nanoseconds.</p>
+   *
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_LEGACY
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_MILLISECONDS
+   */
+  public static final String KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_NANOSECONDS = "NANOSECONDS";
+
+  /**
+   * <p>The default value for the {@link #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE}.</p>
+   *
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_LEGACY
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_MILLISECONDS
+   * @see #KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_NANOSECONDS
+   */
+  public static final String KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_DEFAULT =
+    KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE_LEGACY;
+
+  /**
+   * This environment variable will be used to determine whether file URI strings returned from input steps are returned
+   * encoded (spaces and other special characters escaped) or decoded (default legacy behavior).
+   */
+  public static final String KETTLE_RETURN_ESCAPED_URI_STRINGS = "KETTLE_RETURN_ESCAPED_URI_STRINGS";
+
+  /**
+   * <p>This environment variable is used to define how which calculation method is to be used by the 'Add a Checksum'
+   * step.</p>
+   * <p>Three options exist:</p>
+   * <ul>
+   *   <li>{@link #KETTLE_CHECKSUM_EVALUATION_METHOD_BYTES}: calculate Checksum based on Byte representation of
+   *   fields; as in versions since 8.1</li>
+   *   <li>{@link #KETTLE_CHECKSUM_EVALUATION_METHOD_PENTAHO_STRINGS}: calculate Checksum based on Pentaho String
+   *   representation of fields (applying format masks); as in versions until 7.1</li>
+   *   <li>{@link #KETTLE_CHECKSUM_EVALUATION_METHOD_NATIVE_STRINGS}: calculate Checksum based on Native String
+   *   representation of fields; as in version 8.0</li>
+   * </ul>
+   * <p>The default is {@value #KETTLE_CHECKSUM_EVALUATION_METHOD_DEFAULT}.</p>
+   *
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_BYTES
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_PENTAHO_STRINGS
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_NATIVE_STRINGS
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_DEFAULT
+   */
+  public static final String KETTLE_DEFAULT_CHECKSUM_EVALUATION_METHOD = "KETTLE_DEFAULT_CHECKSUM_EVALUATION_METHOD";
+
+  /**
+   * <p>The value to use for setting the {@link #KETTLE_DEFAULT_CHECKSUM_EVALUATION_METHOD}, so that Checksum is
+   * calculated based on Byte representation of fields. Calculation method used by version 8.1 and after.</p>
+   *
+   * @see #KETTLE_DEFAULT_CHECKSUM_EVALUATION_METHOD
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_PENTAHO_STRINGS
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_NATIVE_STRINGS
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_DEFAULT
+   */
+  public static final String KETTLE_CHECKSUM_EVALUATION_METHOD_BYTES = "BYTES";
+
+  /**
+   * <p>The value to use for setting the {@link #KETTLE_DEFAULT_CHECKSUM_EVALUATION_METHOD}, so that Checksum is
+   * calculated based on Pentaho String representation of fields (applying format masks). Calculation method used by
+   * version 7.1 and prior versions.</p>
+   *
+   * @see #KETTLE_DEFAULT_CHECKSUM_EVALUATION_METHOD
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_BYTES
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_NATIVE_STRINGS
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_DEFAULT
+   */
+  public static final String KETTLE_CHECKSUM_EVALUATION_METHOD_PENTAHO_STRINGS = "PENTAHO_STRINGS";
+
+  /**
+   * <p>The value to use for setting the {@link #KETTLE_DEFAULT_CHECKSUM_EVALUATION_METHOD}, so that Checksum is
+   * calculated based on Native String representation of fields. Calculation method used by version 8.0.</p>
+   *
+   * @see #KETTLE_DEFAULT_CHECKSUM_EVALUATION_METHOD
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_BYTES
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_PENTAHO_STRINGS
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_DEFAULT
+   */
+  public static final String KETTLE_CHECKSUM_EVALUATION_METHOD_NATIVE_STRINGS = "NATIVE_STRINGS";
+
+  /**
+   * <p>The default value for the {@link #KETTLE_DEFAULT_CHECKSUM_EVALUATION_METHOD}.</p>
+   *
+   * @see #KETTLE_DEFAULT_CHECKSUM_EVALUATION_METHOD
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_BYTES
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_PENTAHO_STRINGS
+   * @see #KETTLE_CHECKSUM_EVALUATION_METHOD_NATIVE_STRINGS
+   */
+  public static final String KETTLE_CHECKSUM_EVALUATION_METHOD_DEFAULT = KETTLE_CHECKSUM_EVALUATION_METHOD_BYTES;
+
+  /**
+   * <p>While one assumes that a day has 24 hours, due to daylight savings time settings, it may have 23 hours (the day
+   * Summer time goes into effect) or 25 hours (Winter time).</p>
+   * <p>Imagine Summer time: when clocks reach 1:00, it goes forward 1 hour to 2:00</p>
+   * <p>This means that, when adding 2 hours to 0:30, one gets 3:30</p>
+   * <p>By setting this environment variable to {@code "N"}, DateDiff performs calculations based on local time; as so,
+   * the difference between these two values (3:30 and 0:30) will be 3 hours difference.</p>
+   * <p>Setting this environment variable to {@code "Y"}, DateDiff performs calculations based on UTC time; as so, the
+   * difference between these two values (3:30 and 0:30) will be 2 hours difference.</p>
+   * <p>The default is {@value #KETTLE_DATEDIFF_DST_AWARE_DEFAULT}.</p>
+   *
+   * @see #KETTLE_DATEDIFF_DST_AWARE_DEFAULT
+   */
+  public static final String KETTLE_DATEDIFF_DST_AWARE = "KETTLE_DATEDIFF_DST_AWARE";
+
+  /**
+   * <p>The default value for the {@link #KETTLE_DATEDIFF_DST_AWARE}.</p>
+   *
+   * @see #KETTLE_DATEDIFF_DST_AWARE
+   */
+  public static final String KETTLE_DATEDIFF_DST_AWARE_DEFAULT = "N";
+
+  /**
+   * If true, kettle check for new site files to update in the named cluster every time a named cluster is resolved
+   */
+  public static final String KETTLE_AUTO_UPDATE_SITE_FILE = "KETTLE_AUTO_UPDATE_SITE_FILE";
+
+  /**
+   * If true, use a cache when loading Trans/Job/Step metas vs reading from file system/repository for each load.
+   * Note: cache is currently broken; variable spaces do not get replaced upon loads of the same meta, so parameters
+   * that have changed do not get updated.  This should be off by default.
+   */
+  public static final String KETTLE_USE_META_FILE_CACHE = "KETTLE_USE_META_FILE_CACHE";
+  public static final String KETTLE_USE_META_FILE_CACHE_DEFAULT = "N";
+
+  /**
+   * If true, do not append real-time logging during Job execution. This prevents the logging from growing too large
+   * in memory, especially for long-running jobs or jobs with a large number of subjobs/subtrans
+   * However, if set to "Y", it would prevent users from seeing any log data visible in tools like the Pentaho Ops Mart,
+   * the kettle job status monitor, and other similar tools. It does not change anything regarding what data gets
+   * written out via log4j such as the tomcat catalina.out log, or pentaho.log, etc.
+   */
+  public static final String KETTLE_SKIP_JOB_LOGGING = "KETTLE_SKIP_JOB_LOGGING";
+  public static final String KETTLE_SKIP_JOB_LOGGING_DEFAULT = "N";
+
+  /**
+   * Value used to replace nulls in Python Executor Step Input Lines. Empty will mean no replacement will be done
+   */
+  public static final String KETTLE_PYTHON_STEP_REPLACE_NULLS = "KETTLE_PYTHON_STEP_REPLACE_NULLS";
+
+  /**
+   Value to revert the behaviour of the flag "Execute every Input Row" behavior back to executing even with 0 rows as job input mode.
+  */
+  public static final String COMPATIBILITY_JOB_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT = "COMPATIBILITY_JOB_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT";
+
+  /**
+   Value to revert the behaviour of the flag "Execute every Input Row" behavior back to executing even with 0 rows as trans input mode.
+   */
+    public static final String COMPATIBILITY_TRANS_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT = "COMPATIBILITY_TRANS_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT";
+
+  /**
+   Value to show/not show the Warning messages regarding the configured behaviour of the flag "Execute every Input Row"
+   */
+  public static final String COMPATIBILITY_SHOW_WARNINGS_EXECUTE_EVERY_INPUT_ROW = "COMPATIBILITY_SHOW_WARNINGS_EXECUTE_EVERY_INPUT_ROW";
+
+  /**
+   Value to revert the behaviour of the flag "Execute every Input Row" behavior back to executing even with 0 rows as job input mode.
+   */
+  public static final String KETTLE_COMPATIBILITY_JOB_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT = "KETTLE_COMPATIBILITY_JOB_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT";
+
+  /**
+   Value to revert the behaviour of the flag "Execute every Input Row" behavior back to executing even with 0 rows as trans input mode.
+   */
+  public static final String KETTLE_COMPATIBILITY_TRANS_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT = "KETTLE_COMPATIBILITY_TRANS_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT";
+
+  /**
+   Value to show/not show the Warning messages regarding the configured behaviour of the flag "Execute every Input Row"
+   */
+  public static final String KETTLE_COMPATIBILITY_SHOW_WARNINGS_EXECUTE_EVERY_INPUT_ROW = "KETTLE_COMPATIBILITY_SHOW_WARNINGS_EXECUTE_EVERY_INPUT_ROW";
+
+  /**
+   * Value to execute a temporary generated file or the original script in Shell step
+   *
+   * @see #KETTLE_EXECUTE_TEMPORARY_GENERATED_FILE_IN_TEMP_DIR
+   */
+  public static final String KETTLE_EXECUTE_TEMPORARY_GENERATED_FILE = "KETTLE_EXECUTE_TEMPORARY_GENERATED_FILE";
+
+  /**
+   * Value to control where the temporary generated file should be created.
+   * Options: in the system temp folder or in the same folder as the original script
+   *
+   * @see #KETTLE_EXECUTE_TEMPORARY_GENERATED_FILE
+   */
+  public static final String KETTLE_EXECUTE_TEMPORARY_GENERATED_FILE_IN_TEMP_DIR = "KETTLE_EXECUTE_TEMPORARY_GENERATED_FILE_IN_TEMP_DIR";
+
+  /**
+   * Value to configure whether to ignore out of range exceptions, letting values be rounded to the nearest possible value.
+   */
+  public static final String KETTLE_IGNORE_OUT_OF_RANGE_EXCEPTION = "KETTLE_IGNORE_OUT_OF_RANGE_EXCEPTION";
+
+  /**
+   Value that overrides gather performance metrics checkbox value in scheduler dialog
+   */
+  public static final String KETTLE_PUC_SCHEDULE_GATHER_METRICS_OVERRIDE_VALUE = "KETTLE_PUC_SCHEDULE_GATHER_METRICS_OVERRIDE_VALUE";
+
+  /**
+   Value to Configure if we want to export only the used connections to the XML file
+   */
+  public static final String STRING_ONLY_USED_DB_TO_XML = "STRING_ONLY_USED_DB_TO_XML";
+
+  /**
+   Value to Configure if we want to disable/gray out internal variables, and remove them from the new/edit schedule dialog.
+   */
+  public static final String HIDE_INTERNAL_VARIABLES = "PENTAHO_SCHEDULER_HIDE_INTERNAL_VARIABLES";
+  public static final String HIDE_INTERNAL_VARIABLES_DEFAULT = "Y";
+
+  /**
+   Set the maximum allowed size for byte arrays in Apache POI.
+   */
+  public static final String POI_BYTE_ARRAY_MAX_SIZE = "POI_BYTE_ARRAY_MAX_SIZE";
 
   /**
    * rounds double f to any number of places after decimal point Does arithmetic using BigDecimal class to avoid integer
@@ -1387,10 +1872,14 @@ public class Const {
    */
   public static int toInt( String str, int def ) {
     int retval;
-    try {
-      retval = Integer.parseInt( str );
-    } catch ( Exception e ) {
+    if ( str == null ) {
       retval = def;
+    } else {
+      try {
+        retval = Integer.parseInt( str );
+      } catch ( Exception e ) {
+        retval = def;
+      }
     }
     return retval;
   }
@@ -1406,10 +1895,14 @@ public class Const {
    */
   public static long toLong( String str, long def ) {
     long retval;
-    try {
-      retval = Long.parseLong( str );
-    } catch ( Exception e ) {
+    if ( str == null ) {
       retval = def;
+    } else {
+      try {
+        retval = Long.parseLong( str );
+      } catch ( Exception e ) {
+        retval = def;
+      }
     }
     return retval;
   }
@@ -1425,10 +1918,14 @@ public class Const {
    */
   public static double toDouble( String str, double def ) {
     double retval;
-    try {
-      retval = Double.parseDouble( str );
-    } catch ( Exception e ) {
+    if ( str == null ) {
       retval = def;
+    } else {
+      try {
+        retval = Double.parseDouble( str );
+      } catch ( Exception e ) {
+        retval = def;
+      }
     }
     return retval;
   }
@@ -1533,7 +2030,7 @@ public class Const {
   }
 
   /**
-   * Right pad a string: adds spaces to a string until a certain length. If the length is smaller then the limit
+   * Right pad a string: adds spaces to a string until a certain length. If the length is smaller than the limit
    * specified, the String is truncated.
    *
    * @param ret
@@ -1551,7 +2048,7 @@ public class Const {
   }
 
   /**
-   * Right pad a StringBuffer: adds spaces to a string until a certain length. If the length is smaller then the limit
+   * Right pad a StringBuffer: adds spaces to a string until a certain length. If the length is smaller than the limit
    * specified, the String is truncated.
    *
    * MB - New version is nearly 25% faster
@@ -1575,7 +2072,7 @@ public class Const {
   }
 
   /**
-   * Right pad a StringBuilder: adds spaces to a string until a certain length. If the length is smaller then the limit
+   * Right pad a StringBuilder: adds spaces to a string until a certain length. If the length is smaller than the limit
    * specified, the String is truncated.
    *
    * MB - New version is nearly 25% faster
@@ -1620,7 +2117,7 @@ public class Const {
   }
 
   /**
-   * Alternate faster version of string replace using a stringbuffer as input.
+   * Alternate faster version of string replace using a StringBuffer as input.
    *
    * 33% Faster using replaceAll this way than original method
    *
@@ -1641,7 +2138,7 @@ public class Const {
   }
 
   /**
-   * Alternate faster version of string replace using a stringbuilder as input (non-synchronized).
+   * Alternate faster version of string replace using a StringBuilder as input (non-synchronized).
    *
    * 33% Faster using replaceAll this way than original method
    *
@@ -1811,12 +2308,11 @@ public class Const {
 
         while ( ip.hasMoreElements() ) {
           InetAddress in = ip.nextElement();
-          lastHostname = in.getHostName();
-          // System.out.println("  ip address bound : "+in.getHostAddress());
-          // System.out.println("  hostname         : "+in.getHostName());
-          // System.out.println("  Cann.hostname    : "+in.getCanonicalHostName());
-          // System.out.println("  ip string        : "+in.toString());
-          if ( !lastHostname.equalsIgnoreCase( "localhost" ) && !( lastHostname.indexOf( ':' ) >= 0 ) ) {
+          boolean hasNewHostName = !lastHostname.equalsIgnoreCase( "localhost" );
+          if ( InetAddressUtils.isIPv4Address( in.getHostAddress() ) || !hasNewHostName  ) {
+            lastHostname = in.getHostName();
+          }
+          if ( hasNewHostName && lastHostname.indexOf( ':' ) < 0 )  {
             break;
           }
         }
@@ -1912,8 +2408,7 @@ public class Const {
     while ( ipAddresses.hasMoreElements() ) {
       InetAddress inetAddress = ipAddresses.nextElement();
       if ( !inetAddress.isLoopbackAddress() && inetAddress.toString().indexOf( ":" ) < 0 ) {
-        String hostname = inetAddress.getHostAddress();
-        return hostname;
+        return inetAddress.getHostAddress();
       }
     }
     return null;
@@ -2033,6 +2528,17 @@ public class Const {
   }
 
   /**
+   * Determines if the RUNNING_ON_WEBSPOON_MODE flag is set and returns its boolean value.
+   * This is per user-basis.
+   *
+   * @return Boolean signalig the use of Webspoon mode.
+   */
+  public static boolean isRunningOnWebspoonMode() {
+    return Boolean.parseBoolean( NVL( System.getenv( "RUNNING_ON_WEBSPOON_MODE" ), NVL( System.getProperty( "RUNNING_ON_WEBSPOON_MODE" ),
+            "false" ) ) );
+  }
+
+  /**
    * Looks up the user's home directory (or KETTLE_HOME) for every invocation. This is no longer a static property so
    * the value may be set after this class is loaded.
    *
@@ -2050,6 +2556,145 @@ public class Const {
    */
   public static String getKettleDirectory() {
     return getUserHomeDirectory() + FILE_SEPARATOR + getUserBaseDir();
+  }
+
+  /**
+   * Determines the Kettle user data directory in the user's home directory.
+   * This is per user-basis.
+   *
+   * @return The Kettle user data directory.
+   */
+  public static String getUserDataDirectory() {
+    String dataDir =  getKettleDirectory() + Const.FILE_SEPARATOR + "data";
+    return NVL( System.getenv( "WEBSPOON_USER_HOME" ), NVL( System.getProperty( "WEBSPOON_USER_HOME" ),
+            dataDir ) );
+  }
+
+  /**
+   * Returns the directory where JDBC driver JARs are stored for dynamic loading.
+   *
+   * <p>Resolution order (first non-blank value wins):
+   * <ol>
+   *   <li>OS environment variable {@code JDBC_DRIVERS_DIRECTORY}
+   *       — set via Docker {@code ENV}, Kubernetes {@code env:}, ECS task definition, etc.</li>
+   *   <li>JVM system property {@code JDBC_DRIVERS_DIRECTORY}
+   *       — set via {@code -DJDBC_DRIVERS_DIRECTORY=...} at startup.</li>
+   *   <li>{@code null} — caller falls back to solution-path or kettle.properties lookup.</li>
+   * </ol>
+   *
+   * @return the configured JDBC drivers directory, or {@code null} if not set in any source
+   */
+  public static String getJdbcDriversDirectory() {
+    return NVL( System.getenv( "JDBC_DRIVERS_DIRECTORY" ),
+      System.getProperty( "JDBC_DRIVERS_DIRECTORY" ) );
+  }
+
+  /**
+   * Returns the base URL of the connection-management service used to download JDBC driver JARs
+   * on demand when the JAR is not present on disk.
+   *
+   * <p>Resolution order (first non-blank value wins):
+   * <ol>
+   *   <li>OS environment variable {@code JDBC_DRIVER_SERVICE_URL}</li>
+   *   <li>JVM system property {@code JDBC_DRIVER_SERVICE_URL}</li>
+   *   <li>{@code null} — download is disabled.</li>
+   * </ol>
+   *
+   * @return the download service base URL (no trailing slash), or {@code null} if not configured
+   */
+  public static String getJdbcDriverServiceUrl() {
+    return NVL( System.getenv( "JDBC_DRIVER_SERVICE_URL" ),
+      System.getProperty( "JDBC_DRIVER_SERVICE_URL" ) );
+  }
+
+  /**
+   * Returns the full Keycloak token endpoint for the connection-management service
+   * (e.g. {@code https://keycloak.example.com/realms/pdi/protocol/openid-connect/token}).
+   * Used by the client-credentials flow to obtain a bearer token before calling
+   * {@code JDBC_DRIVER_SERVICE_URL}.
+   *
+   * <p>Resolution order (first non-blank value wins):
+   * <ol>
+   *   <li>OS environment variable {@code CMS_TOKEN_URL}</li>
+   *   <li>JVM system property {@code CMS_TOKEN_URL}</li>
+   *   <li>{@code null} — authentication is disabled.</li>
+   * </ol>
+   *
+   * @return the token endpoint URL, or {@code null} if not configured
+   */
+  public static String getCmsTokenUrl() {
+    return NVL( System.getenv( "CMS_TOKEN_URL" ),
+      System.getProperty( "CMS_TOKEN_URL" ) );
+  }
+
+  /**
+   * Returns the Keycloak client ID for the PDI service account.
+   *
+   * <p>Resolution order (first non-blank value wins):
+   * <ol>
+   *   <li>OS environment variable {@code CMS_CLIENT_ID}</li>
+   *   <li>JVM system property {@code CMS_CLIENT_ID}</li>
+   *   <li>{@code null} — authentication is disabled.</li>
+   * </ol>
+   *
+   * @return the client ID, or {@code null} if not configured
+   */
+  public static String getCmsClientId() {
+    return NVL( System.getenv( "CMS_CLIENT_ID" ),
+      System.getProperty( "CMS_CLIENT_ID" ) );
+  }
+
+  /**
+   * Returns the Keycloak client secret for the PDI service account.
+   *
+   * <p>Resolution order (first non-blank value wins):
+   * <ol>
+   *   <li>OS environment variable {@code CMS_CLIENT_SECRET}</li>
+   *   <li>JVM system property {@code CMS_CLIENT_SECRET}</li>
+   *   <li>{@code null} — authentication is disabled.</li>
+   * </ol>
+   *
+   * @return the client secret, or {@code null} if not configured
+   */
+  public static String getCmsClientSecret() {
+    return NVL( System.getenv( "CMS_CLIENT_SECRET" ),
+      System.getProperty( "CMS_CLIENT_SECRET" ) );
+  }
+
+  /**
+   * Returns the base URL of the Fusion secrets-management service
+   * (e.g. {@code https://secrets.example.com}). The full secret-retrieval
+   * URL is {@code <base>/api/v1/secrets/{secretsRef}}.
+   *
+   * <p>Resolution order (first non-blank value wins):
+   * <ol>
+   *   <li>OS environment variable {@code SECRETS_MANAGEMENT_URL}</li>
+   *   <li>JVM system property {@code SECRETS_MANAGEMENT_URL}</li>
+   *   <li>{@code null} — secret resolution via the vault is disabled.</li>
+   * </ol>
+   *
+   * @return the secrets-management service base URL (no trailing slash), or {@code null} if not configured
+   */
+  public static String getSecretsManagementUrl() {
+    return NVL( System.getenv( "SECRETS_MANAGEMENT_URL" ),
+      System.getProperty( "SECRETS_MANAGEMENT_URL" ) );
+  }
+
+  /**
+   * Indicates whether the Fusion connection-management service flow is enabled.
+   *
+   * <p>Resolution order (first non-blank value wins):
+   * <ol>
+   *   <li>OS environment variable {@code FUSION_CONNECTION_MANAGEMENT_ENABLED}</li>
+   *   <li>JVM system property {@code FUSION_CONNECTION_MANAGEMENT_ENABLED}</li>
+   *   <li>{@code false} if neither is set to {@code "true"} (case-insensitive).</li>
+   * </ol>
+   *
+   * @return {@code true} if the feature flag is explicitly set to {@code "true"}, otherwise {@code false}
+   */
+  public static boolean isFusionConnectionManagementEnabled() {
+    return Boolean.parseBoolean( NVL( System.getenv( "FUSION_CONNECTION_MANAGEMENT_ENABLED" ),
+      System.getProperty( "FUSION_CONNECTION_MANAGEMENT_ENABLED" ) ) );
   }
 
   /**
@@ -2096,6 +2741,15 @@ public class Const {
   }
 
   /**
+   * Returns the full path to the Kettle properties XML file.
+   *
+   * @return The Kettle properties file.
+   */
+  public static String getKettlePropertiesFilename() {
+    return Const.getKettleDirectory() + FILE_SEPARATOR + Const.KETTLE_PROPERTIES;
+  }
+
+  /**
    * Returns the path to the Kettle local (current directory) Carte password file:
    * <p>
    * ./pwd/kettle.pwd<br>
@@ -2127,6 +2781,15 @@ public class Const {
   }
 
   /**
+   * Provides the base wiki documentation url (top-level pentaho-community)
+   *
+   * @return the fully qualified base wiki documentation URL
+   */
+  public static String getBaseWikiDocUrl() {
+    return BaseMessages.getString( PKG, "Const.BaseWikiDocUrl" );
+  }
+
+  /**
    * Provides the documentation url with the configured base + the given URI.
    *
    * @param uri
@@ -2136,19 +2799,24 @@ public class Const {
    * @return the fully qualified documentation URL for the given URI
    */
   public static String getDocUrl( final String uri ) {
-    // initialize the docUrl to point to the top-level doc page
-    String docUrl = getBaseDocUrl();
+
+    // if the uri is not empty, use it to build the URL
     if ( !Utils.isEmpty( uri ) ) {
-      // if the uri is not empty, use it to build the URL
-      if ( uri.startsWith( "http" ) ) {
+      if ( uri.startsWith( WIKI_URL ) ) {
+        // if the link is to the old wiki replace it with the new wiki
+        String docWikiUrl = getBaseWikiDocUrl();
+        String wikiURL = uri.substring( WIKI_URL.length() );
+        return ( wikiURL.startsWith( "/" ) ? docWikiUrl + wikiURL.substring( 1 ) : docWikiUrl + wikiURL );
+      } else if ( uri.startsWith( "http" ) ) {
         // use what is provided, it's already absolute
-        docUrl = uri;
+        return uri;
       } else {
         // the uri provided needs to be assembled
-        docUrl = uri.startsWith( "/" ) ? docUrl + uri.substring( 1 ) : docUrl + uri;
+        String baseDocURL = getBaseDocUrl();
+        return ( uri.startsWith( "/" ) ? baseDocURL + uri.substring( 1 ) : baseDocURL + uri );
       }
     }
-    return docUrl;
+    return getBaseDocUrl();
   }
 
   /**
@@ -2253,6 +2921,22 @@ public class Const {
   }
 
   /**
+   * Implements Oracle style NVL function for generic arguments
+   *
+   * @param source
+   *          The source argument
+   * @param def
+   *          The default value in case source is null
+   * @return source if source is not null, otherwise return def
+   */
+  public static <T> T NVL( T source, T def ) {
+    if ( source == null ) {
+      return def;
+    }
+    return source;
+  }
+
+  /**
    * Return empty string "" in case the given parameter is null, otherwise return the same value.
    *
    * @param source
@@ -2261,7 +2945,7 @@ public class Const {
    */
   public static String nullToEmpty( String source ) {
     if ( source == null ) {
-      return "";
+      return EMPTY_STRING;
     }
     return source;
   }
@@ -2328,7 +3012,7 @@ public class Const {
     }
     int[] indexes = new int[indexesList.size()];
     for ( int i = 0; i < indexesList.size(); i++ ) {
-      indexes[i] = ( indexesList.get( i ) ).intValue();
+      indexes[i] = indexesList.get( i );
     }
     return indexes;
   }
@@ -2392,7 +3076,7 @@ public class Const {
     // System.out.println("splitString ["+path+"] using ["+separator+"]");
     List<String> list = new ArrayList<>();
 
-    if ( string == null || string.length() == 0 ) {
+    if ( string == null || string.isEmpty() ) {
       return new String[] {};
     }
 
@@ -2457,7 +3141,7 @@ public class Const {
     // System.out.println("splitString ["+path+"] using ["+separator+"]");
     List<String> list = new ArrayList<>();
 
-    if ( string == null || string.length() == 0 ) {
+    if ( string == null || string.isEmpty() ) {
       return new String[] {};
     }
 
@@ -2521,16 +3205,16 @@ public class Const {
     }
 
     int sepLen = separator.length();
-    int nr_separators = 1;
+    int nrSeparators = 1;
     int from = path.startsWith( separator ) ? sepLen : 0;
 
     for ( int i = from; i < path.length(); i += sepLen ) {
       if ( path.substring( i, i + sepLen ).equalsIgnoreCase( separator ) ) {
-        nr_separators++;
+        nrSeparators++;
       }
     }
 
-    String[] spath = new String[nr_separators];
+    String[] spath = new String[nrSeparators];
     int nr = 0;
     for ( int i = from; i < path.length(); i += sepLen ) {
       if ( path.substring( i, i + sepLen ).equalsIgnoreCase( separator ) ) {
@@ -2661,7 +3345,8 @@ public class Const {
             // and reset the "concatSplit" buffer. Otherwise continue
             addSplit = oddNumberOfEnclosures;
           }
-          if ( addSplit ) {
+          // Check if enclosure is also using inside data
+          if ( addSplit || numEnclosures > 2 ) {
             String splitResult = concatSplit.toString();
             //remove enclosure from resulting split
             if ( removeEnclosure ) {
@@ -2680,6 +3365,8 @@ public class Const {
     return splitList.toArray( new String[splitList.size()] );
   }
 
+  private static final String WIKI_URL = "http://wiki.pentaho.com";
+
   private static String removeEnclosure( String stringToSplit, String enclosure ) {
 
     int firstIndex = stringToSplit.indexOf( enclosure );
@@ -2687,7 +3374,7 @@ public class Const {
     if ( firstIndex == lastIndex ) {
       return stringToSplit;
     }
-    StrBuilder strBuilder = new StrBuilder( stringToSplit );
+    StringBuilder strBuilder = new StringBuilder( stringToSplit );
     strBuilder.replace( firstIndex, enclosure.length() + firstIndex, "" );
     strBuilder.replace( lastIndex - enclosure.length(), lastIndex, "" );
 
@@ -2948,8 +3635,22 @@ public class Const {
   }
 
   public static String createName( String filename ) {
+    return createName( DefaultBowl.getInstance() , filename );
+  }
+
+  public static String createName( Bowl bowl, String filename ) {
     if ( Utils.isEmpty( filename ) ) {
       return filename;
+    }
+
+    IKettleVFS vfs = KettleVFS.getInstance( bowl );
+    try {
+      FileName fname = vfs.resolveURI( filename );
+      if ( fname != null ) {
+        filename = fname.getPathDecoded();
+      }
+    } catch ( FileSystemException | KettleException ex ) {
+      // must not have been a vfs URI
     }
 
     String pureFilename = filenameOnly( filename );
@@ -3020,6 +3721,22 @@ public class Const {
       }
     }
     return dateFormats;
+  }
+
+  /**
+   * Returning the localized date conversion formats without time. They get created once on first request.
+   *
+   * @return
+   */
+  public static String[] getTimelessDateFormats() {
+    if ( dateTimelessFormats == null ) {
+      List<String> dateFormats = Arrays.asList( Const.getDateFormats() );
+      dateFormats = dateFormats.stream()
+        .filter( date -> !date.toLowerCase().contains( "hh" ) )
+        .collect( Collectors.toList() );
+      dateTimelessFormats = dateFormats.toArray( new String[dateFormats.size()] );
+    }
+    return dateTimelessFormats;
   }
 
   /**
@@ -3123,6 +3840,21 @@ public class Const {
       default:
         return string;
     }
+  }
+
+  /**
+   * Trims a Date by resetting the time part to zero
+   * @param date a Date object to trim (reset time to zero)
+   * @return a Date object with time part reset to zero
+   */
+  public static Date trimDate( Date date ) {
+    Calendar calendar = Calendar.getInstance();
+    calendar.setTime( date );
+    calendar.set( Calendar.MILLISECOND, 0 );
+    calendar.set( Calendar.SECOND, 0 );
+    calendar.set( Calendar.MINUTE, 0 );
+    calendar.set( Calendar.HOUR_OF_DAY, 0 );
+    return calendar.getTime();
   }
 
   /**
@@ -3256,7 +3988,7 @@ public class Const {
     if ( Utils.isEmpty( content ) ) {
       return content;
     }
-    return StringEscapeUtils.escapeXml( content );
+    return StringEscapeUtils.escapeXml11( content );
   }
 
   /**
@@ -3270,7 +4002,7 @@ public class Const {
     if ( Utils.isEmpty( content ) ) {
       return content;
     }
-    return StringEscapeUtils.escapeHtml( content );
+    return StringEscapeUtils.escapeHtml4( content );
   }
 
   /**
@@ -3284,7 +4016,7 @@ public class Const {
     if ( Utils.isEmpty( content ) ) {
       return content;
     }
-    return StringEscapeUtils.unescapeHtml( content );
+    return StringEscapeUtils.unescapeHtml4( content );
   }
 
   /**
@@ -3302,7 +4034,7 @@ public class Const {
   }
 
   /**
-   * Escape SQL content. i.e. replace characters with &values;
+   * Escape SQL content. Escapes single quotes by replacing them with two single quotes.
    *
    * @param content
    *          content
@@ -3312,7 +4044,8 @@ public class Const {
     if ( Utils.isEmpty( content ) ) {
       return content;
     }
-    return StringEscapeUtils.escapeSql( content );
+    // SQL escaping: replace single quotes with two single quotes
+    return content.replace( "'", "''" );
   }
 
   /**
@@ -3544,7 +4277,29 @@ public class Const {
     if ( Utils.isEmpty( content ) ) {
       return content;
     }
-    return StringEscapeUtils.escapeXml( content );
+    return StringEscapeUtils.escapeXml11( content );
+  }
+
+
+  /**
+   * Convert a string containing a URI with escaped special characters and return the decoded version depending on
+   * system property settings.
+   * @param uri
+   * @return decoded URI string
+   */
+  public static String optionallyDecodeUriString( String uri ) {
+    boolean decodeUri = !System.getProperty( KETTLE_RETURN_ESCAPED_URI_STRINGS, "N" )
+      .equalsIgnoreCase( "Y" );
+    if ( decodeUri ) {
+      try {
+        return UriParser.decode( uri );
+      } catch ( FileSystemException e ) {
+        // return the raw string if the URI is malformed (bad escape sequence)
+        return uri;
+      }
+    } else {
+      return uri;
+    }
   }
 
   /**

@@ -1,35 +1,28 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.salesforceupsert;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-
-import org.pentaho.di.core.util.Utils;
+import com.google.common.annotations.VisibleForTesting;
+import com.sforce.soap.partner.Field;
+import com.sforce.soap.partner.sobject.SObject;
+import com.sforce.ws.bind.XmlObject;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.core.row.RowDataUtil;
 import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
@@ -40,11 +33,11 @@ import org.pentaho.di.trans.steps.salesforce.SalesforceConnection;
 import org.pentaho.di.trans.steps.salesforce.SalesforceStep;
 import org.pentaho.di.trans.steps.salesforceutils.SalesforceUtils;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.sforce.soap.partner.sobject.SObject;
-import com.sforce.ws.bind.XmlObject;
-
 import javax.xml.namespace.QName;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 /**
  * Read data from Salesforce module, convert them to rows and writes these to one or more output streams.
@@ -57,6 +50,10 @@ public class SalesforceUpsert extends SalesforceStep {
 
   private SalesforceUpsertMeta meta;
   private SalesforceUpsertData data;
+
+  private static final String BOOLEAN = "boolean";
+  private static final String STRING = "string";
+  private static final String INT = "int";
 
   public SalesforceUpsert( StepMeta stepMeta, StepDataInterface stepDataInterface, int copyNr,
     TransMeta transMeta, Trans trans ) {
@@ -96,7 +93,8 @@ public class SalesforceUpsert extends SalesforceStep {
       // Create the output row meta-data
       data.inputRowMeta = getInputRowMeta().clone();
       data.outputRowMeta = data.inputRowMeta.clone();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+                      metaStore );
 
       // Build the mapping of input position to field name
       data.fieldnrs = new int[meta.getUpdateStream().length];
@@ -143,6 +141,9 @@ public class SalesforceUpsert extends SalesforceStep {
                 .getUseExternalId()[i] ) );
           } else {
             Object normalObject = normalizeValue( valueMeta, rowData[data.fieldnrs[i]] );
+            if ( data.mapData && data.dataTypeMap != null ) {
+              normalObject = mapDataTypes( valueMeta.getType(), meta.getUpdateLookup()[i], normalObject );
+            }
             upsertfields.add( SalesforceConnection.createMessageElement( meta.getUpdateLookup()[i], normalObject, meta
                 .getUseExternalId()[i] ) );
           }
@@ -310,6 +311,9 @@ public class SalesforceUpsert extends SalesforceStep {
     meta = (SalesforceUpsertMeta) smi;
     data = (SalesforceUpsertData) sdi;
 
+    // For https://jira.pentaho.com/browse/ESR-6833
+    data.mapData = "true".equalsIgnoreCase( System.getProperties().getProperty( "MAP_SALESFORCE_UPSERT_DATA_TYPES" ) );
+
     if ( super.init( smi, sdi ) ) {
 
       try {
@@ -322,6 +326,12 @@ public class SalesforceUpsert extends SalesforceStep {
         data.connection.setRollbackAllChangesOnError( meta.isRollbackAllChangesOnError() );
         // Now connect ...
         data.connection.connect();
+        if ( data.mapData ) { // check if user wants data mapping. If so, get the (fieldName --> dataType) mapping
+          Field[] fields = data.connection.getObjectFields( environmentSubstitute( meta.getModule() ) );
+          if ( fields != null ) {
+            data.dataTypeMap = mapDataTypesToFields( fields );
+          }
+        }
         return true;
       } catch ( KettleException ke ) {
         logError( BaseMessages.getString( PKG, "SalesforceUpsert.Log.ErrorOccurredDuringStepInitialize" )
@@ -341,5 +351,86 @@ public class SalesforceUpsert extends SalesforceStep {
       data.sfBuffer = null;
     }
     super.dispose( smi, sdi );
+  }
+
+  /**
+   * For https://jira.pentaho.com/browse/ESR-6833. Maps the field names to their data types
+   * @param fields - Array of fields to map
+   * @return - Map of field names to their data types
+   */
+  private Map<String, String> mapDataTypesToFields( Field[] fields ) {
+    Map<String, String> mappedFields = new HashMap<>();
+    for ( Field f : fields ) {
+      String fieldType = f.getType().toString();
+      if ( "base64".equalsIgnoreCase( fieldType ) || "date".equalsIgnoreCase( fieldType )
+        || "datetime".equalsIgnoreCase( fieldType  ) || INT.equalsIgnoreCase( fieldType )
+        || "double".equalsIgnoreCase( fieldType ) || BOOLEAN.equalsIgnoreCase( fieldType ) ) {
+        mappedFields.put( f.getName(), fieldType );
+      } else {
+        mappedFields.put( f.getName(), STRING );
+      }
+    }
+    return mappedFields;
+  }
+
+  /**
+   * For https://jira.pentaho.com/browse/ESR-6833. Attempts to map the data according to PDI version 6.1
+   * functionality.
+   * @param type - ValueMetaInteface data type.
+   * @param name - Salesforce Field name
+   * @param value - Data
+   * @return - Either original value OR a new data type to upsert to salesforce.
+   */
+  private Object mapDataTypes( int type, String name, Object value ) {
+    try { // if ClassCastException or any other Exception, just return value
+      switch ( type ) {
+        case ValueMetaInterface.TYPE_INTEGER: // If integer --> string OR if integer --> boolean, convert
+          if ( STRING.equalsIgnoreCase( data.dataTypeMap.get( name ) ) ) {
+            value = String.valueOf( value );
+          } else if ( BOOLEAN.equalsIgnoreCase( data.dataTypeMap.get( name ) ) ) {
+            int i = (int) value;
+            if ( i == 0 || i == 1 ) { // Only values 0 or 1 are valid. 0: false, 1: true
+              value = i == 1;
+            }
+          }
+          break;
+        case ValueMetaInterface.TYPE_BOOLEAN: // If boolean --> string, convert
+          if ( STRING.equalsIgnoreCase( data.dataTypeMap.get( name ) ) ) {
+            value = String.valueOf( value );
+          }
+          break;
+        case ValueMetaInterface.TYPE_NUMBER: // If number --> string OR number --> boolean, convert
+          if ( STRING.equalsIgnoreCase( data.dataTypeMap.get( name ) ) ) {
+            value = String.valueOf( value );
+          } else if ( BOOLEAN.equalsIgnoreCase( data.dataTypeMap.get( name ) ) ) {
+            Double d = (Double) value;
+            if ( 0 <= d && d < 2 ) { // 0: false, 1: true
+              value = d.intValue() == 1;
+            }
+          }
+          break;
+        case ValueMetaInterface.TYPE_STRING: // If string --> integer OR string --> boolean, convert
+          if ( INT.equalsIgnoreCase( data.dataTypeMap.get( name ) ) ) {
+            value = Integer.valueOf( (String) value );
+          } else if ( BOOLEAN.equalsIgnoreCase( data.dataTypeMap.get( name ) ) ) {
+            if ( "true".equalsIgnoreCase( (String) value ) || "false".equalsIgnoreCase( (String) value ) ) {
+              value = Boolean.valueOf( (String) value );
+            } else if ( !( (String) value ).startsWith( "-" ) ) {
+              Double d = Double.parseDouble( (String) value );
+              if ( 0 <= d && d < 2 ) { // 0: false, 1: true
+                value = d.intValue() == 1;
+              }
+            }
+          }
+          break;
+        case ValueMetaInterface.TYPE_DATE:
+          break;
+        default:
+          break;
+      }
+    } catch ( Exception e ) {
+      // do nothing. just return value
+    }
+    return value;
   }
 }

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.msaccessbulkload;
 
@@ -36,7 +28,6 @@ import java.util.regex.Pattern;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.annotations.JobEntry;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.core.ResultFile;
@@ -60,6 +51,8 @@ import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
 
 import com.healthmarketscience.jackcess.Database;
+import com.healthmarketscience.jackcess.DatabaseBuilder;
+import com.healthmarketscience.jackcess.util.ImportUtil;
 
 /**
  * This defines a 'MS Access Bulk Load' job entry. It will compare to load data from files into Microsoft Access files
@@ -69,11 +62,12 @@ import com.healthmarketscience.jackcess.Database;
  *
  */
 
-@JobEntry( id = "MS_ACCESS_BULK_LOAD", image = "ui/images/deprecated.svg",
-  suggestion = "JobEntryMSAccessBulkLoad.SuggestedEntry",
-  categoryDescription = "i18n:org.pentaho.di.job:JobCategory.Category.Deprecated",
-  i18nPackageName = "org.pentaho.di.job.entries.msaccessbulkload",
-  name = "JobEntryMSAccessBulkLoad.Name.Default", description = "JobEntryMSAccessBulkLoad.Tooltip" )
+// BACKLOG-38582 Remove specific deprecated steps and job entries from PDI, Please uncomment to enable plugin if needed.
+//@JobEntry( id = "MS_ACCESS_BULK_LOAD", image = "ui/images/deprecated.svg",
+//  suggestion = "JobEntryMSAccessBulkLoad.SuggestedEntry",
+//  categoryDescription = "i18n:org.pentaho.di.job:JobCategory.Category.Deprecated",
+//  i18nPackageName = "org.pentaho.di.job.entries.msaccessbulkload",
+//  name = "JobEntryMSAccessBulkLoad.Name.Default", description = "JobEntryMSAccessBulkLoad.Tooltip" )
 public class JobEntryMSAccessBulkLoad extends JobEntryBase implements Cloneable, JobEntryInterface {
   private static Class<?> PKG = JobEntryMSAccessBulkLoad.class; // for i18n purposes, needed by Translator2!!
 
@@ -270,8 +264,8 @@ public class JobEntryMSAccessBulkLoad extends JobEntryBase implements Cloneable,
   private void addFileToResultFilenames( String fileaddentry, Result result, Job parentJob ) {
     try {
       ResultFile resultFile =
-        new ResultFile( ResultFile.FILE_TYPE_GENERAL, KettleVFS.getFileObject( fileaddentry, this ), parentJob
-          .getJobname(), toString() );
+        new ResultFile( ResultFile.FILE_TYPE_GENERAL, KettleVFS.getInstance( parentJobMeta.getBowl() )
+          .getFileObject( fileaddentry, this ), parentJob.getJobname(), toString() );
       result.getResultFiles().put( resultFile.getFile().toString(), resultFile );
 
       if ( log.isDebug() ) {
@@ -392,28 +386,25 @@ public class JobEntryMSAccessBulkLoad extends JobEntryBase implements Cloneable,
 
       File sourceDataFile = new File( sourceFilename );
       File targetDbFile = new File( targetFilename );
+      boolean dbAlreadyExists = targetDbFile.exists();
 
-      // create database if needed
-      if ( !targetDbFile.exists() ) {
-        Database.create( targetDbFile );
-        logBasic( BaseMessages.getString( PKG, "JobEntryMSAccessBulkLoad.Log.DbCreated", targetFilename ) );
-      } else {
-        // Database exists
-        Database db = Database.open( targetDbFile );
-        logBasic( BaseMessages.getString( PKG, "JobEntryMSAccessBulkLoad.Log.DbOpened", targetFilename ) );
-        // Let's check table
-        if ( db.getTable( tablename ) != null ) {
-          logBasic( BaseMessages.getString( PKG, "JobEntryMSAccessBulkLoad.Log.TableExists", tablename ) );
+      try ( Database db = dbAlreadyExists ? DatabaseBuilder.open( targetDbFile )
+        : new DatabaseBuilder( targetDbFile ).setFileFormat( Database.FileFormat.V2000 ).create() ) {
+        if ( !dbAlreadyExists ) {
+          logBasic( BaseMessages.getString( PKG, "JobEntryMSAccessBulkLoad.Log.DbCreated", targetFilename ) );
+        } else {
+          // Database exists
+          logBasic( BaseMessages.getString( PKG, "JobEntryMSAccessBulkLoad.Log.DbOpened", targetFilename ) );
+          // Let's check table
+          if ( db.getTable( tablename ) != null ) {
+            logBasic( BaseMessages.getString( PKG, "JobEntryMSAccessBulkLoad.Log.TableExists", tablename ) );
+          }
         }
 
-        // close database
-        if ( db != null ) {
-          db.close();
-        }
-        logBasic( BaseMessages.getString( PKG, "JobEntryMSAccessBulkLoad.Log.DbCosed", targetFilename ) );
+        ImportUtil.importFile( sourceDataFile, db, tablename, delimiter );
       }
-      // load data from file
-      Database.open( targetDbFile ).importFile( tablename, sourceDataFile, delimiter );
+
+      logBasic( BaseMessages.getString( PKG, "JobEntryMSAccessBulkLoad.Log.DbClosed", targetFilename ) );
 
       logBasic( BaseMessages.getString(
         PKG, "JobEntryMSAccessBulkLoad.Log.FileImported", sourceFilename, tablename, targetFilename ) );
@@ -557,7 +548,7 @@ public class JobEntryMSAccessBulkLoad extends JobEntryBase implements Cloneable,
 
   public void check( List<CheckResultInterface> remarks, JobMeta jobMeta, VariableSpace space,
     Repository repository, IMetaStore metaStore ) {
-    boolean res = andValidator().validate( this, "arguments", remarks, putValidators( notNullValidator() ) );
+    boolean res = andValidator().validate( jobMeta.getBowl(), this, "arguments", remarks, putValidators( notNullValidator() ) );
 
     if ( res == false ) {
       return;
@@ -568,7 +559,7 @@ public class JobEntryMSAccessBulkLoad extends JobEntryBase implements Cloneable,
     putValidators( ctx, notNullValidator(), fileExistsValidator() );
 
     for ( int i = 0; i < source_filefolder.length; i++ ) {
-      andValidator().validate( this, "arguments[" + i + "]", remarks, ctx );
+      andValidator().validate( jobMeta.getBowl(), this, "arguments[" + i + "]", remarks, ctx );
     }
   }
 

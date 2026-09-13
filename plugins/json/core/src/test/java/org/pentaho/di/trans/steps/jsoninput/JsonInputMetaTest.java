@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.jsoninput;
 
@@ -26,7 +18,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleXMLException;
@@ -40,12 +33,6 @@ import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.Collections;
@@ -53,10 +40,20 @@ import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 /**
  * Created by bmorrise on 3/22/16.
  */
-@RunWith( MockitoJUnitRunner.class )
+@RunWith( MockitoJUnitRunner.StrictStubs.class )
 public class JsonInputMetaTest {
   private static final List<DatabaseMeta> DATABASES_LIST = Collections.emptyList();
   public static final String DATA = "data";
@@ -91,6 +88,7 @@ public class JsonInputMetaTest {
 
   @Before
   public void setup() {
+    System.clearProperty( Const.KETTLE_JSON_INPUT_INCLUDE_NULLS );
     jsonInputMeta = new JsonInputMeta();
     jsonInputMeta.setInputFiles( inputFiles );
     jsonInputMeta.setInputFields( new JsonInputField[] { inputField } );
@@ -107,7 +105,7 @@ public class JsonInputMetaTest {
 
     when( rowMeta.indexOfValue( DATA ) ).thenReturn( 0 );
 
-    jsonInputMeta.getFields( rowMeta, NAME, info, nextStep, space, repository, metaStore );
+    jsonInputMeta.getFields( DefaultBowl.getInstance(), rowMeta, NAME, info, nextStep, space, repository, metaStore );
 
     verify( rowMeta ).removeValueMeta( 0 );
   }
@@ -115,10 +113,12 @@ public class JsonInputMetaTest {
   @Test
   public void verifyReadingRepoSetsAcceptFilenames() throws Exception {
     ObjectId objectId = () -> "id";
+    when( repository.getStepAttributeBoolean( eq(objectId), anyString() ) ).thenReturn( false );
+    when( repository.getStepAttributeBoolean( eq(objectId), anyInt(), anyString(), anyBoolean()) ).thenReturn( false );
     when( repository.getStepAttributeBoolean( objectId, "IsInFields" ) ).thenReturn( true );
     jsonInputMeta.readRep( repository, null, objectId, null );
-   assertTrue( jsonInputMeta.isInFields() );
-   assertTrue( jsonInputMeta.inputFiles.acceptingFilenames );
+    assertTrue( jsonInputMeta.isInFields() );
+    assertTrue( jsonInputMeta.inputFiles.acceptingFilenames );
   }
 
   @Test
@@ -176,5 +176,54 @@ public class JsonInputMetaTest {
       xml = CLEAN_NODES.matcher( xml ).replaceAll( "" );
       return xml;
     }
+  }
+
+  @Test
+  public void testDefaultWithoutIncludeNulls() throws KettleXMLException {
+    jsonInputMeta = new JsonInputMeta();
+    jsonInputMeta.loadXML( loadStep( "step_defaultWithoutIncludeNulls.xml" ), DATABASES_LIST, metaStore );
+    assertFalse( jsonInputMeta.isIncludeNulls() );
+  }
+
+  @Test
+  public void testDefaultWithIncludeNulls_Y() throws KettleXMLException {
+    jsonInputMeta = new JsonInputMeta();
+    jsonInputMeta.loadXML( loadStep( "step_defaultWithIncludeNulls_Y.xml" ), DATABASES_LIST, metaStore );
+    assertTrue( jsonInputMeta.isIncludeNulls() );
+  }
+
+  @Test
+  public void testDefaultWithIncludeNulls_N() throws KettleXMLException {
+    jsonInputMeta = new JsonInputMeta();
+    jsonInputMeta.loadXML( loadStep( "step_default.xml" ), DATABASES_LIST, metaStore );
+    assertFalse( jsonInputMeta.isIncludeNulls() );
+  }
+
+  @Test
+  public void testDefaultWithoutIncludeNullsWithSystemProperty_Y() throws KettleXMLException {
+    System.setProperty( Const.KETTLE_JSON_INPUT_INCLUDE_NULLS, "Y" );
+    jsonInputMeta = new JsonInputMeta();
+    jsonInputMeta.loadXML( loadStep( "step_defaultWithoutIncludeNulls.xml" ), DATABASES_LIST, metaStore );
+    assertTrue( jsonInputMeta.isIncludeNulls() );
+  }
+
+  @Test
+  public void testDefaultWithoutIncludeNullsWithSystemProperty_N() throws KettleXMLException {
+    System.setProperty( Const.KETTLE_JSON_INPUT_INCLUDE_NULLS, "N" );
+    jsonInputMeta = new JsonInputMeta();
+    jsonInputMeta.loadXML( loadStep( "step_defaultWithoutIncludeNulls.xml" ), DATABASES_LIST, metaStore );
+    assertFalse( jsonInputMeta.isIncludeNulls() );
+  }
+
+  @Test
+  public void testGetIncludeNullsProperty_Y() {
+    System.setProperty( Const.KETTLE_JSON_INPUT_INCLUDE_NULLS, "Y" );
+    assertTrue( JsonInputMeta.getIncludeNullsProperty() );
+  }
+
+  @Test
+  public void testGetIncludeNullsProperty_N() {
+    System.setProperty( Const.KETTLE_JSON_INPUT_INCLUDE_NULLS, "N" );
+    assertFalse( JsonInputMeta.getIncludeNullsProperty() );
   }
 }

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.core.widget.tree;
 
@@ -27,6 +19,7 @@ import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.Image;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +27,7 @@ import java.util.Map;
 /**
  * Created by bmorrise on 6/27/18.
  */
-public class TreeNode {
+public class TreeNode implements Comparable<TreeNode> {
   private String label;
   private Image image;
   private List<TreeNode> children = new ArrayList<>();
@@ -61,6 +54,10 @@ public class TreeNode {
 
   public void addChild( TreeNode treeNode ) {
     children.add( treeNode );
+    Collections.sort( children );
+    for ( int i = 0; i < children.size(); i++ ) {
+      children.get( i ).setIndex( i );
+    }
   }
 
   public boolean hasChildren() {
@@ -142,4 +139,11 @@ public class TreeNode {
   public void setIndex( int index ) {
     this.index = index;
   }
+
+  // subclasses could overwrite this.
+  @Override
+  public int compareTo(TreeNode other) {
+    return String.CASE_INSENSITIVE_ORDER.compare( getLabel(), other.getLabel() );
+  }
 }
+

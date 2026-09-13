@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.xmlinputstream;
 
@@ -171,7 +163,8 @@ public class XMLInputStream extends BaseStep implements StepInterface {
     } else {
       data.previousFieldsNumber = getInputRowMeta().size();
       data.finalOutputRowMeta = getInputRowMeta().clone();
-      meta.getFields( data.finalOutputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.finalOutputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
     }
   }
 
@@ -181,7 +174,8 @@ public class XMLInputStream extends BaseStep implements StepInterface {
       if ( data.filenr >= data.filenames.length ) {
         return false;
       }
-      data.fileObject = KettleVFS.getFileObject( data.filenames[data.filenr], getTransMeta() );
+      data.fileObject = KettleVFS.getInstance( getTransMeta().getBowl() )
+        .getFileObject( data.filenames[data.filenr], getTransMeta() );
       data.inputStream = KettleVFS.getInputStream( data.fileObject );
       data.xmlEventReader = data.staxInstance.createXMLEventReader( data.inputStream, data.encoding );
     } catch ( IOException e ) {
@@ -490,7 +484,6 @@ public class XMLInputStream extends BaseStep implements StepInterface {
   }
 
   // Namespaces: put an extra row out for each namespace
-  @SuppressWarnings( "unchecked" )
   private Object[] parseNamespaces( Object[] outputRowData, XMLEvent e ) throws KettleValueException,
     KettleStepException {
     Iterator<Namespace> iter = e.asStartElement().getNamespaces();
@@ -523,7 +516,6 @@ public class XMLInputStream extends BaseStep implements StepInterface {
   }
 
   // Attributes: put an extra row out for each attribute
-  @SuppressWarnings( "unchecked" )
   private Object[] parseAttributes( Object[] outputRowData, XMLEvent e ) throws KettleValueException,
     KettleStepException {
     Iterator<Attribute> iter = e.asStartElement().getAttributes();
@@ -613,6 +605,7 @@ public class XMLInputStream extends BaseStep implements StepInterface {
 
     if ( super.init( smi, sdi ) ) {
       data.staxInstance = XMLInputFactory.newInstance(); // could select the parser later on
+      data.staxInstance.setProperty( "javax.xml.stream.isCoalescing", false );
       data.filenr = 0;
       if ( getTransMeta().findNrPrevSteps( getStepMeta() ) == 0 && !meta.sourceFromInput ) {
         String filename = environmentSubstitute( meta.getFilename() );
@@ -631,7 +624,8 @@ public class XMLInputStream extends BaseStep implements StepInterface {
       data.encoding = this.environmentSubstitute( meta.getEncoding() );
 
       data.outputRowMeta = new RowMeta();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+                      metaStore );
 
       // get and save field positions
       data.pos_xml_filename = data.outputRowMeta.indexOfValue( meta.getFilenameField() );

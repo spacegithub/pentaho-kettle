@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.spoon.trans;
 
@@ -55,6 +47,7 @@ import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepMetaDataCombi;
 import org.pentaho.di.ui.core.PropsUI;
 import org.pentaho.di.ui.core.dialog.ErrorDialog;
+import org.pentaho.di.ui.core.dialog.Splash;
 import org.pentaho.di.ui.core.gui.GUIResource;
 import org.pentaho.di.ui.core.widget.ColumnInfo;
 import org.pentaho.di.ui.core.widget.TableView;
@@ -332,6 +325,7 @@ public class TransPreviewDelegate extends SpoonDelegate implements XulEventHandl
       }
       for ( int colNr = 0; colNr < rowMeta.size(); colNr++ ) {
         int dataIndex = dataRowMeta.indexOfValue( rowMeta.getValueMeta( colNr ).getName() );
+        dataIndex = dataIndex < 0 ? colNr : dataIndex;
         String string;
         ValueMetaInterface valueMetaInterface;
         try {
@@ -349,7 +343,7 @@ public class TransPreviewDelegate extends SpoonDelegate implements XulEventHandl
           item.setText( colNr + 1, "<null>" );
           item.setForeground( colNr + 1, GUIResource.getInstance().getColorBlue() );
         } else {
-          item.setText( colNr + 1, string );
+          item.setText( colNr + 1, Splash.isMacOS() ? string.replace( "\n", "" ) : string );
         }
       }
     }
@@ -462,11 +456,11 @@ public class TransPreviewDelegate extends SpoonDelegate implements XulEventHandl
     previewMetaMap.clear();
     previewDataMap.clear();
 
-    try {
-      final TransMeta transMeta = trans.getTransMeta();
 
-      for ( final StepMeta stepMeta : stepMetas ) {
+    final TransMeta transMeta = trans.getTransMeta();
 
+    for ( final StepMeta stepMeta : stepMetas ) {
+      try {
         final RowMetaInterface rowMeta = transMeta.getStepFields( stepMeta ).clone();
         previewMetaMap.put( stepMeta, rowMeta );
         final List<RowMetaAndData> rowsData;
@@ -516,10 +510,9 @@ public class TransPreviewDelegate extends SpoonDelegate implements XulEventHandl
               break;
           }
         }
-
+      } catch ( Exception e ) {
+        loggingText.append( Const.getStackTracker( e ) );
       }
-    } catch ( Exception e ) {
-      loggingText.append( Const.getStackTracker( e ) );
     }
 
     // In case there were errors during preview...

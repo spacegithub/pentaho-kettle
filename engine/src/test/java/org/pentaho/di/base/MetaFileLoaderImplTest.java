@@ -1,0 +1,482 @@
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
+package org.pentaho.di.base;
+
+import org.pentaho.di.core.Const;
+import org.pentaho.di.core.KettleClientEnvironment;
+import org.pentaho.di.core.ObjectLocationSpecificationMethod;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.bowl.DefaultBowl;
+import org.pentaho.di.core.logging.LogChannelInterface;
+import org.pentaho.di.core.variables.VariableSpace;
+import org.pentaho.di.core.variables.Variables;
+import org.pentaho.di.job.Job;
+import org.pentaho.di.job.JobMeta;
+import org.pentaho.di.job.entries.job.JobEntryJob;
+import org.pentaho.di.job.entries.trans.JobEntryTrans;
+import org.pentaho.di.job.entry.JobEntryBase;
+import org.pentaho.di.repository.Repository;
+import org.pentaho.di.repository.RepositoryDirectoryInterface;
+import org.pentaho.di.trans.TransMeta;
+import org.pentaho.di.trans.step.BaseStepMeta;
+import org.pentaho.di.trans.step.StepMeta;
+import org.pentaho.di.trans.steps.jobexecutor.JobExecutorMeta;
+import org.pentaho.di.trans.steps.transexecutor.TransExecutorMeta;
+import org.pentaho.metastore.api.IMetaStore;
+
+import java.io.File;
+import java.nio.file.Paths;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.junit.MockitoJUnitRunner;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
+
+@RunWith( MockitoJUnitRunner.class )
+public class MetaFileLoaderImplTest {
+  private final String JOB_FILE = "one-step-job.kjb";
+  private final String TRANS_FILE = "one-step-trans.ktr";
+
+  private final Repository repository = mock( Repository.class );
+  private final RepositoryDirectoryInterface rdi = mock( RepositoryDirectoryInterface.class );
+  private final IMetaStore store = mock( IMetaStore.class );
+  private VariableSpace space;
+
+  private String targetMetaName;
+  private MetaFileCacheImpl metaFileCache;
+  private JobEntryBase jobEntryBase;
+  private BaseStepMeta baseStepMeta;
+  private ObjectLocationSpecificationMethod specificationMethod;
+  private String keyPath; //The absolute path used as part of the cachekey
+  private String oldSystemParam;
+
+  @Before
+  public void setUp() throws Exception {
+    oldSystemParam = System.getProperty( Const.KETTLE_USE_META_FILE_CACHE );
+    System.setProperty( Const.KETTLE_USE_META_FILE_CACHE, "Y" );
+    KettleClientEnvironment.init();
+  }
+
+  @After
+  public void tearDown() {
+    System.setProperty( Const.KETTLE_USE_META_FILE_CACHE, null == oldSystemParam ? "" : oldSystemParam );
+    // NOTE: Removed KettleClientEnvironment.reset() as this is a pure unit test for file loading, not global initialization.
+    // Calling reset() causes PluginRegistry to be cleared globally, which corrupts extension-point type registration 
+    // for subsequent tests in the same JVM (e.g., PanCommandExecutorTest). Since this test only calls init() in setUp,
+    // no cleanup is necessary.
+  }
+
+  @Test
+  //A job getting the JobMeta from the fileSystem
+  public void getMetaForEntryAsJobFromFileSystemTest() throws Exception {
+    setupJobEntryJob();
+    specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
+    MetaFileLoaderImpl metaFileLoader = new MetaFileLoaderImpl<JobMeta>( jobEntryBase, specificationMethod );
+    JobMeta jobMeta = (JobMeta) metaFileLoader.getMetaForEntry( DefaultBowl.getInstance(), repository, store, space );
+
+    validateFirstJobMetaAccess( jobMeta );
+    jobMeta = (JobMeta) metaFileLoader.getMetaForEntry( DefaultBowl.getInstance(), repository, store, space );
+    validateSecondJobMetaAccess( jobMeta );
+  }
+
+  @Test
+  //A job getting the JobMeta from the repo
+  public void getMetaForEntryAsJobFromRepoTest() throws Exception {
+    setupJobEntryJob();
+    specificationMethod = ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME;
+    MetaFileLoaderImpl metaFileLoader = new MetaFileLoaderImpl<JobMeta>( jobEntryBase, specificationMethod );
+    JobMeta jobMeta = (JobMeta) metaFileLoader.getMetaForEntry( DefaultBowl.getInstance(), repository, store, space );
+
+    validateFirstJobMetaAccess( jobMeta );
+    jobMeta = (JobMeta) metaFileLoader.getMetaForEntry( DefaultBowl.getInstance(), repository, store, space );
+    validateSecondJobMetaAccess( jobMeta );
+  }
+
+  @Test
+  //A job getting the TransMeta from the fileSystem
+  public void getMetaForEntryAsTransFromFileSystemTest() throws Exception {
+    setupJobEntryTrans();
+    specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
+    MetaFileLoaderImpl metaFileLoader = new MetaFileLoaderImpl<TransMeta>( jobEntryBase, specificationMethod );
+    TransMeta transMeta = (TransMeta) metaFileLoader.getMetaForEntry( DefaultBowl.getInstance(), repository, store,
+      space );
+
+    validateFirstTransMetaAccess( transMeta );
+    transMeta = (TransMeta) metaFileLoader.getMetaForEntry( DefaultBowl.getInstance(), repository, store, space );
+    validateSecondTransMetaAccess( transMeta );
+  }
+
+  @Test
+  //A job getting the TransMeta from the repo
+  public void getMetaForEntryAsTransFromRepoTest() throws Exception {
+    setupJobEntryTrans();
+    specificationMethod = ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME;
+    MetaFileLoaderImpl metaFileLoader = new MetaFileLoaderImpl<TransMeta>( jobEntryBase, specificationMethod );
+    TransMeta transMeta = (TransMeta) metaFileLoader.getMetaForEntry( DefaultBowl.getInstance(), repository, store,
+      space );
+
+    validateFirstTransMetaAccess( transMeta );
+    transMeta = (TransMeta) metaFileLoader.getMetaForEntry( DefaultBowl.getInstance(), repository, store, space );
+    validateSecondTransMetaAccess( transMeta );
+  }
+
+  @Test
+  //A Transformation getting the jobMeta from the filesystem
+  public void getMetaForStepAsJobFromFileSystemTest() throws Exception {
+    setupJobExecutorMeta();
+    specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
+    when( repository.getBowl() ).thenReturn( DefaultBowl.getInstance() );
+    MetaFileLoaderImpl metaFileLoader = new MetaFileLoaderImpl<JobMeta>( baseStepMeta, specificationMethod );
+    JobMeta jobMeta = (JobMeta) metaFileLoader.getMetaForStep( DefaultBowl.getInstance(), repository, store, space );
+    validateFirstJobMetaAccess( jobMeta );
+    jobMeta = (JobMeta) metaFileLoader.getMetaForStep( DefaultBowl.getInstance(), repository, store, space );
+    validateSecondJobMetaAccess( jobMeta );
+  }
+
+  @Test
+  //A Transformation getting the jobMeta from the repo
+  public void getMetaForStepAsJobFromRepoTest() throws Exception {
+    setupJobExecutorMeta();
+    specificationMethod = ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME;
+    MetaFileLoaderImpl metaFileLoader = new MetaFileLoaderImpl<JobMeta>( baseStepMeta, specificationMethod );
+    JobMeta jobMeta = (JobMeta) metaFileLoader.getMetaForStep( DefaultBowl.getInstance(), repository, store, space );
+    validateFirstJobMetaAccess( jobMeta );
+    jobMeta = (JobMeta) metaFileLoader.getMetaForStep( DefaultBowl.getInstance(), repository, store, space );
+    validateSecondJobMetaAccess( jobMeta );
+  }
+
+  @Test
+  //A Transformation getting the TransMeta from the file system
+  public void getMetaForStepAsTransFromFileSystemTest() throws Exception {
+    setupTransExecutorMeta();
+    specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
+    MetaFileLoaderImpl metaFileLoader = new MetaFileLoaderImpl<TransMeta>( baseStepMeta, specificationMethod );
+    TransMeta transMeta = (TransMeta) metaFileLoader.getMetaForStep( DefaultBowl.getInstance(), repository, store, space );
+    validateFirstTransMetaAccess( transMeta );
+    transMeta = (TransMeta) metaFileLoader.getMetaForStep( DefaultBowl.getInstance(), repository, store, space );
+    validateSecondTransMetaAccess( transMeta );
+  }
+
+  @Test
+  //A Transformation getting the TransMeta from the repo
+  public void getMetaForStepAsTransFromRepoTest() throws Exception {
+    setupTransExecutorMeta();
+    specificationMethod = ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME;
+    MetaFileLoaderImpl metaFileLoader = new MetaFileLoaderImpl<TransMeta>( baseStepMeta, specificationMethod );
+    TransMeta transMeta = (TransMeta) metaFileLoader.getMetaForStep( DefaultBowl.getInstance(), repository, store, space );
+    validateFirstTransMetaAccess( transMeta );
+    transMeta = (TransMeta) metaFileLoader.getMetaForStep( DefaultBowl.getInstance(), repository, store, space );
+    validateSecondTransMetaAccess( transMeta );
+  }
+
+  @Test
+  //A Transformation getting the TransMeta from the vfs file system but connected to repo
+  public void getMetaForStepAsTransFromVfsButConnectedToRepo() throws Exception {
+    setupTransExecutorMeta();
+    when( repository.loadTransformation( any( Bowl.class ), eq( TRANS_FILE ), eq( rdi ), eq( null ), eq( true ), eq( null ), any( VariableSpace.class ) ) ).thenReturn( null );
+    specificationMethod = ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME;
+    MetaFileLoaderImpl metaFileLoader = new MetaFileLoaderImpl<TransMeta>( baseStepMeta, specificationMethod );
+    TransMeta transMeta = (TransMeta) metaFileLoader.getMetaForStep( DefaultBowl.getInstance(), repository, store, space );
+    validateFirstTransMetaAccess( transMeta );
+    transMeta = (TransMeta) metaFileLoader.getMetaForStep( DefaultBowl.getInstance(), repository, store, space );
+    validateSecondTransMetaAccess( transMeta );
+  }
+
+  private void validateMetaName( String fileNameWithExtension, AbstractMeta meta ) {
+    assertEquals( stripExtension( fileNameWithExtension ), meta.getName() );
+  }
+
+  private String stripExtension( String fileNameWithExtension ) {
+    return fileNameWithExtension.substring( 0, fileNameWithExtension.lastIndexOf( "." ) );
+  }
+
+  private void setupJobEntryJob() throws Exception {
+    JobEntryJob jobEntryJob = new JobEntryJob();
+    jobEntryBase = jobEntryJob;
+    JobMeta parentJobMeta = spy( new JobMeta() );
+    LogChannelInterface logger = mock( LogChannelInterface.class );
+    metaFileCache = new MetaFileCacheImpl( logger );
+    parentJobMeta.setMetaFileCache( metaFileCache );
+    jobEntryJob.setParentJobMeta( parentJobMeta );
+    keyPath = getClass().getResource( JOB_FILE ).getPath();
+    jobEntryJob.setFileName( keyPath );
+    Job job = new Job();
+    space = job;
+    jobEntryJob.setParentJob( job );
+
+    targetMetaName = JOB_FILE;
+    jobEntryJob.setJobName( targetMetaName );
+
+    //repo stuff
+    keyPath = convertToRepoKeyPath( keyPath );
+    jobEntryJob.setDirectory( keyPath.substring( 0, keyPath.lastIndexOf( "/" ) ) );
+    jobEntryJob.setJobObjectId( null );
+    when( rdi.findDirectory( jobEntryJob.getDirectory() ) ).thenReturn( rdi );
+    when( repository.loadRepositoryDirectoryTree() ).thenReturn( rdi );
+    JobMeta jobMeta = new JobMeta();
+    jobMeta.setName( stripExtension( JOB_FILE ) );
+    when( repository.loadJob( eq( JOB_FILE ), eq( rdi ), eq( null ), eq( null ), any( VariableSpace.class ) ) ).thenReturn( jobMeta );
+  }
+
+  private String convertToRepoKeyPath( String fileKeyPath ) {
+    String keyPath = fileKeyPath.replace( File.separator, "/" );
+    return keyPath;
+  }
+
+  private void setupJobEntryTrans() throws Exception {
+    JobEntryTrans jobEntryTrans = new JobEntryTrans();
+    jobEntryBase = jobEntryTrans;
+    JobMeta parentJobMeta = spy( new JobMeta() );
+    LogChannelInterface logger = mock( LogChannelInterface.class );
+    metaFileCache = new MetaFileCacheImpl( logger );
+    parentJobMeta.setMetaFileCache( metaFileCache );
+    jobEntryTrans.setParentJobMeta( parentJobMeta );
+    keyPath = getClass().getResource( TRANS_FILE ).getPath();
+    jobEntryTrans.setFileName( keyPath );
+    Job job = new Job();
+    space = job;
+    jobEntryTrans.setParentJob( job );
+
+    targetMetaName = TRANS_FILE;
+    jobEntryTrans.setTransname( targetMetaName );
+    jobEntryTrans.setTransObjectId( null );
+
+    //repo stuff
+    keyPath = convertToRepoKeyPath( keyPath );
+    jobEntryTrans.setDirectory( keyPath.substring( 0, keyPath.lastIndexOf( "/" ) ) );
+    jobEntryTrans.setTransObjectId( null );
+    RepositoryDirectoryInterface rdi = mock( RepositoryDirectoryInterface.class );
+    when( rdi.findDirectory( jobEntryTrans.getDirectory() ) ).thenReturn( rdi );
+    when( repository.loadRepositoryDirectoryTree() ).thenReturn( rdi );
+    TransMeta transMeta = new TransMeta();
+    transMeta.setName( stripExtension( TRANS_FILE ) );
+    when( repository.loadTransformation( any( Bowl.class ), eq( TRANS_FILE ), eq( rdi ), eq( null ), eq( true ), eq( null ), any( VariableSpace.class ) ) ).thenReturn( transMeta );
+  }
+
+  private void setupJobExecutorMeta() throws Exception {
+    JobExecutorMeta jobExecutorMeta = new JobExecutorMeta();
+    baseStepMeta = jobExecutorMeta;
+    TransMeta parentTransMeta = spy( new TransMeta() );
+    LogChannelInterface logger = mock( LogChannelInterface.class );
+    metaFileCache = new MetaFileCacheImpl( logger );
+    parentTransMeta.setMetaFileCache( metaFileCache );
+    StepMeta stepMeta = new StepMeta();
+    stepMeta.setParentTransMeta( parentTransMeta );
+    jobExecutorMeta.setParentStepMeta( stepMeta );
+    keyPath = getClass().getResource( JOB_FILE ).getPath();
+    jobExecutorMeta.setFileName( keyPath );
+    Job job = new Job();
+    space = job;
+
+    targetMetaName = JOB_FILE;
+    jobExecutorMeta.setJobName( targetMetaName );
+    jobExecutorMeta.setJobObjectId( null );
+
+    //repo stuff
+    keyPath = convertToRepoKeyPath( keyPath );
+    jobExecutorMeta.setDirectoryPath( keyPath.substring( 0, keyPath.lastIndexOf( "/" ) ) );
+    jobExecutorMeta.setJobObjectId( null );
+    when( repository.findDirectory( jobExecutorMeta.getDirectoryPath() ) ).thenReturn( rdi );
+    JobMeta jobMeta = new JobMeta();
+    jobMeta.setName( stripExtension( JOB_FILE ) );
+    when( repository.loadJob( eq( JOB_FILE ), eq( rdi ), eq( null ), eq( null ), any( VariableSpace.class ) ) ).thenReturn( jobMeta );
+  }
+
+  private void setupTransExecutorMeta() throws Exception {
+    TransExecutorMeta transExecutorMeta = new TransExecutorMeta();
+    baseStepMeta = transExecutorMeta;
+    TransMeta parentTransMeta = spy( new TransMeta() );
+    LogChannelInterface logger = mock( LogChannelInterface.class );
+    metaFileCache = new MetaFileCacheImpl( logger );
+    parentTransMeta.setMetaFileCache( metaFileCache );
+    StepMeta stepMeta = new StepMeta();
+    stepMeta.setParentTransMeta( parentTransMeta );
+    transExecutorMeta.setParentStepMeta( stepMeta );
+    keyPath = getClass().getResource( TRANS_FILE ).getPath();
+    transExecutorMeta.setFileName( keyPath );
+    space = new Job();
+
+    targetMetaName = TRANS_FILE;
+    transExecutorMeta.setTransName( targetMetaName );
+    transExecutorMeta.setTransObjectId( null );
+
+    //repo stuff
+    keyPath = convertToRepoKeyPath( keyPath );
+    transExecutorMeta.setDirectoryPath( keyPath.substring( 0, keyPath.lastIndexOf( "/" ) ) );
+    transExecutorMeta.setTransObjectId( null );
+    when( repository.findDirectory( transExecutorMeta.getDirectoryPath() ) ).thenReturn( rdi );
+    TransMeta transMeta = new TransMeta();
+    transMeta.setName( stripExtension( TRANS_FILE ) );
+    when( repository.loadTransformation( any( Bowl.class ), eq( TRANS_FILE ), eq( rdi ), eq( null ), eq( true ), eq( null ), any( VariableSpace.class ) ) ).thenReturn( transMeta );
+  }
+
+  private void validateFirstJobMetaAccess( JobMeta jobMeta ) {
+    validateMetaName( JOB_FILE, jobMeta );
+    //ensure it loaded the meta in the cache
+    assertEquals( 1, metaFileCache.cacheMap.size() );
+    String key = getKey();
+    assertEquals( 0, metaFileCache.cacheMap.get( key ).getTimesUsed() );
+    assertEquals( jobMeta, metaFileCache.cacheMap.get( key ).getMeta() );
+    assertEquals( 1, metaFileCache.cacheMap.get( key ).getTimesUsed() );
+  }
+
+  private void validateSecondJobMetaAccess( JobMeta jobMeta ) {
+    //If we get it again it should come from the cache
+    validateMetaName( JOB_FILE, jobMeta );
+    assertEquals( 2, metaFileCache.cacheMap.get( getKey() ).getTimesUsed() );
+  }
+
+  private void validateFirstTransMetaAccess( TransMeta transMeta ) {
+    validateMetaName( TRANS_FILE, transMeta );
+    //ensure it loaded the meta in the cache
+    assertEquals( 1, metaFileCache.cacheMap.size() );
+    String key = getKey();
+    assertEquals( 0, metaFileCache.cacheMap.get( key ).getTimesUsed() );
+    assertEquals( transMeta, metaFileCache.cacheMap.get( key ).getMeta() );
+    assertEquals( 1, metaFileCache.cacheMap.get( key ).getTimesUsed() );
+  }
+
+  private void validateSecondTransMetaAccess( TransMeta transMeta ) {
+    //If we get it again it should come from the cache
+    validateMetaName( TRANS_FILE, transMeta );
+    assertEquals( 2, metaFileCache.cacheMap.get( getKey() ).getTimesUsed() );
+  }
+
+  private String getKey() {
+    return specificationMethod + ":" + keyPath;
+  }
+
+  @Test
+  public void getMetaForEntry_WhenFilenameSpec_ThenRebasesToChildFileDirectory() throws Exception {
+    setupJobEntryTrans();
+    specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
+
+    MetaFileLoaderImpl metaFileLoader = new MetaFileLoaderImpl<TransMeta>( jobEntryBase, specificationMethod );
+    TransMeta transMeta = (TransMeta) metaFileLoader.getMetaForEntry( DefaultBowl.getInstance(), repository, store, space );
+
+    String expectedDir = Paths.get( getClass().getResource( TRANS_FILE ).toURI() ).getParent().toUri().toString();
+    if ( expectedDir.endsWith( "/" ) ) {
+      expectedDir = expectedDir.substring( 0, expectedDir.length() - 1 );
+    }
+
+    assertEquals( expectedDir, transMeta.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+  }
+
+  @Test
+  public void getMetaForEntry_WhenFilenameSpecUsesParentDirectoryVariable_ThenDoesNotDoubleSubstitute()
+    throws Exception {
+    JobEntryTrans jobEntryTrans = new JobEntryTrans();
+    jobEntryBase = jobEntryTrans;
+
+    JobMeta parentJobMeta = spy( new JobMeta() );
+    LogChannelInterface logger = mock( LogChannelInterface.class );
+    metaFileCache = new MetaFileCacheImpl( logger );
+    parentJobMeta.setMetaFileCache( metaFileCache );
+    jobEntryTrans.setParentJobMeta( parentJobMeta );
+
+    Job job = new Job();
+    space = job;
+    jobEntryTrans.setParentJob( job );
+
+    String engineRoot = Paths.get( "" ).toAbsolutePath().toUri().toString();
+    if ( engineRoot.endsWith( "/" ) ) {
+      engineRoot = engineRoot.substring( 0, engineRoot.length() - 1 );
+    }
+    job.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, engineRoot );
+    job.setVariable( Const.INTERNAL_VARIABLE_JOB_FILENAME_DIRECTORY, engineRoot );
+    job.setVariable( Const.INTERNAL_VARIABLE_TRANSFORMATION_FILENAME_DIRECTORY, engineRoot );
+
+    String relativeFilename = "src/test/resources/org/pentaho/di/base/" + TRANS_FILE;
+    String variableizedFilename = "${" + Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY + "}/" + relativeFilename;
+    jobEntryTrans.setFileName( variableizedFilename );
+    jobEntryTrans.setTransname( TRANS_FILE );
+    jobEntryTrans.setTransObjectId( null );
+    specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
+
+    MetaFileLoaderImpl<TransMeta> metaFileLoader = new MetaFileLoaderImpl<>( jobEntryBase, specificationMethod );
+    TransMeta transMeta = metaFileLoader.getMetaForEntry( DefaultBowl.getInstance(), null, store, space );
+
+    assertNotNull( transMeta );
+    validateMetaName( TRANS_FILE, transMeta );
+
+    String expectedDir = Paths.get( relativeFilename ).toAbsolutePath().getParent().toUri().toString();
+    if ( expectedDir.endsWith( "/" ) ) {
+      expectedDir = expectedDir.substring( 0, expectedDir.length() - 1 );
+    }
+
+    assertEquals( expectedDir, transMeta.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+  }
+
+  @Test
+  public void resolveFilenameForLoad_WhenPrimarySpaceLeavesInternalPlaceholderUnresolved_ThenFallsBackToTmpSpace() {
+    MetaFileLoaderImpl<TransMeta> metaFileLoader = new MetaFileLoaderImpl<>( mock( JobEntryTrans.class ),
+      ObjectLocationSpecificationMethod.FILENAME );
+
+    JobMeta primarySpace = new JobMeta();
+    Variables tmpSpace = new Variables();
+    tmpSpace.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "/home/user/project" );
+
+    String filename = "${" + Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY + "}/child.ktr";
+
+    assertEquals( "/home/user/project/child.ktr", metaFileLoader.resolveFilenameForLoad( primarySpace, tmpSpace,
+      filename ) );
+  }
+
+  @Test
+  public void resolveFilenameForLoad_WhenPrimarySpaceResolvesFilename_ThenDoesNotFallBackToTmpSpace() {
+    MetaFileLoaderImpl<TransMeta> metaFileLoader = new MetaFileLoaderImpl<>( mock( JobEntryTrans.class ),
+      ObjectLocationSpecificationMethod.FILENAME );
+
+    Variables primarySpace = new Variables();
+    Variables tmpSpace = new Variables();
+    primarySpace.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "/home/user/project" );
+    tmpSpace.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "/different/path" );
+
+    String filename = "${" + Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY + "}/child.ktr";
+
+    assertEquals( "/home/user/project/child.ktr", metaFileLoader.resolveFilenameForLoad( primarySpace, tmpSpace,
+      filename ) );
+  }
+
+  @Test
+  public void ensureFilePathHasExtension_AddsCorrectExtensionBasedOnMetaType() {
+    MetaFileLoaderImpl<TransMeta> transLoader =
+      new MetaFileLoaderImpl<>( mock( JobEntryTrans.class ), ObjectLocationSpecificationMethod.FILENAME );
+    MetaFileLoaderImpl<JobMeta> jobLoader =
+      new MetaFileLoaderImpl<>( mock( JobEntryJob.class ), ObjectLocationSpecificationMethod.FILENAME );
+
+    assertFileExtension( transLoader, "path/to/transformation", "path/to/transformation.ktr" );
+    assertFileExtension( transLoader, "path/to/transformation.ktr", "path/to/transformation.ktr" );
+    assertFileExtension( transLoader, "file:///home/user/transformation", "file:///home/user/transformation.ktr" );
+    assertFileExtension( transLoader, "pvfs://connection/transformation", "pvfs://connection/transformation.ktr" );
+
+    assertFileExtension( jobLoader, "path/to/job", "path/to/job.kjb" );
+    assertFileExtension( jobLoader, "path/to/job.kjb", "path/to/job.kjb" );
+    assertFileExtension( jobLoader, "hdfs://server/path/job", "hdfs://server/path/job.kjb" );
+    assertFileExtension( jobLoader, "zip:file:///archive.zip!/job", "zip:file:///archive.zip!/job.kjb" );
+  }
+
+  private void assertFileExtension( MetaFileLoaderImpl<?> loader, String input, String expected ) {
+    String result = loader.ensureFilePathHasExtension( input );
+    assertEquals( "Failed for input: " + input, expected, result );
+  }
+}

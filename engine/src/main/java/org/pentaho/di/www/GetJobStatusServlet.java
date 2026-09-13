@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.www;
 
@@ -28,9 +20,9 @@ import java.io.PrintWriter;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.owasp.encoder.Encode;
@@ -45,9 +37,12 @@ import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.job.Job;
 import org.pentaho.di.www.cache.CarteStatusCache;
+import org.pentaho.di.www.exception.DuplicateKeyException;
 
 
 public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginInterface {
+  private static final String TEXT_XML = "text/xml";
+  private static final String HREF = "<a href=\"";
   private static Class<?> PKG = GetJobStatusServlet.class; // for i18n purposes, needed by Translator2!!
 
   private static final long serialVersionUID = 3634806745372015720L;
@@ -176,6 +171,14 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
    <td>Request was processed.</td>
    </tr>
    <tr>
+   <td>400</td>
+   <td>Bad Request: Mandatory parameter, either id or name, is missing</td>
+   </tr>
+   <tr>
+   <td>404</td>
+   <td>Not found: Job not found</td>
+   </tr>
+   <tr>
    <td>500</td>
    <td>Internal server error occurs during request processing.</td>
    </tr>
@@ -195,16 +198,30 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
 
     String jobName = request.getParameter( "name" );
     String id = request.getParameter( "id" );
+    String root = request.getRequestURI() == null ? StatusServletUtils.PENTAHO_ROOT
+      : request.getRequestURI().substring( 0, request.getRequestURI().indexOf( CONTEXT_PATH ) );
+    String prefix = isJettyMode() ? StatusServletUtils.STATIC_PATH : root + StatusServletUtils.RESOURCES_PATH;
     boolean useXML = "Y".equalsIgnoreCase( request.getParameter( "xml" ) );
+    int numberOfTailLines = Const.toInt( request.getParameter( "tail" ), 0 );
     int startLineNr = Const.toInt( request.getParameter( "from" ), 0 );
 
     response.setStatus( HttpServletResponse.SC_OK );
 
     if ( useXML ) {
-      response.setContentType( "text/xml" );
+      response.setContentType( TEXT_XML );
       response.setCharacterEncoding( Const.XML_ENCODING );
     } else {
       response.setContentType( "text/html;charset=UTF-8" );
+    }
+
+    //Either jobName or id is required parameter
+
+    if ( jobName == null && id == null ) {
+      PrintWriter out = response.getWriter();
+      response.setStatus( HttpServletResponse.SC_BAD_REQUEST );
+      String message = BaseMessages.getString( PKG, "GetJobStatusServlet.Error.JobNameOrIdIsMandatory" );
+      printResponse( response, useXML, out, message );
+      return;
     }
 
     // ID is optional...
@@ -213,7 +230,6 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
     CarteObjectEntry entry;
     if ( Utils.isEmpty( id ) ) {
       // get the first job that matches...
-      //
       entry = getJobMap().getFirstCarteObjectEntry( jobName );
       if ( entry == null ) {
         job = null;
@@ -253,9 +269,13 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
             out.flush();
           } else {
             int lastLineNr = KettleLogStore.getLastBufferLineNr();
-            String logText = getLogText( job, startLineNr, lastLineNr );
+            String logText = getLogText( job, startLineNr, lastLineNr, numberOfTailLines );
+/*            if ( numberOfTailLines > 0 ) {
+              //Only asking for last numberOfTailLines log lines
+              logText = logText.substring( StringUtils.lastOrdinalIndexOf(  logText, "\n", numberOfTailLines + 1 ) + 1 );
+            }*/
 
-            response.setContentType( "text/xml" );
+            response.setContentType( TEXT_XML );
             response.setCharacterEncoding( Const.XML_ENCODING );
 
             SlaveServerJobStatus jobStatus = new SlaveServerJobStatus( jobName, id, job.getStatus() );
@@ -283,13 +303,14 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
             out.write( XML_HEADER );
             out.write( data );
             out.flush();
-            if ( finishedOrStopped && logId != null ) {
+            if ( finishedOrStopped && ( jobStatus.isFinished() || jobStatus.isStopped() ) && logId != null ) {
               cache.put( logId, xml, startLineNr );
             }
           }
           response.flushBuffer();
         } catch ( KettleException e ) {
-          throw new ServletException( "Unable to get the job status in XML format", e );
+          response.setStatus( HttpServletResponse.SC_INTERNAL_SERVER_ERROR );
+          throw new ServletException( BaseMessages.getString( PKG, "GetJobStatusServlet.Error.UnableToGetJobStatusInXML" ), e );
         }
       } else {
 
@@ -312,7 +333,11 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
             + "\">" );
         }
         out.println( "<META http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">" );
-        out.print( StatusServletUtils.getPentahoStyles() );
+        if ( isJettyMode() ) {
+          out.println( "<link rel=\"stylesheet\" type=\"text/css\" href=\"/static/css/carte.css\" />" );
+        } else {
+          out.print( StatusServletUtils.getPentahoStyles( request.getSession().getServletContext(),  root ) );
+        }
         out.println( "</HEAD>" );
         out.println( "<BODY style=\"overflow: auto;\">" );
         out.println( "<div class=\"row\" id=\"pucHeader\">" );
@@ -322,14 +347,14 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
         try {
           out.println( "<div class=\"row\" style=\"padding: 0px 0px 0px 30px\">" );
           out.println( "<div class=\"row\" style=\"padding-top: 30px;\">" );
-          out.print( "<a href=\"" + convertContextPath( GetStatusServlet.CONTEXT_PATH ) + "\">" );
-          out.print( "<img src=\"/pentaho/content/common-ui/resources/themes/images/back.svg\" style=\"margin-right: 5px; width: 16px; height: 16px; vertical-align: middle;\">" );
+          out.print( HREF + convertContextPath( GetStatusServlet.CONTEXT_PATH ) + "\">" );
+          out.print( "<img src=\"" + prefix + "/images/back.svg\" style=\"margin-right: 5px; width: 16px; height: 16px; vertical-align: middle;\">" );
           out.print( BaseMessages.getString( PKG, "CarteStatusServlet.BackToCarteStatus" ) + "</a>" );
           out.println( "</div>" );
           out.println( "<div class=\"row\" style=\"padding: 30px 0px 75px 0px; display: table;\">" );
           out.println( "<div style=\"display: table-row;\">" );
           out.println( "<div style=\"padding: 0px 30px 0px 0px; width: 60px; display: table-cell; vertical-align: top;\">" );
-          out.println( "<img src=\"/pentaho/content/common-ui/resources/themes/images/job.svg\" style=\"width: 60px; height: 60px;\"></img>" );
+          out.println( "<img src=\"" + prefix + "/images/job.svg\" style=\"width: 60px; height: 60px;\"></img>" );
           out.println( "</div>" );
           out.println( "<div style=\"vertical-align: top; display: table-cell;\">" );
           out.println( "<table style=\"border-collapse: collapse;\" border=\"" + tableBorder + "\">" );
@@ -341,7 +366,8 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
           out.print( "<td style=\"padding: 8px 10px 10px 10px\" class=\"cellTableCell cellTableFirstColumn\">" + Const.NVL( Encode.forHtml( id ), "" ) + "</td>" );
           out.print( "<td style=\"padding: 8px 10px 10px 10px\" class=\"cellTableCell\" id=\"statusColor\" style=\"font-weight: bold;\">" + job.getStatus() + "</td>" );
           String dateStr = XMLHandler.date2string( job.getLogDate() );
-          out.print( "<td style=\"padding: 8px 10px 10px 10px\" class=\"cellTableCell cellTableLastColumn\">" + dateStr.substring( 0, dateStr.indexOf( ' ' ) ) + "</td>" );
+          dateStr = dateStr == null ? "-" : dateStr.substring( 0, dateStr.indexOf( ' ' ) );
+          out.print( "<td style=\"padding: 8px 10px 10px 10px\" class=\"cellTableCell cellTableLastColumn\">" + dateStr + "</td>" );
           out.print( "</tr>" );
           out.print( "</table>" );
           out.print( "</div>" );
@@ -350,7 +376,7 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
           out.print( "<a target=\"_blank\" href=\""
             + convertContextPath( GetJobStatusServlet.CONTEXT_PATH ) + "?name="
             + URLEncoder.encode( jobName, "UTF-8" ) + "&id=" + URLEncoder.encode( id, "UTF-8" ) + "&xml=y\">"
-            + "<img src=\"/pentaho/content/common-ui/resources/themes/images/view-as-xml.svg\" style=\"display: block; margin: auto; width: 22px; height: 22px;\"></a>" );
+            + "<img src=\"" + prefix + "/images/view-as-xml.svg\" style=\"display: block; margin: auto; width: 22px; height: 22px;\"></a>" );
           out.print( "</div>" );
           out.println( "<div style=\"text-align: center; padding-top: 12px; font-size: 12px;\">" );
           out.print( "<a target=\"_blank\" href=\""
@@ -377,18 +403,13 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
               + "\"></iframe>" );
           out.print( "</div>" );
 
-          // out.print("<a href=\"" + convertContextPath(GetJobImageServlet.CONTEXT_PATH) + "?name=" +
-          // URLEncoder.encode(Const.NVL(jobName, ""), "UTF-8") + "&id="+id+"\">"
-          // + BaseMessages.getString(PKG, "GetJobImageServlet.GetJobImage") + "</a>");
-          // out.print("<p>");
-
           // Put the logging below that.
 
           out.print( "<div class=\"row\" style=\"padding: 0px 0px 30px 0px;\">" );
           out.print( "<div class=\"workspaceHeading\">Job log</div>" );
           out.println( "<textarea id=\"joblog\" cols=\"120\" rows=\"20\" wrap=\"off\" "
               + "name=\"Job log\" readonly=\"readonly\" style=\"height: auto;\">"
-              + Encode.forHtml( getLogText( job, startLineNr, lastLineNr ) ) + "</textarea>" );
+              + Encode.forHtml( getLogText( job, startLineNr, lastLineNr, numberOfTailLines ) ) + "</textarea>" );
           out.print( "</div>" );
 
           out.println( "<script type=\"text/javascript\">" );
@@ -405,6 +426,7 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
           out.println( "  joblog.scrollTop=joblog.scrollHeight; " );
           out.println( "</script> " );
         } catch ( Exception ex ) {
+          response.setStatus( HttpServletResponse.SC_INTERNAL_SERVER_ERROR );
           out.println( "<pre>" );
           out.println( Encode.forHtml( Const.getStackTracker( ex ) ) );
           out.println( "</pre>" );
@@ -416,15 +438,44 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
       }
     } else {
       PrintWriter out = response.getWriter();
+      response.setStatus( HttpServletResponse.SC_NOT_FOUND );
+      String message = BaseMessages.getString( PKG, "StartJobServlet.Log.SpecifiedJobNotFound", jobName, id );
       if ( useXML ) {
-        out.println( new WebResult( WebResult.STRING_ERROR, BaseMessages.getString(
-          PKG, "StartJobServlet.Log.SpecifiedJobNotFound", jobName, id ) ) );
+        out.println( new WebResult( WebResult.STRING_ERROR, message ) );
       } else {
-        out.println( "<H1>Job " + Encode.forHtml( "\'" + jobName + "\'" ) + " could not be found.</H1>" );
-        out.println( "<a href=\""
+        out.println( "<H1>" + Encode.forHtml( message ) + "</H1>" );
+        out.println( HREF
           + convertContextPath( GetStatusServlet.CONTEXT_PATH ) + "\">"
           + BaseMessages.getString( PKG, "JobStatusServlet.BackToStatusPage" ) + "</a><p>" );
       }
+    }
+  }
+
+  private void printResponse( HttpServletResponse response, boolean useXML, PrintWriter out, String message ) {
+    if ( useXML ) {
+      response.setContentType( TEXT_XML );
+      response.setCharacterEncoding( Const.XML_ENCODING );
+      out.print( XMLHandler.getXMLHeader( Const.XML_ENCODING ) );
+      out.println( new WebResult( WebResult.STRING_ERROR, message ) );
+    } else {
+      String h1End = "</H1>";
+      String h1 = "<H1>";
+      String hrefEnd = "</a><p>";
+      response.setContentType( "text/html;charset=UTF-8" );
+      out.println( "<HTML>" );
+      out.println( "<HEAD>" );
+      out.println( "<TITLE>Start job</TITLE>" );
+      out.println( "<META http-equiv=\"Refresh\" content=\"2;url="
+        + convertContextPath( GetStatusServlet.CONTEXT_PATH ) + "\">" );
+      out.println( "<META http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">" );
+      out.println( "</HEAD>" );
+      out.println( "<BODY>" );
+      out.println( h1 + Encode.forHtml( message ) + h1End );
+      out.println( HREF
+        + convertContextPath( GetStatusServlet.CONTEXT_PATH ) + "\">"
+        + BaseMessages.getString( PKG, "JobStatusServlet.BackToStatusPage" ) + hrefEnd );
+      out.println( "</BODY>" );
+      out.println( "</HTML>" );
     }
   }
 
@@ -440,12 +491,12 @@ public class GetJobStatusServlet extends BaseHttpServlet implements CartePluginI
     return CONTEXT_PATH;
   }
 
-  private String getLogText( Job job, int startLineNr, int lastLineNr ) throws KettleException {
+  private String getLogText( Job job, int startLineNr, int lastLineNr, int numberOfTailLines ) throws KettleException {
     try {
       return KettleLogStore.getAppender().getBuffer(
-        job.getLogChannel().getLogChannelId(), false, startLineNr, lastLineNr ).toString();
+        job.getLogChannel().getLogChannelId(), false, startLineNr, lastLineNr, numberOfTailLines ).toString();
     } catch ( OutOfMemoryError error ) {
-      throw new KettleException( "Log string is too long" );
+      throw new KettleException( BaseMessages.getString( PKG, "GetJobStatusServlet.Error.LogStringIsTooLong" ) );
     }
   }
 }

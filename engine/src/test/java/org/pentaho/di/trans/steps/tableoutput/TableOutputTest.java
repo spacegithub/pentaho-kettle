@@ -1,45 +1,48 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.tableoutput;
 
+import java.lang.reflect.Method;
+import java.sql.Connection;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.json.simple.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
+import org.pentaho.di.core.SQLStatement;
 import org.pentaho.di.core.database.Database;
 import org.pentaho.di.core.database.DatabaseInterface;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.exception.KettleStepException;
+import org.pentaho.di.core.row.RowMeta;
 import org.pentaho.di.core.row.RowMetaInterface;
+import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
+import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepPartitioningMeta;
 
-import java.sql.Connection;
-import java.util.Map;
-
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.anyString;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
@@ -59,6 +62,11 @@ public class TableOutputTest {
   private TableOutputMeta tableOutputMeta, tableOutputMetaSpy;
   private TableOutputData tableOutputData, tableOutputDataSpy;
   private Database db;
+  private TransMeta transMeta;
+
+  private static RowMetaInterface filled;
+  private static RowMetaInterface empty;
+  private static String[] sample = { "1", "2", "3" };
 
   @Before
   public void setUp() throws Exception {
@@ -82,7 +90,7 @@ public class TableOutputTest {
     tableOutputData.preparedStatements = mock( Map.class );
     tableOutputData.commitCounterMap = mock( Map.class );
 
-    TransMeta transMeta = mock( TransMeta.class );
+    transMeta = mock( TransMeta.class );
     doReturn( stepMeta ).when( transMeta ).findStep( anyString() );
 
     tableOutput = new TableOutput( stepMeta, tableOutputData, 1, transMeta, mock( Trans.class ) );
@@ -93,11 +101,15 @@ public class TableOutputTest {
     doReturn( false ).when( tableOutputSpy ).isRowLevel();
     doReturn( false ).when( tableOutputSpy ).isDebug();
     doNothing().when( tableOutputSpy ).logDetailed( anyString() );
+    doReturn( "1" ).when( tableOutputSpy ).getStepExecutionId();
+
+    filled = createRowMeta( sample, false );
+    empty = createRowMeta( sample, true );
   }
 
   @Test
   public void testWriteToTable() throws Exception {
-    tableOutputSpy.writeToTable( mock( RowMetaInterface.class ), new Object[]{} );
+    tableOutputSpy.writeToTable( mock( RowMetaInterface.class ), new Object[] {} );
   }
 
   @Test
@@ -111,9 +123,11 @@ public class TableOutputTest {
     when( tableOutputMeta.truncateTable() ).thenReturn( true );
     when( tableOutputSpy.getCopy() ).thenReturn( 0 );
     when( tableOutputSpy.getUniqueStepNrAcrossSlaves() ).thenReturn( 0 );
+    when( tableOutputMeta.getTableName() ).thenReturn( "fooTable" );
+    when( tableOutputMeta.getSchemaName() ).thenReturn( "barSchema" );
 
     tableOutputSpy.truncateTable();
-    verify( db ).truncateTable( anyString(), anyString() );
+    verify( db ).truncateTable( any(), any() );
   }
 
   @Test
@@ -122,9 +136,11 @@ public class TableOutputTest {
     when( tableOutputSpy.getCopy() ).thenReturn( 1 );
     when( tableOutputSpy.getUniqueStepNrAcrossSlaves() ).thenReturn( 0 );
     when( tableOutputSpy.getPartitionID() ).thenReturn( "partition id" );
+    when( tableOutputMeta.getTableName() ).thenReturn( "fooTable" );
+    when( tableOutputMeta.getSchemaName() ).thenReturn( "barSchema" );
 
     tableOutputSpy.truncateTable();
-    verify( db ).truncateTable( anyString(), anyString() );
+    verify( db ).truncateTable( any(), any() );
   }
 
   @Test
@@ -154,7 +170,7 @@ public class TableOutputTest {
   @Test
   public void testProcessRow_truncatesOnFirstRow() throws Exception {
     when( tableOutputMeta.truncateTable() ).thenReturn( true );
-    Object[] row = new Object[]{};
+    Object[] row = new Object[] {};
     doReturn( row ).when( tableOutputSpy ).getRow();
 
     try {
@@ -168,9 +184,10 @@ public class TableOutputTest {
   @Test
   public void testProcessRow_doesNotTruncateOnOtherRows() throws Exception {
     when( tableOutputMeta.truncateTable() ).thenReturn( true );
-    Object[] row = new Object[]{};
+    Object[] row = new Object[] {};
     doReturn( row ).when( tableOutputSpy ).getRow();
     tableOutputSpy.first = false;
+    doNothing().when( tableOutputSpy ).putRow( any(), any() );
     doReturn( null ).when( tableOutputSpy ).writeToTable( any( RowMetaInterface.class ), any( row.getClass() ) );
 
     boolean result = tableOutputSpy.processRow( tableOutputMeta, tableOutputData );
@@ -182,7 +199,7 @@ public class TableOutputTest {
   @Test
   public void testInit_unsupportedConnection() {
 
-    TableOutputMeta meta =  mock( TableOutputMeta.class );
+    TableOutputMeta meta = mock( TableOutputMeta.class );
     TableOutputData data = mock( TableOutputData.class );
 
     DatabaseInterface dbInterface = mock( DatabaseInterface.class );
@@ -204,4 +221,17 @@ public class TableOutputTest {
     KettleException ke = new KettleException( unsupportedTableOutputMessage );
     verify( tableOutputSpy, times( 1 ) ).logError( "An error occurred intialising this step: " + ke.getMessage() );
   }
+
+
+  private RowMetaInterface createRowMeta( String[] args, boolean hasEmptyFields ) {
+    RowMetaInterface result = new RowMeta();
+    if ( hasEmptyFields ) {
+      result.addValueMeta( new ValueMetaString( "" ) );
+    }
+    for ( String s : args ) {
+      result.addValueMeta( new ValueMetaString( s ) );
+    }
+    return result;
+  }
+
 }

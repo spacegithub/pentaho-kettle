@@ -1,19 +1,16 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.pur;
 
 import java.util.ArrayList;
@@ -35,13 +32,28 @@ public class AbsSecurityManager extends PurRepositorySecurityManager implements 
 
   private static final long serialVersionUID = -7472721270945456826L; /* EESOURCE: UPDATE SERIALVERUID */
 
+  private static final String ERROR_0002_UNABLE_TO_GET_LOGICAL_ROLES =
+      "AbsSecurityManager.ERROR_0002_UNABLE_TO_GET_LOGICAL_ROLES"; //$NON-NLS-1$
+
   private IRoleAuthorizationPolicyRoleBindingDaoWebService authorizationPolicyRoleBindingService = null;
 
   private RoleBindingStruct roleBindingStruct = null;
 
+  private final transient ServiceManager serviceManager;
+
   public AbsSecurityManager( PurRepository repository, PurRepositoryMeta repositoryMeta, IUser userInfo,
       ServiceManager serviceManager ) {
     super( repository, repositoryMeta, userInfo, serviceManager );
+    this.serviceManager = serviceManager;
+    createAuthorizationPolicyService( userInfo );
+  }
+
+  /**
+   * Creates (or recreates) the authorization policy role binding web service stub.
+   *
+   * @param userInfo the user whose credentials are used to create the service
+   */
+  private void createAuthorizationPolicyService( IUser userInfo ) {
     try {
       authorizationPolicyRoleBindingService =
           serviceManager.createService( userInfo.getLogin(), userInfo.getPassword(),
@@ -63,13 +75,46 @@ public class AbsSecurityManager extends PurRepositorySecurityManager implements 
       try {
         roleBindingStruct = authorizationPolicyRoleBindingService.getRoleBindingStruct( locale );
       } catch ( Exception e ) {
-        throw new KettleException( BaseMessages.getString( AbsSecurityManager.class,
-            "AbsSecurityManager.ERROR_0002_UNABLE_TO_GET_LOGICAL_ROLES" ), e ); //$NON-NLS-1$
+        // The web service stub may be stale after a session timeout and reconnection
+        // (e.g. "close method has already been invoked"). Recreate the stub with fresh
+        // credentials from the repository and retry once.
+        roleBindingStruct = retryGetRoleBindingStruct( locale, e );
       }
     } else {
       throw new KettleException( BaseMessages.getString( AbsSecurityManager.class,
           "AbsSecurityManager.ERROR_0005_INSUFFICIENT_PRIVELEGES" ) ); //$NON-NLS-1$
     }
+  }
+
+  /**
+   * Attempts to recreate the web service stub and retry the {@code getRoleBindingStruct} call.
+   * This handles the case where the original stub became stale after a session timeout and reconnection.
+   *
+   * @param locale the locale to pass to the service
+   * @param originalException the exception from the first attempt
+   * @return the {@link RoleBindingStruct} if the retry succeeds
+   * @throws KettleException if the retry also fails or the stub cannot be recreated
+   */
+  private RoleBindingStruct retryGetRoleBindingStruct( String locale, Exception originalException )
+      throws KettleException {
+    getLogger().info(
+        BaseMessages.getString( AbsSecurityManager.class,
+            ERROR_0002_UNABLE_TO_GET_LOGICAL_ROLES )
+            + " - attempting to recreate web service stub and retry" );
+    IUser currentUser = getRepository().getUserInfo();
+    if ( currentUser != null && serviceManager != null ) {
+      createAuthorizationPolicyService( currentUser );
+      if ( authorizationPolicyRoleBindingService != null ) {
+        try {
+          return authorizationPolicyRoleBindingService.getRoleBindingStruct( locale );
+        } catch ( Exception retryException ) {
+          throw new KettleException( BaseMessages.getString( AbsSecurityManager.class,
+              ERROR_0002_UNABLE_TO_GET_LOGICAL_ROLES ), retryException );
+        }
+      }
+    }
+    throw new KettleException( BaseMessages.getString( AbsSecurityManager.class,
+        ERROR_0002_UNABLE_TO_GET_LOGICAL_ROLES ), originalException );
   }
 
   @Override

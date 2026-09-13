@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.repository.kdr;
 
@@ -64,7 +56,7 @@ public abstract class KettleDatabaseRepositoryBase extends AbstractRepository {
   public static final String FIELD_DATABASE_PORT = "PORT";
   public static final String FIELD_DATABASE_USERNAME = "USERNAME";
   public static final String FIELD_DATABASE_DATA_TBS = "DATA_TBS";
-  public static final String FIELD_DATABASE_PASSWORD = "PASSWORD";
+  @SuppressWarnings( "squid:S2068" ) public static final String FIELD_DATABASE_PASSWORD = "PASSWORD";
   public static final String FIELD_DATABASE_SERVERNAME = "SERVERNAME";
   public static final String FIELD_DATABASE_INDEX_TBS = "INDEX_TBS";
 
@@ -297,7 +289,7 @@ public abstract class KettleDatabaseRepositoryBase extends AbstractRepository {
   public static final String TABLE_R_USER = "R_USER";
   public static final String FIELD_USER_ID_USER = "ID_USER";
   public static final String FIELD_USER_LOGIN = "LOGIN";
-  public static final String FIELD_USER_PASSWORD = "PASSWORD";
+  @SuppressWarnings( "squid:S2068" ) public static final String FIELD_USER_PASSWORD = "PASSWORD";
   public static final String FIELD_USER_NAME = "NAME";
   public static final String FIELD_USER_DESCRIPTION = "DESCRIPTION";
   public static final String FIELD_USER_ENABLED = "ENABLED";
@@ -338,7 +330,7 @@ public abstract class KettleDatabaseRepositoryBase extends AbstractRepository {
   public static final String FIELD_SLAVE_HOST_NAME = "HOST_NAME";
   public static final String FIELD_SLAVE_PORT = "PORT";
   public static final String FIELD_SLAVE_USERNAME = "USERNAME";
-  public static final String FIELD_SLAVE_PASSWORD = "PASSWORD";
+  @SuppressWarnings( "squid:S2068" ) public static final String FIELD_SLAVE_PASSWORD = "PASSWORD";
   public static final String FIELD_SLAVE_PROXY_HOST_NAME = "PROXY_HOST_NAME";
   public static final String FIELD_SLAVE_PROXY_PORT = "PROXY_PORT";
   public static final String FIELD_SLAVE_NON_PROXY_HOSTS = "NON_PROXY_HOSTS";

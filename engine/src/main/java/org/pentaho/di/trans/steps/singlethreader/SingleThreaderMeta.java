@@ -1,30 +1,23 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.singlethreader;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
@@ -55,6 +48,7 @@ import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.TransMeta.TransformationType;
 import org.pentaho.di.trans.step.StepDataInterface;
+import org.pentaho.di.trans.step.StepHelperInterface;
 import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepMetaInterface;
@@ -264,7 +258,8 @@ public class SingleThreaderMeta extends StepWithMappingMeta implements StepMetaI
     parameterValues = new String[0];
   }
 
-  public void getFields( RowMetaInterface row, String origin, RowMetaInterface[] info, StepMeta nextStep,
+  @Override
+  public void getFields( Bowl bowl, RowMetaInterface row, String origin, RowMetaInterface[] info, StepMeta nextStep,
     VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
 
     // First load some interesting data...
@@ -273,7 +268,7 @@ public class SingleThreaderMeta extends StepWithMappingMeta implements StepMetaI
     //
     TransMeta mappingTransMeta = null;
     try {
-      mappingTransMeta = loadSingleThreadedTransMeta( this, repository, space );
+      mappingTransMeta = loadSingleThreadedTransMeta( bowl, this, repository, space );
     } catch ( KettleException e ) {
       throw new KettleStepException( BaseMessages.getString(
         PKG, "SingleThreaderMeta.Exception.UnableToLoadMappingTransformation" ), e );
@@ -290,14 +285,14 @@ public class SingleThreaderMeta extends StepWithMappingMeta implements StepMetaI
   }
 
 
-  public static final synchronized TransMeta loadSingleThreadedTransMeta( SingleThreaderMeta mappingMeta,
+  public static final synchronized TransMeta loadSingleThreadedTransMeta( Bowl bowl, SingleThreaderMeta mappingMeta,
                                                                           Repository rep, VariableSpace space ) throws KettleException {
-    return loadMappingMeta( mappingMeta, rep, null, space );
+    return loadMappingMeta( bowl, mappingMeta, rep, null, space );
   }
 
-  public static final synchronized TransMeta loadSingleThreadedTransMeta( SingleThreaderMeta mappingMeta,
+  public static final synchronized TransMeta loadSingleThreadedTransMeta( Bowl bowl, SingleThreaderMeta mappingMeta,
                                                                           Repository rep, VariableSpace space, boolean passingAllParameters  ) throws KettleException {
-    return loadMappingMeta( mappingMeta, rep, null, space, passingAllParameters );
+    return loadMappingMeta( bowl, mappingMeta, rep, null, space, passingAllParameters );
   }
 
   public void check( List<CheckResultInterface> remarks, TransMeta transMeta, StepMeta stepMeta,
@@ -530,12 +525,13 @@ public class SingleThreaderMeta extends StepWithMappingMeta implements StepMetaI
    * @throws KettleException
    */
   @Deprecated
-  public Object loadReferencedObject( int index, Repository rep, VariableSpace space ) throws KettleException {
-    return loadSingleThreadedTransMeta( this, rep, space );
+  public Object loadReferencedObject( Bowl bowl, int index, Repository rep, VariableSpace space )
+    throws KettleException {
+    return loadSingleThreadedTransMeta( bowl, this, rep, space );
   }
 
-  public Object loadReferencedObject( int index, Repository rep, IMetaStore metaStore, VariableSpace space ) throws KettleException {
-    return loadMappingMeta( this, rep, metaStore, space );
+  public Object loadReferencedObject( Bowl bowl, int index, Repository rep, IMetaStore metaStore, VariableSpace space ) throws KettleException {
+    return loadMappingMeta( bowl, this, rep, metaStore, space );
   }
 
   @Override
@@ -554,5 +550,10 @@ public class SingleThreaderMeta extends StepWithMappingMeta implements StepMetaI
 
   public IMetaStore getMetaStore() {
     return metaStore;
+  }
+
+  @Override
+  public StepHelperInterface getStepHelperInterface() {
+    return new SingleThreaderHelper( this );
   }
 }

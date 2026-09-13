@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.trans.steps.datagrid;
 
 import static org.junit.Assert.assertTrue;
@@ -59,9 +51,9 @@ public class DataGridMetaTest implements InitializerInterface<StepMetaInterface>
     PluginRegistry.init( false );
     List<String> attributes =
         Arrays.asList( "currency", "decimal", "group", "fieldName", "fieldType", "fieldFormat", "fieldLength",
-            "fieldPrecision", "setEmptyString", "dataLines" );
+            "fieldPrecision", "setEmptyString", "dataLines", "fieldNullIf" );
 
-    Map<String, String> getterMap = new HashMap<String, String>();
+    Map<String, String> getterMap = new HashMap<>();
     Map<String, String> setterMap = new HashMap<String, String>() {
       {
         put( "setEmptyString", "setEmptyString" );
@@ -83,7 +75,8 @@ public class DataGridMetaTest implements InitializerInterface<StepMetaInterface>
         new PrimitiveIntArrayLoadSaveValidator( new IntLoadSaveValidator( 9 ), 3 ) );
     attrValidatorMap.put( "setEmptyString",
          new PrimitiveBooleanArrayLoadSaveValidator( new BooleanLoadSaveValidator(), 3 ) );
-    attrValidatorMap.put(  "dataLines", new DataGridLinesLoadSaveValidator() );
+    attrValidatorMap.put( "dataLines", new DataGridLinesLoadSaveValidator() );
+    attrValidatorMap.put( "fieldNullIf", stringArrayLoadSaveValidator );
 
     Map<String, FieldLoadSaveValidator<?>> typeValidatorMap = new HashMap<String, FieldLoadSaveValidator<?>>();
 

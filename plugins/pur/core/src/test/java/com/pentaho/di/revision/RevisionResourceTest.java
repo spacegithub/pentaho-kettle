@@ -1,22 +1,19 @@
-/*!
-* Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-* http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*
-*/
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package com.pentaho.di.revision;
 
-import static org.mockito.Matchers.anyString;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -24,8 +21,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import javax.ws.rs.core.GenericEntity;
-import javax.ws.rs.core.Response;
+import jakarta.ws.rs.core.GenericEntity;
+import jakarta.ws.rs.core.Response;
 
 import org.pentaho.di.core.util.Assert;
 import org.pentaho.di.repository.pur.PurObjectRevision;
@@ -86,7 +83,7 @@ public class RevisionResourceTest {
     Object entity = response.getEntity();
 
     // Yeah this gets weird: List, wrapped in a Response, wrapped in GenericEnttiy
-    List<PurObjectRevision> revisionList = (List<PurObjectRevision>) ( (GenericEntity) entity ).getEntity();
+    List<PurObjectRevision> revisionList = (List<PurObjectRevision>) entity;
 
     Assert.assertTrue( revisionList.size() == 1 );
     Assert.assertTrue( revisionList.get( 0 ).getLogin().equals( MOCK_VERSION_AUTHOR_1 ) );

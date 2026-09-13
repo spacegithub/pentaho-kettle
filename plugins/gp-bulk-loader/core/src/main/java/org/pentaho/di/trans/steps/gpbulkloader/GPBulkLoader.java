@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.gpbulkloader;
 
@@ -319,7 +311,8 @@ public class GPBulkLoader extends BaseStep implements StepInterface {
     if ( meta.getPsqlpath() != null ) {
       try {
         FileObject fileObject =
-          KettleVFS.getFileObject( environmentSubstitute( meta.getPsqlpath() ), getTransMeta() );
+          KettleVFS.getInstance( getTransMeta().getBowl() )
+            .getFileObject( environmentSubstitute( meta.getPsqlpath() ), getTransMeta() );
         String psqlexec = KettleVFS.getFilename( fileObject );
         sb.append( enclosure ).append( psqlexec ).append( enclosure );
       } catch ( Exception ex ) {
@@ -332,7 +325,8 @@ public class GPBulkLoader extends BaseStep implements StepInterface {
     if ( meta.getControlFile() != null ) {
       try {
         FileObject fileObject =
-          KettleVFS.getFileObject( environmentSubstitute( meta.getControlFile() ), getTransMeta() );
+          KettleVFS.getInstance( getTransMeta().getBowl() )
+            .getFileObject( environmentSubstitute( meta.getControlFile() ), getTransMeta() );
 
         sb.append( " -n -f " );
         sb.append( enclosure ).append( KettleVFS.getFilename( fileObject ) ).append( enclosure );
@@ -346,7 +340,8 @@ public class GPBulkLoader extends BaseStep implements StepInterface {
     if ( meta.getLogFile() != null ) {
       try {
         FileObject fileObject =
-          KettleVFS.getFileObject( environmentSubstitute( meta.getLogFile() ), getTransMeta() );
+          KettleVFS.getInstance( getTransMeta().getBowl() )
+            .getFileObject( environmentSubstitute( meta.getLogFile() ), getTransMeta() );
 
         sb.append( " -o " );
         sb.append( enclosure ).append( KettleVFS.getFilename( fileObject ) ).append( enclosure );
@@ -542,7 +537,8 @@ public class GPBulkLoader extends BaseStep implements StepInterface {
 
         if ( meta.getControlFile() != null ) {
           try {
-            fileObject = KettleVFS.getFileObject( environmentSubstitute( meta.getControlFile() ), getTransMeta() );
+            fileObject = KettleVFS.getInstance( getTransMeta().getBowl() )
+              .getFileObject( environmentSubstitute( meta.getControlFile() ), getTransMeta() );
             fileObject.delete();
             fileObject.close();
           } catch ( Exception ex ) {
@@ -556,7 +552,8 @@ public class GPBulkLoader extends BaseStep implements StepInterface {
         // In concurrent mode the data is written to the control file.
         if ( meta.getDataFile() != null ) {
           try {
-            fileObject = KettleVFS.getFileObject( environmentSubstitute( meta.getDataFile() ), getTransMeta() );
+            fileObject = KettleVFS.getInstance( getTransMeta().getBowl() )
+              .getFileObject( environmentSubstitute( meta.getDataFile() ), getTransMeta() );
             fileObject.delete();
             fileObject.close();
           } catch ( Exception ex ) {

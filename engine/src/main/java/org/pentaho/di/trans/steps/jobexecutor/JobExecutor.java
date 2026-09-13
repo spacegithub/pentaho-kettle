@@ -1,33 +1,29 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.jobexecutor;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Map;
 
 import com.google.common.annotations.VisibleForTesting;
-
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.core.ResultFile;
 import org.pentaho.di.core.RowMetaAndData;
@@ -36,10 +32,10 @@ import org.pentaho.di.core.extension.ExtensionPointHandler;
 import org.pentaho.di.core.extension.KettleExtensionPoint;
 import org.pentaho.di.core.logging.KettleLogStore;
 import org.pentaho.di.core.logging.LoggingObjectInterface;
-import org.pentaho.di.core.logging.LoggingRegistry;
 import org.pentaho.di.core.row.RowDataUtil;
 import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaFactory;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.job.DelegationListener;
 import org.pentaho.di.job.Job;
@@ -111,18 +107,18 @@ public class JobExecutor extends BaseStep implements StepInterface {
         data.resultFilesOutputRowMeta = data.inputRowMeta.clone();
 
         if ( meta.getExecutionResultTargetStepMeta() != null ) {
-          meta.getFields( data.executionResultsOutputRowMeta, getStepname(), null, meta
+          meta.getFields( getTransMeta().getBowl(), data.executionResultsOutputRowMeta, getStepname(), null, meta
             .getExecutionResultTargetStepMeta(), this, repository, metaStore );
           data.executionResultRowSet = findOutputRowSet( meta.getExecutionResultTargetStepMeta().getName() );
         }
         if ( meta.getResultRowsTargetStepMeta() != null ) {
-          meta.getFields(
+          meta.getFields( getTransMeta().getBowl(),
             data.resultRowsOutputRowMeta, getStepname(), null, meta.getResultRowsTargetStepMeta(), this,
             repository, metaStore );
           data.resultRowsRowSet = findOutputRowSet( meta.getResultRowsTargetStepMeta().getName() );
         }
         if ( meta.getResultFilesTargetStepMeta() != null ) {
-          meta.getFields(
+          meta.getFields( getTransMeta().getBowl(),
             data.resultFilesOutputRowMeta, getStepname(), null, meta.getResultFilesTargetStepMeta(), this,
             repository, metaStore );
           data.resultFilesRowSet = findOutputRowSet( meta.getResultFilesTargetStepMeta().getName() );
@@ -223,6 +219,7 @@ public class JobExecutor extends BaseStep implements StepInterface {
 
     ExtensionPointHandler.callExtensionPoint( log, KettleExtensionPoint.JobStart.id, data.executorJob );
 
+    data.executorJob.setInitialLogBufferStartLine();
     data.executorJob.beginProcessing();
 
     Result result = new Result();
@@ -247,6 +244,8 @@ public class JobExecutor extends BaseStep implements StepInterface {
     } finally {
       try {
         ExtensionPointHandler.callExtensionPoint( log, KettleExtensionPoint.JobFinish.id, data.executorJob );
+        getExecutorJob().getJobMeta().disposeEmbeddedMetastoreProvider();
+        log.logDebug( BaseMessages.getString( PKG, "JobExecutor.Log.DisposeEmbeddedMetastore" ) );
         data.executorJob.fireJobFinishListeners();
       } catch ( KettleException e ) {
         result.setNrErrors( 1 );
@@ -356,7 +355,6 @@ public class JobExecutor extends BaseStep implements StepInterface {
     // TODO: make this optional/user-defined later
     if ( data.executorJob != null ) {
       KettleLogStore.discardLines( data.executorJob.getLogChannelId(), false );
-      LoggingRegistry.getInstance().removeIncludingChildren( data.executorJob.getLogChannelId() );
     }
   }
 
@@ -381,7 +379,7 @@ public class JobExecutor extends BaseStep implements StepInterface {
     }
 
     StepWithMappingMeta.activateParams( data.executorJob, data.executorJob, this, data.executorJob.listParameters(),
-      parameters.getVariable(), parameters.getInput() );
+      parameters.getVariable(), parameters.getInput(), meta.getParameters().isInheritingAllVariables() );
   }
 
   public boolean init( StepMetaInterface smi, StepDataInterface sdi ) {
@@ -395,7 +393,7 @@ public class JobExecutor extends BaseStep implements StepInterface {
         //
         meta.setRepository( getTransMeta().getRepository() );
 
-        data.executorJobMeta = JobExecutorMeta.loadJobMeta( meta, meta.getRepository(), this );
+        data.executorJobMeta = JobExecutorMeta.loadJobMeta( getTransMeta().getBowl(), meta, meta.getRepository(), this );
 
         // Do we have a job at all?
         //

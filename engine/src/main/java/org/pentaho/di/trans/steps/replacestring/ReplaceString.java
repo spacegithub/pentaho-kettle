@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.replacestring;
 
@@ -166,7 +158,8 @@ public class ReplaceString extends BaseStep implements StepInterface {
       // What's the format of the output row?
       data.outputRowMeta = getInputRowMeta().clone();
       data.inputFieldsNr = data.outputRowMeta.size();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
       data.numFields = meta.getFieldInStream().length;
       data.inStreamNrs = new int[data.numFields];
@@ -190,14 +183,8 @@ public class ReplaceString extends BaseStep implements StepInterface {
         }
 
         data.outStreamNrs[i] = environmentSubstitute( meta.getFieldOutStream()[i] );
-
-        data.patterns[i] =
-          buildPattern(
-            meta.getUseRegEx()[i] != ReplaceStringMeta.USE_REGEX_YES,
-            meta.getCaseSensitive()[i] == ReplaceStringMeta.CASE_SENSITIVE_YES,
-            meta.getWholeWord()[i] == ReplaceStringMeta.WHOLE_WORD_YES, environmentSubstitute( meta
-              .getReplaceString()[i] ),
-            meta.isUnicode()[i] == ReplaceStringMeta.IS_UNICODE_YES );
+        data.patterns[ i ] = buildPattern( !meta.getUseRegEx()[ i ], meta.getCaseSensitive()[ i ],
+          meta.getWholeWord()[ i ], environmentSubstitute( meta.getReplaceString()[ i ] ), meta.isUnicode()[ i ] );
 
         String field = meta.getFieldReplaceByString()[i];
         if ( !Utils.isEmpty( field ) ) {

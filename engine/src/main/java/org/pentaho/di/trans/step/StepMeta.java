@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step;
 
@@ -28,7 +20,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.lang.ArrayUtils;
 import org.pentaho.di.base.BaseMeta;
 import org.pentaho.di.cluster.ClusterSchema;
 import org.pentaho.di.core.AttributesInterface;
@@ -37,6 +28,7 @@ import org.pentaho.di.core.CheckResultSourceInterface;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.Counter;
 import org.pentaho.di.core.attributes.AttributesUtil;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettlePluginLoaderException;
@@ -47,10 +39,12 @@ import org.pentaho.di.core.plugins.PluginInterface;
 import org.pentaho.di.core.plugins.PluginRegistry;
 import org.pentaho.di.core.plugins.StepPluginType;
 import org.pentaho.di.core.row.RowMetaInterface;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.variables.Variables;
 import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.i18n.BaseMessages;
+import org.pentaho.di.metastore.MetaStoreConst;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.resource.ResourceDefinition;
@@ -75,7 +69,7 @@ import org.w3c.dom.Node;
  *
  */
 public class StepMeta extends SharedObjectBase implements Cloneable, Comparable<StepMeta>, GUIPositionInterface,
-    SharedObjectInterface, CheckResultSourceInterface, ResourceExportInterface, ResourceHolderInterface,
+    SharedObjectInterface<StepMeta>, CheckResultSourceInterface, ResourceExportInterface, ResourceHolderInterface,
     AttributesInterface, BaseMeta {
   private static Class<?> PKG = StepMeta.class; // for i18n purposes, needed by Translator2!!
 
@@ -175,8 +169,14 @@ public class StepMeta extends SharedObjectBase implements Cloneable, Comparable<
   public StepMeta( String stepname, StepMetaInterface stepMetaInterface ) {
     if ( stepMetaInterface != null ) {
       PluginRegistry registry = PluginRegistry.getInstance();
-      this.stepid = registry.getPluginId( StepPluginType.class, stepMetaInterface );
-      setDeprecationAndSuggestedStep();
+      PluginInterface pi = registry.getPlugin( StepPluginType.class, stepMetaInterface );
+      if( pi != null && !Utils.isEmpty( pi.getIds()[0] ) ) {
+        this.stepid = pi.getIds()[0];
+        if( pi.isDeprecated() ) {
+          this.isDeprecated = true;
+          this.suggestion = Const.NVL( pi.getSuggestion(), "" );
+        }
+      }
     }
     this.name = stepname;
     setStepMetaInterface( stepMetaInterface );
@@ -300,10 +300,13 @@ public class StepMeta extends SharedObjectBase implements Cloneable, Comparable<
     try {
       name = XMLHandler.getTagValue( stepnode, "name" );
       stepid = XMLHandler.getTagValue( stepnode, "type" );
-      setDeprecationAndSuggestedStep();
 
       // Create a new StepMetaInterface object...
-      PluginInterface sp = registry.findPluginWithId( StepPluginType.class, stepid );
+      PluginInterface sp = registry.findPluginWithId( StepPluginType.class, stepid, true );
+      if( sp != null && sp.isDeprecated() ) {
+        this.isDeprecated = true;
+        this.suggestion = Const.NVL( sp.getSuggestion(), "" );
+      }
 
       if ( sp == null ) {
         setStepMetaInterface( new MissingTrans( name, stepid ) );
@@ -974,18 +977,20 @@ public class StepMeta extends SharedObjectBase implements Cloneable, Comparable<
   @Deprecated
   public String exportResources( VariableSpace space, Map<String, ResourceDefinition> definitions,
       ResourceNamingInterface resourceNamingInterface, Repository repository ) throws KettleException {
-    return exportResources( space, definitions, resourceNamingInterface, repository, repository.getMetaStore() );
+    return exportResources( space, definitions, resourceNamingInterface, repository,
+      MetaStoreConst.getDefaultMetastore() );
   }
 
   @Override
   @SuppressWarnings( "deprecation" )
-  public String exportResources( VariableSpace space, Map<String, ResourceDefinition> definitions,
-      ResourceNamingInterface resourceNamingInterface, Repository repository, IMetaStore metaStore )
-        throws KettleException {
+  public String exportResources( Bowl executionBowl, Bowl globalManagementBowl, VariableSpace space,
+      Map<String, ResourceDefinition> definitions, ResourceNamingInterface resourceNamingInterface,
+      Repository repository, IMetaStore metaStore ) throws KettleException {
 
     // Compatibility with previous release...
     //
-    String resources = stepMetaInterface.exportResources( space, definitions, resourceNamingInterface, repository );
+    String resources = stepMetaInterface.exportResources( executionBowl, space, definitions,
+      resourceNamingInterface, repository );
     if ( resources != null ) {
       return resources;
     }
@@ -994,7 +999,8 @@ public class StepMeta extends SharedObjectBase implements Cloneable, Comparable<
     // These can in turn add anything to the map in terms of resources, etc.
     // Even reference files, etc. For now it's just XML probably...
     //
-    return stepMetaInterface.exportResources( space, definitions, resourceNamingInterface, repository, metaStore );
+    return stepMetaInterface.exportResources( executionBowl, globalManagementBowl, space, definitions,
+      resourceNamingInterface, repository, metaStore );
   }
 
   /**
@@ -1149,21 +1155,6 @@ public class StepMeta extends SharedObjectBase implements Cloneable, Comparable<
     return attributes.get( key );
   }
 
-  private void setDeprecationAndSuggestedStep() {
-    PluginRegistry registry = PluginRegistry.getInstance();
-    final List<PluginInterface> deprecatedSteps = registry.getPluginsByCategory( StepPluginType.class,
-      BaseMessages.getString( PKG, "BaseStep.Category.Deprecated" ) );
-    for ( PluginInterface p : deprecatedSteps ) {
-      String[] ids = p.getIds();
-      if ( !ArrayUtils.isEmpty( ids ) && ids[0].equals( this.stepid ) ) {
-        this.isDeprecated = true;
-        this.suggestion = registry.findPluginWithId( StepPluginType.class, this.stepid ) != null
-          ? registry.findPluginWithId( StepPluginType.class, this.stepid ).getSuggestion() : "";
-        break;
-      }
-    }
-  }
-
   public boolean isMissing() {
     return this.stepMetaInterface instanceof MissingTrans;
   }
@@ -1174,5 +1165,16 @@ public class StepMeta extends SharedObjectBase implements Cloneable, Comparable<
 
   public String getSuggestion() {
     return suggestion;
+  }
+
+  @Override
+  public StepMeta makeClone() {
+    return (StepMeta) clone();
+  }
+
+  @Override
+  public Node toNode() throws KettleException {
+    Document doc = XMLHandler.loadXMLString( getXML() );
+    return XMLHandler.getSubNode( doc, XML_TAG );
   }
 }

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core;
 
@@ -31,7 +23,13 @@ import org.pentaho.di.core.row.value.ValueMetaInteger;
 import org.pentaho.di.core.row.value.ValueMetaNumber;
 import org.pentaho.di.junit.rules.RestorePDIEnvironment;
 
+import java.util.Arrays;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class ConditionTest {
@@ -74,12 +72,290 @@ public class ConditionTest {
     rowMeta1.addValueMeta( new ValueMetaInteger( "name1" ) );
 
     String left = "name1";
-    ValueMetaAndData right_exact = new ValueMetaAndData( new ValueMetaInteger( "name1" ), new Long( -10 ) );
+    ValueMetaAndData rightExact = new ValueMetaAndData( new ValueMetaInteger( "name1" ), Long.valueOf( -10L ) );
 
-    Condition condition = new Condition( left, Condition.FUNC_SMALLER, null, right_exact );
-    assertFalse( condition.evaluate( rowMeta1, new Object[] { null, "test" } ) );
+    Condition condition = new Condition( left, Condition.FUNC_SMALLER, null, rightExact );
+    assertTrue( condition.evaluate( rowMeta1, new Object[] { null, "test" } ) );
 
-    condition = new Condition( left, Condition.FUNC_SMALLER_EQUAL, null, right_exact );
-    assertFalse( condition.evaluate( rowMeta1, new Object[] { null, "test" } ) );
+    condition = new Condition( left, Condition.FUNC_SMALLER_EQUAL, null, rightExact );
+    assertTrue( condition.evaluate( rowMeta1, new Object[] { null, "test" } ) );
   }
+
+  @Test
+  public void testZeroLargerOrEqualsThanNull() {
+    String left = "left";
+    String right = "right";
+
+    Long leftValue = 0L;
+    Long rightValue = null;
+
+    RowMetaInterface rowMeta = new RowMeta();
+    rowMeta.addValueMeta( new ValueMetaInteger( left ) );
+    rowMeta.addValueMeta( new ValueMetaInteger( right ) );
+
+    Condition condition = new Condition( left, Condition.FUNC_LARGER_EQUAL, right, null );
+    assertTrue( condition.evaluate( rowMeta, new Object[] { leftValue, rightValue  } ) );
+  }
+
+  @Test
+  public void testZeroLargerThanNull() {
+    String left = "left";
+    String right = "right";
+
+    Long leftValue = 0L;
+    Long rightValue = null;
+
+    RowMetaInterface rowMeta = new RowMeta();
+    rowMeta.addValueMeta( new ValueMetaInteger( left ) );
+    rowMeta.addValueMeta( new ValueMetaInteger( right ) );
+
+    Condition condition = new Condition( left, Condition.FUNC_LARGER, right, null );
+    assertTrue( condition.evaluate( rowMeta, new Object[] { leftValue, rightValue  } ) );
+  }
+
+  @Test
+  public void testZeroSmallerOrEqualsThanNull() {
+    String left = "left";
+    String right = "right";
+
+    Long leftValue = 0L;
+    Long rightValue = null;
+
+    RowMetaInterface rowMeta = new RowMeta();
+    rowMeta.addValueMeta( new ValueMetaInteger( left ) );
+    rowMeta.addValueMeta( new ValueMetaInteger( right ) );
+
+    Condition condition = new Condition( left, Condition.FUNC_SMALLER_EQUAL, right, null );
+    assertFalse( condition.evaluate( rowMeta, new Object[] { leftValue, rightValue  } ) );
+  }
+
+  @Test
+  public void testZeroSmallerThanNull() {
+    String left = "left";
+    String right = "right";
+
+    Long leftValue = 0L;
+    Long rightValue = null;
+
+    RowMetaInterface rowMeta = new RowMeta();
+    rowMeta.addValueMeta( new ValueMetaInteger( left ) );
+    rowMeta.addValueMeta( new ValueMetaInteger( right ) );
+
+    Condition condition = new Condition( left, Condition.FUNC_SMALLER, right, null );
+    assertFalse( condition.evaluate( rowMeta, new Object[] { leftValue, rightValue  } ) );
+  }
+
+  @Test
+  public void testNullLargerOrEqualsThanZero() {
+    String left = "left";
+    String right = "right";
+
+    Long leftValue = null;
+    Long rightValue = 0L;
+
+    RowMetaInterface rowMeta = new RowMeta();
+    rowMeta.addValueMeta( new ValueMetaInteger( left ) );
+    rowMeta.addValueMeta( new ValueMetaInteger( right ) );
+
+    Condition condition = new Condition( left, Condition.FUNC_LARGER_EQUAL, right, null );
+    assertFalse( condition.evaluate( rowMeta, new Object[] { leftValue, rightValue  } ) );
+  }
+
+  @Test
+  public void testNullLargerThanZero() {
+    String left = "left";
+    String right = "right";
+
+    Long leftValue = null;
+    Long rightValue = 0L;
+
+    RowMetaInterface rowMeta = new RowMeta();
+    rowMeta.addValueMeta( new ValueMetaInteger( left ) );
+    rowMeta.addValueMeta( new ValueMetaInteger( right ) );
+
+    Condition condition = new Condition( left, Condition.FUNC_LARGER, right, null );
+    assertFalse( condition.evaluate( rowMeta, new Object[] { leftValue, rightValue  } ) );
+  }
+
+  @Test
+  public void testNullSmallerOrEqualsThanZero() {
+    String left = "left";
+    String right = "right";
+
+    Long leftValue = null;
+    Long rightValue = 0L;
+
+    RowMetaInterface rowMeta = new RowMeta();
+    rowMeta.addValueMeta( new ValueMetaInteger( left ) );
+    rowMeta.addValueMeta( new ValueMetaInteger( right ) );
+
+    Condition condition = new Condition( left, Condition.FUNC_SMALLER_EQUAL, right, null );
+    assertTrue( condition.evaluate( rowMeta, new Object[] { leftValue, rightValue  } ) );
+  }
+
+  @Test
+  public void testNullSmallerThanZero() {
+    String left = "left";
+    String right = "right";
+
+    Long leftValue = null;
+    Long rightValue = 0L;
+
+    RowMetaInterface rowMeta = new RowMeta();
+    rowMeta.addValueMeta( new ValueMetaInteger( left ) );
+    rowMeta.addValueMeta( new ValueMetaInteger( right ) );
+
+    Condition condition = new Condition( left, Condition.FUNC_SMALLER, right, null );
+    assertTrue( condition.evaluate( rowMeta, new Object[] { leftValue, rightValue  } ) );
+  }
+
+
+  /**
+   * This test should evaluate the following table result
+   *
+   * +------+------+-------+-------+-------+-------+
+   * |  A   |  B   |  A<B  | A<=B  |  B>A  | B>=A  |
+   * +------+------+-------+-------+-------+-------+
+   * | null | 1    | true  | true  | true  | true  |
+   * | 0    | 1    | true  | true  | true  | true  |
+   * | 1    | null | false | false | false | false |
+   * | 1    | 0    | false | false | false | false |
+   * | null | 0    | true  | true  | true  | true  |
+   * | 0    | null | false | false | false | false |
+   * | null | -1   | true  | true  | true  | true  |
+   * | 0    | -1   | false | false | false | false |
+   * | -1   | null | false | false | false | false |
+   * | -1   | 0    | true  | true  | true  | true  |
+   * +------+------+-------+-------+-------+-------+
+   *
+   */
+  @Test
+  public void testFormula() {
+    String left = "left";
+    String right = "right";
+
+    RowMetaInterface rowMeta = new RowMeta();
+    rowMeta.addValueMeta( new ValueMetaInteger( left ) );
+    rowMeta.addValueMeta( new ValueMetaInteger( right ) );
+
+    List<Long> valuesA = Arrays.asList( null, 0L, 1L, 1L, null, 0L, null, 0L, -1L, -1L );
+    List<Long> valuesB = Arrays.asList( 1L, 1L, null, 0L, 0L, null, -1L, -1L, null, 0L );
+
+    List<Boolean> resultsSmallerFunction = Arrays.asList( true, true, false, false, true, false, true, false, false, true );
+    List<Boolean> resultsSmallerOrEqualFunction = Arrays.asList( true, true, false, false, true, false, true, false, false, true );
+    List<Boolean> resultsLargerFunction = Arrays.asList( true, true, false, false, true, false, true, false, false, true );
+    List<Boolean> resultsLargerOrEqualFunction = Arrays.asList( true, true, false, false, true, false, true, false, false, true );
+
+    for ( int i = 0; i < resultsSmallerFunction.size(); i++ ) {
+      System.out.print( String.format( "FUNC: A<B; A: %d; B: %d; Expected: %b;", valuesA.get( i ), valuesB.get( i ), resultsSmallerFunction.get( i ) ) );
+      Condition condition = new Condition( left, Condition.FUNC_SMALLER, right, null );
+      assertEquals( resultsSmallerFunction.get( i ), condition.evaluate( rowMeta, new Object[] { valuesA.get( i ), valuesB.get( i )  } ) );
+      System.out.println(" Result: " + condition.evaluate( rowMeta, new Object[] { valuesA.get( i ), valuesB.get( i )  } ) );
+    }
+
+    for ( int i = 0; i < resultsSmallerOrEqualFunction.size(); i++ ) {
+      System.out.print( String.format( "FUNC: A<=B; A: %d; B: %d; Expected: %b;", valuesA.get( i ), valuesB.get( i ), resultsSmallerOrEqualFunction.get( i ) ) );
+      Condition condition = new Condition( left, Condition.FUNC_SMALLER_EQUAL, right, null );
+      assertEquals( resultsSmallerOrEqualFunction.get( i ), condition.evaluate( rowMeta, new Object[] { valuesA.get( i ), valuesB.get( i )  } ) );
+      System.out.println(" Result: " + condition.evaluate( rowMeta, new Object[] { valuesA.get( i ), valuesB.get( i )  } ) );
+    }
+
+    for ( int i = 0; i < resultsLargerFunction.size(); i++ ) {
+      System.out.print( String.format( "FUNC: B>A; A: %d; B: %d; Expected: %b;", valuesA.get( i ), valuesB.get( i ), resultsLargerFunction.get( i ) ) );
+      Condition condition = new Condition( left, Condition.FUNC_LARGER, right, null );
+      assertEquals( resultsLargerFunction.get( i ), condition.evaluate( rowMeta, new Object[] { valuesB.get( i ), valuesA.get( i )  } ) );
+      System.out.println(" Result: " + condition.evaluate( rowMeta, new Object[] { valuesB.get( i ), valuesA.get( i )  } ) );
+    }
+
+    for ( int i = 0; i < resultsLargerOrEqualFunction.size(); i++ ) {
+      System.out.print( String.format( "FUNC: B>=A; A: %d; B: %d; Expected: %b;", valuesA.get( i ), valuesB.get( i ), resultsLargerOrEqualFunction.get( i ) ) );
+      Condition condition = new Condition( left, Condition.FUNC_LARGER_EQUAL, right, null );
+      assertEquals( resultsLargerOrEqualFunction.get( i ), condition.evaluate( rowMeta, new Object[] { valuesB.get( i ), valuesA.get( i )  } ) );
+      System.out.println(" Result: " + condition.evaluate( rowMeta, new Object[] { valuesB.get( i ), valuesA.get( i )  } ) );
+    }
+  }
+
+  @Test
+  public void testEmptyRightValueTagKeepsRightExactConstantWhenYieldEmptyValueIsY() throws Exception {
+
+    System.setProperty( Const.KETTLE_XML_EMPTY_TAG_YIELDS_EMPTY_VALUE, "Y" );
+
+    String xml = "<condition>" +
+      "<negated>N</negated>" +
+      "<leftvalue>A</leftvalue>" +
+      "<function>=</function>" +
+      "<rightvalue/>" +
+      "<value>" +
+      "<name>constant</name>" +
+      "<type>String</type>" +
+      "<text>Pass</text>" +
+      "<length>-1</length>" +
+      "<precision>-1</precision>" +
+      "<isnull>N</isnull>" +
+      "<mask/>" +
+      "</value>" +
+      "</condition>";
+
+    Condition c = new Condition( xml );
+
+    assertTrue( c.isAtomic() );
+    assertEquals( "A", c.getLeftValuename() );
+    assertEquals( Condition.FUNC_EQUAL, c.getFunction() );
+
+    // Critical: empty rightvalue should not hide / override the rightExact constant.
+    assertNotNull( c.getRightExact() );
+    assertEquals( "Pass", c.getRightExactString() );
+
+    // With KETTLE_XML_EMPTY_TAG_YIELDS_EMPTY_VALUE=Y, <rightvalue/> would normally become "".
+    // We normalize it back to null so it doesn't mask the right-exact constant.
+    assertNull( c.getRightValuename() );
+  }
+
+  @Test
+  public void testEmptyRightValueTagKeepsRightExactConstantWhenYieldEmptyValueIsN() throws Exception {
+
+    System.setProperty( Const.KETTLE_XML_EMPTY_TAG_YIELDS_EMPTY_VALUE, "N" );
+
+    String xml = "<condition>" +
+      "<negated>N</negated>" +
+      "<leftvalue>A</leftvalue>" +
+      "<function>=</function>" +
+      "<rightvalue/>" +
+      "<value>" +
+      "<name>constant</name>" +
+      "<type>String</type>" +
+      "<text>Pass</text>" +
+      "<length>-1</length>" +
+      "<precision>-1</precision>" +
+      "<isnull>N</isnull>" +
+      "<mask/>" +
+      "</value>" +
+      "</condition>";
+
+    Condition c = new Condition( xml );
+
+    assertTrue( c.isAtomic() );
+    assertNotNull( c.getRightExact() );
+    assertEquals( "Pass", c.getRightExactString() );
+  }
+
+  @Test
+  public void testEmptyLeftValueTagTreatedAsNullWhenYieldEmptyValueIsY() throws Exception {
+
+    System.setProperty( Const.KETTLE_XML_EMPTY_TAG_YIELDS_EMPTY_VALUE, "Y" );
+
+    String xml = "<condition>" +
+      "<negated>N</negated>" +
+      "<leftvalue/>" +
+      "<function>=</function>" +
+      "<rightvalue>B</rightvalue>" +
+      "</condition>";
+
+    Condition c = new Condition( xml );
+
+    assertTrue( c.isAtomic() );
+    assertNull( c.getLeftValuename() );
+    assertTrue( c.isEmpty() );
+  }
+
 }

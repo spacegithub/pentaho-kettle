@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.mapping;
 
@@ -537,7 +529,7 @@ public class Mapping extends BaseStep implements StepInterface {
     if ( mappingParameters != null ) {
       StepWithMappingMeta
         .activateParams( data.mappingTrans, data.mappingTrans, this, data.mappingTransMeta.listParameters(),
-          mappingParameters.getVariable(), mappingParameters.getInputField() );
+          mappingParameters.getVariable(), mappingParameters.getInputField(), meta.getMappingParameters().isInheritingAllVariables() );
     }
 
   }
@@ -566,7 +558,7 @@ public class Mapping extends BaseStep implements StepInterface {
       // Pass the repository down to the metadata object...
       //
       meta.setRepository( getTransMeta().getRepository() );
-      mappingData.mappingTransMeta = MappingMeta.loadMappingMeta( meta, meta.getRepository(),
+      mappingData.mappingTransMeta = MappingMeta.loadMappingMeta( getTransMeta().getBowl(), meta, meta.getRepository(),
           meta.getMetaStore(), this, meta.getMappingParameters().isInheritingAllVariables() );
 
       if ( data.mappingTransMeta == null ) {

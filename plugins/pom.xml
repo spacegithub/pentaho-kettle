@@ -1,25 +1,37 @@
 <?xml version="1.0"?>
+<!-- ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************* -->
 <project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>org.pentaho.di.plugins</groupId>
   <artifactId>pdi-plugins</artifactId>
-  <version>9.0.0.0-SNAPSHOT</version>
+  <version>11.1.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <name>PDI Plugins</name>
-
   <parent>
     <groupId>org.pentaho.di</groupId>
     <artifactId>pdi</artifactId>
-    <version>9.0.0.0-SNAPSHOT</version>
+    <version>11.1.0.0-SNAPSHOT</version>
   </parent>
 
   <properties>
     <!-- Test running configuration -->
     <maven-surefire-plugin.reuseForks>true</maven-surefire-plugin.reuseForks>
     <maven-failsafe-plugin.reuseForks>false</maven-failsafe-plugin.reuseForks>
+    <maven-surefire-plugin.argLine> --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED </maven-surefire-plugin.argLine>
+    <maven-failsafe-plugin.argLine> --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED </maven-failsafe-plugin.argLine>
   </properties>
 
   <profiles>
@@ -31,7 +43,34 @@
         </property>
       </activation>
       <modules>
-        <module>log4j</module>
+        <module>monet-db-bulk-loader</module>
+        <module>postgresql-db-bulk-loader</module>
+        <module>oracle-bulk-loader</module>
+        <module>terafast-bulk-loader</module>
+        <module>infobright-bulk-loader</module>
+        <module>ivw-bulk-loader</module>
+        <module>edi2xml</module>
+        <module>random-cc-number-generator</module>
+        <module>credit-card-validator</module>
+        <module>mysql-bulk-loader</module>
+        <module>yaml-input</module>
+        <module>metastore-locator</module>
+        <module>repository-locator</module>
+        <module>rss</module>
+        <module>mondrianinput</module>
+        <module>avro-format</module>
+        <module>get-repository-names</module>
+        <module>sftpput</module>
+        <module>put-file-sftp</module>
+        <module>connected-to-repository</module>
+        <module>get-file-sftp</module>
+        <module>ftps</module>
+        <module>mail</module>
+        <module>export-repository</module>
+        <module>ftp-delete</module>
+        <module>mail-validator</module>
+        <module>get-file-with-ftp</module>
+        <module>msg-box-info</module>
       </modules>
     </profile>
 
@@ -45,16 +84,14 @@
       <modules>
         <module>core</module>
         <module>core-ui</module>
-        <module>file-open-save</module>
-        <module>get-fields</module>
+        <module>file-open-save-new</module>
+        <module>connections</module>
         <module>repositories</module>
         <module>meta-inject</module>
         <module>engine-configuration</module>
         <module>get-previous-row-field</module>
         <module>aggregate-rows</module>
-        <module>elasticsearch-bulk-insert</module>
         <module>google-analytics</module>
-        <module>gp-bulk-loader</module>
         <module>pentaho-googledrive-vfs</module>
         <module>hl7</module>
         <module>drools</module>
@@ -64,15 +101,23 @@
         <module>sap</module>
         <module>shapefilereader</module>
         <module>gpload</module>
-        <module>openerp</module>
-        <module>palo</module>
-        <module>version-checker</module>
-        <module>lucid-db-streaming-loader</module>
         <module>salesforce</module>
         <module>pur</module>
         <module>ms-access</module>
         <module>xml</module>
         <module>streaming</module>
+        <module>metastore-locator</module>
+        <module>repository-locator</module>
+        <module>ldap</module>
+        <module>excel</module>
+        <module>pentaho-reporting</module>
+        <module>rest</module>
+        <module>put-a-file-with-ftp</module>
+        <module>email-messages</module>
+        <module>mail-job</module>
+        <module>repo-vfs</module>
+        <module>s3-vfs</module>
+        <module>kafka</module>
       </modules>
     </profile>
 

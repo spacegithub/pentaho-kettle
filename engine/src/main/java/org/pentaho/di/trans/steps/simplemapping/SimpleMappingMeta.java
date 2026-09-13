@@ -1,27 +1,20 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.simplemapping;
 
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
@@ -53,6 +46,7 @@ import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.TransMeta.TransformationType;
 import org.pentaho.di.trans.step.StepDataInterface;
+import org.pentaho.di.trans.step.StepHelperInterface;
 import org.pentaho.di.trans.step.StepIOMeta;
 import org.pentaho.di.trans.step.StepIOMetaInterface;
 import org.pentaho.di.trans.step.StepInterface;
@@ -271,7 +265,8 @@ public class SimpleMappingMeta extends StepWithMappingMeta implements StepMetaIn
     outputMapping = outputDefinition;
   }
 
-  public void getFields( RowMetaInterface row, String origin, RowMetaInterface[] info, StepMeta nextStep,
+  @Override
+  public void getFields( Bowl bowl, RowMetaInterface row, String origin, RowMetaInterface[] info, StepMeta nextStep,
     VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
     // First load some interesting data...
 
@@ -280,7 +275,7 @@ public class SimpleMappingMeta extends StepWithMappingMeta implements StepMetaIn
     TransMeta mappingTransMeta = null;
     try {
       mappingTransMeta =
-        loadMappingMeta( this, repository, metaStore, space, mappingParameters.isInheritingAllVariables() );
+        loadMappingMeta( bowl, this, repository, metaStore, space, mappingParameters.isInheritingAllVariables() );
     } catch ( KettleException e ) {
       throw new KettleStepException( BaseMessages.getString(
         PKG, "SimpleMappingMeta.Exception.UnableToLoadMappingTransformation" ), e );
@@ -294,7 +289,7 @@ public class SimpleMappingMeta extends StepWithMappingMeta implements StepMetaIn
       // This just means: set a number of variables or parameter values:
       //
       StepWithMappingMeta.activateParams( mappingTransMeta, mappingTransMeta, space, mappingTransMeta.listParameters(),
-        mappingParameters.getVariable(), mappingParameters.getInputField() );
+        mappingParameters.getVariable(), mappingParameters.getInputField(), mappingParameters.isInheritingAllVariables() );
     }
 
     // Keep track of all the fields that need renaming...
@@ -433,6 +428,11 @@ public class SimpleMappingMeta extends StepWithMappingMeta implements StepMetaIn
   }
 
   @Override
+  public StepHelperInterface getStepHelperInterface() {
+    return new SimpleMappingHelper( this );
+  }
+
+  @Override
   public List<ResourceReference> getResourceDependencies( TransMeta transMeta, StepMeta stepInfo ) {
     List<ResourceReference> references = new ArrayList<ResourceReference>( 5 );
     String realFilename = transMeta.environmentSubstitute( fileName );
@@ -523,8 +523,9 @@ public class SimpleMappingMeta extends StepWithMappingMeta implements StepMetaIn
   }
 
   @Deprecated
-  public Object loadReferencedObject( int index, Repository rep, VariableSpace space ) throws KettleException {
-    return loadReferencedObject( index, rep, null, space );
+  public Object loadReferencedObject( Bowl bowl, int index, Repository rep, VariableSpace space )
+    throws KettleException {
+    return loadReferencedObject( bowl, index, rep, null, space );
   }
 
   /**
@@ -541,8 +542,8 @@ public class SimpleMappingMeta extends StepWithMappingMeta implements StepMetaIn
    * @return the referenced object once loaded
    * @throws KettleException
    */
-  public Object loadReferencedObject( int index, Repository rep, IMetaStore metaStore, VariableSpace space ) throws KettleException {
-    return loadMappingMeta( this, rep, metaStore, space );
+  public Object loadReferencedObject( Bowl bowl, int index, Repository rep, IMetaStore metaStore, VariableSpace space ) throws KettleException {
+    return loadMappingMeta( bowl, this, rep, metaStore, space );
   }
 
   public IMetaStore getMetaStore() {
@@ -571,14 +572,14 @@ public class SimpleMappingMeta extends StepWithMappingMeta implements StepMetaIn
 
   @Override
   public List<MappingIODefinition> getInputMappings() {
-    final List<MappingIODefinition> inputMappings = new ArrayList();
+    final List<MappingIODefinition> inputMappings = new ArrayList<>();
     inputMappings.add( inputMapping );
     return inputMappings;
   }
 
   @Override
   public List<MappingIODefinition> getOutputMappings() {
-    final List<MappingIODefinition> outputMappings = new ArrayList();
+    final List<MappingIODefinition> outputMappings = new ArrayList<>();
     outputMappings.add( outputMapping );
     return outputMappings;
   }

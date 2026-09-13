@@ -1,24 +1,16 @@
-/*******************************************************************************
+/*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.textfileoutput;
 
@@ -33,13 +25,12 @@ import java.util.List;
 
 import org.apache.commons.vfs2.FileObject;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.compress.CompressionOutputStream;
-import org.pentaho.di.core.compress.zip.ZIPCompressionProvider;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.ResultFile;
 import org.pentaho.di.core.WriterOutputStream;
+import org.pentaho.di.core.compress.CompressionOutputStream;
 import org.pentaho.di.core.compress.CompressionProvider;
 import org.pentaho.di.core.compress.CompressionProviderFactory;
+import org.pentaho.di.core.compress.zip.ZIPCompressionProvider;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleFileException;
 import org.pentaho.di.core.exception.KettleStepException;
@@ -47,6 +38,7 @@ import org.pentaho.di.core.exception.KettleValueException;
 import org.pentaho.di.core.fileinput.CharsetToolkit;
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.i18n.BaseMessages;
@@ -102,10 +94,8 @@ public class TextFileOutput extends BaseStep implements StepInterface {
   }
 
   private CompressionProvider getCompressionProvider() throws KettleException {
-    String compressionType = meta.getFileCompression();
-    if ( Utils.isEmpty( compressionType ) ) {
-      compressionType = FILE_COMPRESSION_TYPE_NONE;
-    }
+    String compressionType = Const.NVL( meta.getFileCompression(), FILE_COMPRESSION_TYPE_NONE );
+
     CompressionProvider compressionProvider = CompressionProviderFactory.getInstance().getCompressionProviderByName( compressionType );
 
     if ( compressionProvider == null ) {
@@ -135,9 +125,6 @@ public class TextFileOutput extends BaseStep implements StepInterface {
   public void initFileStreamWriter( String filename ) throws KettleException {
     data.writer = null;
     try {
-      BufferedOutputStream bufferedOutputStream;
-      OutputStream fileOutputStream;
-      CompressionOutputStream compressionOutputStream;
       TextFileOutputData.FileStream fileStreams = null;
 
       try {
@@ -149,13 +136,22 @@ public class TextFileOutput extends BaseStep implements StepInterface {
           fileStreams = data.getFileStreamsCollection().getStream( filename );
         }
 
-        boolean writingToFileForFirstTime = fileStreams != null;
-        boolean createParentDirIfNotExists = meta.isCreateParentFolder();
-        boolean appendToExistingFile = meta.isFileAppended();
+        boolean writingToFileForFirstTime = fileStreams == null;
 
-        if ( fileStreams == null ) { // Opening file for first time
+        if ( writingToFileForFirstTime ) { // Opening file for first time
+
+          if ( meta.isAddToResultFiles() ) {
+            // Add this to the result file names...
+            ResultFile resultFile =
+              new ResultFile( ResultFile.FILE_TYPE_GENERAL, getFileObject( filename, getTransMeta() ),
+                getTransMeta().getName(), getStepname() );
+            resultFile.setComment( BaseMessages.getString( PKG, "TextFileOutput.AddResultFile" ) );
+            addResultFile( resultFile );
+          }
+
           CompressionProvider compressionProvider = getCompressionProvider();
           boolean isZipFile = compressionProvider instanceof ZIPCompressionProvider;
+          boolean appendToExistingFile = meta.isFileAppended();
 
           if ( appendToExistingFile && isZipFile && isFileExists( filename ) ) {
             throw new KettleException( "Can not append to an existing zip file : " + filename );
@@ -171,15 +167,17 @@ public class TextFileOutput extends BaseStep implements StepInterface {
             data.getFileStreamsCollection().closeOldestOpenFile( isZipFile );
           }
 
-          if ( createParentDirIfNotExists && ( ( data.getFileStreamsCollection().size( ) == 0 )  || meta.isFileNameInField( ) ) ) {
+          if ( meta.isCreateParentFolder()
+            && ( ( data.getFileStreamsCollection().size() == 0 ) || meta.isFileNameInField() ) ) {
             createParentFolder( filename );
           }
           if ( log.isDetailed() ) {
             logDetailed( "Opening output stream using provider: " + compressionProvider.getName() );
           }
 
-          fileOutputStream = getOutputStream( filename, getTransMeta(), !isZipFile && appendToExistingFile );
-          compressionOutputStream = compressionProvider.createOutputStream( fileOutputStream );
+          OutputStream fileOutputStream =
+            getOutputStream( filename, getTransMeta(), !isZipFile && appendToExistingFile );
+          CompressionOutputStream compressionOutputStream = compressionProvider.createOutputStream( fileOutputStream );
 
           // The compression output stream may also archive entries. For this we create the filename
           // (with appropriate extension) and add it as an entry to the output stream. For providers
@@ -194,14 +192,15 @@ public class TextFileOutput extends BaseStep implements StepInterface {
             }
           }
 
-          bufferedOutputStream = new BufferedOutputStream( compressionOutputStream, 5000 );
+          BufferedOutputStream bufferedOutputStream = new BufferedOutputStream( compressionOutputStream, 5000 );
 
           fileStreams = data.new FileStream( fileOutputStream, compressionOutputStream, bufferedOutputStream );
 
           data.getFileStreamsCollection().add( filename, fileStreams );
 
           if ( log.isDetailed() ) {
-            logDetailed( "Opened new file with name [" + KettleVFS.getFriendlyURI( filename ) + "]" );
+            logDetailed( "Opened new file with name [" + KettleVFS.getInstance( getTransMeta().getBowl() )
+                         .getFriendlyURI( filename ) + "]" );
           }
         } else if ( fileStreams.getBufferedOutputStream() == null ) { // File was previously opened and now needs to be reopened.
           int maxOpenFiles = getMaxOpenFiles();
@@ -209,30 +208,19 @@ public class TextFileOutput extends BaseStep implements StepInterface {
             data.getFileStreamsCollection().closeOldestOpenFile( false );
           }
 
-          fileOutputStream = getOutputStream( filename, getTransMeta(), true );
+          OutputStream fileOutputStream = getOutputStream( filename, getTransMeta(), true );
           CompressionProvider compressionProvider = getCompressionProvider();
-          compressionOutputStream = compressionProvider.createOutputStream( fileOutputStream );
+          CompressionOutputStream compressionOutputStream = compressionProvider.createOutputStream( fileOutputStream );
           compressionOutputStream.addEntry( filename, environmentSubstitute( meta.getExtension() ) );
-          bufferedOutputStream = new BufferedOutputStream( compressionOutputStream, 5000 );
+          BufferedOutputStream bufferedOutputStream = new BufferedOutputStream( compressionOutputStream, 5000 );
 
           fileStreams.setFileOutputStream( fileOutputStream );
           fileStreams.setCompressedOutputStream( compressionOutputStream );
           fileStreams.setBufferedOutputStream( bufferedOutputStream );
         }
-
-        if ( writingToFileForFirstTime ) {
-          if ( meta.isAddToResultFiles() ) {
-            // Add this to the result file names...
-            ResultFile resultFile = new ResultFile( ResultFile.FILE_TYPE_GENERAL, getFileObject( filename, getTransMeta() ), getTransMeta().getName(), getStepname() );
-            if ( resultFile != null ) {
-              resultFile.setComment( BaseMessages.getString( PKG, "TextFileOutput.AddResultFile" ) );
-              addResultFile( resultFile );
-            }
-          }
-        }
       } catch ( Exception e ) {
         if ( !( e instanceof KettleException ) ) {
-          throw new KettleException( "Error opening new file : " + e.toString() );
+          throw new KettleException( "Error opening new file : " + e.toString(), e );
         } else {
           throw (KettleException) e;
         }
@@ -280,11 +268,11 @@ public class TextFileOutput extends BaseStep implements StepInterface {
   }
 
   public int getFlushInterval(  )  {
-    String var = getTransMeta().getVariable( "KETTLE_FILE_OUTPUT_MAX_STREAM_LIFE" );
+    String flushIntervalStr = getTransMeta().getVariable( "KETTLE_FILE_OUTPUT_MAX_STREAM_LIFE" );
     int flushInterval = 0;
-    if ( var != null ) {
+    if ( flushIntervalStr != null ) {
       try {
-        flushInterval = Integer.parseInt( var );
+        flushInterval = Integer.parseInt( flushIntervalStr );
       } catch ( Exception ex ) {
         // Do nothing
       }
@@ -293,11 +281,11 @@ public class TextFileOutput extends BaseStep implements StepInterface {
   }
 
   public int getMaxOpenFiles(  )  {
-    String var = getTransMeta().getVariable( "KETTLE_FILE_OUTPUT_MAX_STREAM_COUNT" );
+    String maxStreamCountStr = getTransMeta().getVariable( "KETTLE_FILE_OUTPUT_MAX_STREAM_COUNT" );
     int maxStreamCount = 0;
-    if ( var != null ) {
+    if ( maxStreamCountStr != null ) {
       try {
-        maxStreamCount = Integer.parseInt( var );
+        maxStreamCount = Integer.parseInt( maxStreamCountStr );
       } catch ( Exception ex ) {
         // Do nothing
       }
@@ -334,8 +322,8 @@ public class TextFileOutput extends BaseStep implements StepInterface {
 
   // Warning!!!
   // We need to be very particular about how we go about determining whether or not to write a file header before writing the row data.
-  // There are two performance issues in play. 1: Don't hit the file system unneccesarily. 2: Don't search the collection of
-  // file streams unneccessarily. Messing around with this method could have serious performance impacts.
+  // There are two performance issues in play. 1: Don't hit the file system unnecessarily. 2: Don't search the collection of
+  // file streams unnecessarily. Messing around with this method could have serious performance impacts.
   public boolean isWriteHeader( String filename ) throws KettleException {
     boolean writingToFileForFirstTime = first;
     boolean isWriteHeader = meta.isHeaderEnabled();
@@ -354,7 +342,9 @@ public class TextFileOutput extends BaseStep implements StepInterface {
     if ( row != null ) {
       String filename = getOutputFileName( meta.isFileNameInField() ? row : null );
       boolean isWriteHeader = isWriteHeader( filename );
-      initFileStreamWriter( filename );
+      if ( data.writer == null || meta.isFileNameInField() ) {
+        initFileStreamWriter( filename );
+      }
 
       first = false;
 
@@ -398,7 +388,7 @@ public class TextFileOutput extends BaseStep implements StepInterface {
         long currentTime = new Date().getTime();
         if ( data.lastFileFlushTime == 0 ) {
           data.lastFileFlushTime = currentTime;
-        } else if ( data.lastFileFlushTime - currentTime > flushInterval ) {
+        } else if ( currentTime - data.lastFileFlushTime > flushInterval ) {
           try {
             data.getFileStreamsCollection().flushOpenFiles( false );
           } catch ( IOException e ) {
@@ -439,25 +429,30 @@ public class TextFileOutput extends BaseStep implements StepInterface {
     meta = (TextFileOutputMeta) smi;
     data = (TextFileOutputData) sdi;
 
-    if ( ( meta.getEncoding() == null ) || ( meta.getEncoding().isEmpty() ) ) {
+    if ( Utils.isEmpty( meta.getEncoding() ) ) {
       meta.setEncoding( CharsetToolkit.getDefaultSystemCharset().name() );
     }
 
     Object[] row = getRow(); // This also waits for a row to be finished.
 
-    if ( row != null  && first ) {
-      data.outputRowMeta = getInputRowMeta().clone();
-    }
-
     if ( first ) {
+
+      if ( row != null ) {
+        data.inputRowMeta = getInputRowMeta();
+        data.outputRowMeta = data.inputRowMeta.clone();
+      }
+
       initBinaryDataFields();
       if ( data.outputRowMeta != null ) {
         initFieldNumbers( data.outputRowMeta, meta.getOutputFields() );
         if ( row != null ) {
-          meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+          meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+            metaStore );
         }
+        meta.calcMetaWithFieldOptions( data );
       }
     }
+
     return writeRowTo( row );
   }
 
@@ -471,7 +466,7 @@ public class TextFileOutput extends BaseStep implements StepInterface {
 
   public void writeRow( RowMetaInterface rowMeta, Object[] r ) throws KettleStepException {
     try {
-      if ( meta.getOutputFields() == null || meta.getOutputFields().length == 0 ) {
+      if ( Utils.isEmpty( meta.getOutputFields() ) ) {
         /*
          * Write all values in stream to text file.
          */
@@ -487,7 +482,6 @@ public class TextFileOutput extends BaseStep implements StepInterface {
           //
           writeField( v, valueData, null );
         }
-        data.writer.write( data.binaryNewline );
       } else {
         /*
          * Only write the fields specified!
@@ -497,12 +491,13 @@ public class TextFileOutput extends BaseStep implements StepInterface {
             data.writer.write( data.binarySeparator );
           }
 
-          ValueMetaInterface v = rowMeta.getValueMeta( data.fieldnrs[i] );
-          Object valueData = r[data.fieldnrs[i]];
-          writeField( v, valueData, data.binaryNullValue[i] );
+          ValueMetaInterface v = meta.getMetaWithFieldOptions()[ i ];
+          Object valueData = r[ data.fieldnrs[ i ] ];
+          writeField( v, valueData, data.binaryNullValue[ i ] );
         }
-        data.writer.write( data.binaryNewline );
       }
+
+      data.writer.write( data.binaryNewline );
 
       incrementLinesOutput();
 
@@ -581,8 +576,8 @@ public class TextFileOutput extends BaseStep implements StepInterface {
         } else {
           int currIndex = text.length;
           for ( int i = 0; i < ( length - string.length() ); i++ ) {
-            for ( int j = 0; j < filler.length; j++ ) {
-              bytes[currIndex++] = filler[j];
+            for ( byte b : filler ) {
+              bytes[ currIndex++ ] = b;
             }
           }
         }
@@ -629,16 +624,7 @@ public class TextFileOutput extends BaseStep implements StepInterface {
 
       if ( str != null && str.length > 0 ) {
         List<Integer> enclosures = null;
-        boolean writeEnclosures = false;
-
-        if ( v.isString() ) {
-          if ( meta.isEnclosureForced() && !meta.isPadded() ) {
-            writeEnclosures = true;
-          } else if ( !meta.isEnclosureFixDisabled()
-              && containsSeparatorOrEnclosure( str, data.binarySeparator, data.binaryEnclosure ) ) {
-            writeEnclosures = true;
-          }
-        }
+        boolean writeEnclosures = isWriteEnclosureForWriteField( str );
 
         if ( writeEnclosures ) {
           data.writer.write( data.binaryEnclosure );
@@ -685,7 +671,7 @@ public class TextFileOutput extends BaseStep implements StepInterface {
         }
         if ( found ) {
           if ( positions == null ) {
-            positions = new ArrayList<Integer>();
+            positions = new ArrayList<>();
           }
           positions.add( i );
         }
@@ -719,7 +705,7 @@ public class TextFileOutput extends BaseStep implements StepInterface {
 
     try {
       // If we have fields specified: list them in this order!
-      if ( meta.getOutputFields() != null && meta.getOutputFields().length > 0 ) {
+      if ( !Utils.isEmpty( meta.getOutputFields() ) ) {
         for ( int i = 0; i < meta.getOutputFields().length; i++ ) {
           String fieldName = meta.getOutputFields()[i].getName();
           ValueMetaInterface v = r.searchValueMeta( fieldName );
@@ -728,10 +714,7 @@ public class TextFileOutput extends BaseStep implements StepInterface {
             data.writer.write( data.binarySeparator );
           }
 
-          boolean writeEnclosure =
-              ( meta.isEnclosureForced() && data.binaryEnclosure.length > 0 && v != null && v.isString() )
-                  || ( ( !meta.isEnclosureFixDisabled() && containsSeparatorOrEnclosure( fieldName.getBytes(),
-                      data.binarySeparator, data.binaryEnclosure ) ) );
+          boolean writeEnclosure = isWriteEnclosureForFieldName( v, fieldName );
 
           if ( writeEnclosure ) {
             data.writer.write( data.binaryEnclosure );
@@ -743,6 +726,10 @@ public class TextFileOutput extends BaseStep implements StepInterface {
         }
         data.writer.write( data.binaryNewline );
       } else if ( r != null ) {
+        //PDI-17902 - Concat Fields changes the output row meta, only input rows are desired
+        if ( data.inputRowMeta != null ) {
+          r = data.inputRowMeta;
+        }
         // Just put all field names in the header/footer
         for ( int i = 0; i < r.size(); i++ ) {
           if ( i > 0 && data.binarySeparator.length > 0 ) {
@@ -750,10 +737,7 @@ public class TextFileOutput extends BaseStep implements StepInterface {
           }
           ValueMetaInterface v = r.getValueMeta( i );
 
-          boolean writeEnclosure =
-              ( meta.isEnclosureForced() && data.binaryEnclosure.length > 0 && v != null && v.isString() )
-                  || ( ( !meta.isEnclosureFixDisabled() && containsSeparatorOrEnclosure( v.getName().getBytes(),
-                      data.binarySeparator, data.binaryEnclosure ) ) );
+          boolean writeEnclosure = isWriteEnclosureForValueMetaInterface( v );
 
           if ( writeEnclosure ) {
             data.writer.write( data.binaryEnclosure );
@@ -836,9 +820,16 @@ public class TextFileOutput extends BaseStep implements StepInterface {
         try {
           initOutput();
         } catch ( Exception e ) {
-          logError( "Couldn't open file "
-              + KettleVFS.getFriendlyURI( getParentVariableSpace().environmentSubstitute( meta.getFileName() ) )
-              + "." + getParentVariableSpace().environmentSubstitute( meta.getExtension() ), e );
+          if ( getParentVariableSpace() == null ) {
+            logError( "Couldn't open file "
+                + KettleVFS.getInstance( getTransMeta().getBowl() )
+                      .getFriendlyURI( meta.getFileName() ) + "." + meta.getExtension(), e );
+          } else {
+            logError( "Couldn't open file "
+                + KettleVFS.getInstance( getTransMeta().getBowl() )
+                      .getFriendlyURI( getParentVariableSpace().environmentSubstitute( meta.getFileName() ) )
+                + "." + getParentVariableSpace().environmentSubstitute( meta.getExtension() ), e );
+          }
           setErrors( 1L );
           stopAll();
         }
@@ -1010,7 +1001,8 @@ public class TextFileOutput extends BaseStep implements StepInterface {
           }
         } else {
           throw new KettleException( BaseMessages.getString( PKG, "TextFileOutput.Log.ParentFolderNotExistCreateIt",
-              KettleVFS.getFriendlyURI( parentfolder ), KettleVFS.getFriendlyURI( filename ) ) );
+            KettleVFS.getFriendlyURI( parentfolder ),
+            KettleVFS.getInstance( getTransMeta().getBowl() ).getFriendlyURI( filename ) ) );
         }
       }
     } finally {
@@ -1024,16 +1016,57 @@ public class TextFileOutput extends BaseStep implements StepInterface {
     }
   }
 
+
+
+  /**
+   * @return writeEnclosure based on fieldName and ValueMetaInterface value
+   */
+  boolean isWriteEnclosureForFieldName( ValueMetaInterface v, String fieldName ) {
+    return ( isWriteEnclosed( v ) )
+            || isEnclosureFixDisabledAndContainsSeparatorOrEnclosure( fieldName.getBytes() );
+  }
+
+  /**
+   * @return writeEnclosure based on ValueMetaInterface values
+   */
+  boolean isWriteEnclosureForValueMetaInterface( ValueMetaInterface v ) {
+    return ( isWriteEnclosed( v ) )
+            || isEnclosureFixDisabledAndContainsSeparatorOrEnclosure( v.getName().getBytes() );
+  }
+
+  /**
+   * @return writeEnclosure based on valueData
+   */
+  boolean isWriteEnclosureForWriteField( byte[] str ) {
+    return ( meta.isEnclosureForced() && !meta.isPadded() )
+            || isEnclosureFixDisabledAndContainsSeparatorOrEnclosure( str );
+  }
+
+  /**
+   * @return writeEnclosure based on TextFileOutputMeta, TextFileOutputData and ValueMetaInterface values
+   */
+  boolean isWriteEnclosed( ValueMetaInterface v ) {
+    return meta.isEnclosureForced() && data.binaryEnclosure.length > 0 && v != null && v.isString();
+  }
+
+  /**
+   * @return writeEnclosure based on TextFileOutputMeta and ValueMetaInterface values
+   */
+  boolean isEnclosureFixDisabledAndContainsSeparatorOrEnclosure( byte[] source ) {
+    return ( !meta.isEnclosureFixDisabled() && containsSeparatorOrEnclosure( source,
+            data.binarySeparator, data.binaryEnclosure ) );
+  }
+
   protected FileObject getFileObject( String vfsFilename ) throws KettleFileException {
-    return KettleVFS.getFileObject( vfsFilename );
+    return KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( vfsFilename );
   }
 
   protected FileObject getFileObject( String vfsFilename, VariableSpace space ) throws KettleFileException {
-    return KettleVFS.getFileObject( vfsFilename, space );
+    return KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( vfsFilename, space );
   }
 
   protected OutputStream getOutputStream( String vfsFilename, VariableSpace space, boolean append ) throws KettleFileException {
-    return KettleVFS.getOutputStream( vfsFilename, space, append );
+    return KettleVFS.getInstance( getTransMeta().getBowl() ).getOutputStream( vfsFilename, space, append );
   }
 
 }

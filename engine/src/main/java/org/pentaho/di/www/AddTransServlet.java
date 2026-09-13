@@ -1,29 +1,25 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.www;
 
+import org.apache.xerces.dom.DeferredTextImpl;
+import org.owasp.encoder.Encode;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.exception.KettleXMLException;
 import org.pentaho.di.core.logging.LogChannelFileWriter;
 import org.pentaho.di.core.logging.LoggingObjectType;
 import org.pentaho.di.core.logging.SimpleLoggingObject;
@@ -36,18 +32,32 @@ import org.pentaho.di.trans.TransAdapter;
 import org.pentaho.di.trans.TransConfiguration;
 import org.pentaho.di.trans.TransExecutionConfiguration;
 import org.pentaho.di.trans.TransMeta;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 import java.util.Map;
 import java.util.UUID;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 
-//has been replaced by RegisterTransServlet
+/**
+ * @deprecated has been replaced by RegisterTransServlet
+ */
 @Deprecated
 public class AddTransServlet extends BaseHttpServlet implements CartePluginInterface {
   private static final long serialVersionUID = -6850701762586992604L;
@@ -60,6 +70,7 @@ public class AddTransServlet extends BaseHttpServlet implements CartePluginInter
   public AddTransServlet( TransformationMap transformationMap, SocketRepository socketRepository ) {
     super( transformationMap, socketRepository );
   }
+
   /**
 
     <div id="mindtouch">
@@ -139,6 +150,10 @@ public class AddTransServlet extends BaseHttpServlet implements CartePluginInter
       <td>Request was processed and XML response is returned.</td>
     </tr>
     <tr>
+      <td>400</td>
+      <td>Bad request. Malformed XML</td>
+    </tr>
+    <tr>
       <td>500</td>
       <td>Internal server error occurs during request processing.</td>
     </tr>
@@ -176,6 +191,17 @@ public class AddTransServlet extends BaseHttpServlet implements CartePluginInter
 
     response.setStatus( HttpServletResponse.SC_OK );
 
+    addTransformation( request, response, useXML, out, in );
+
+    if ( !useXML ) {
+      out.println( "<p>" );
+      out.println( "</BODY>" );
+      out.println( "</HTML>" );
+    }
+  }
+
+  private void addTransformation( HttpServletRequest request, HttpServletResponse response, boolean useXML,
+                                  PrintWriter out, BufferedReader in ) {
     String realLogFilename = null;
     TransExecutionConfiguration transExecutionConfiguration = null;
 
@@ -187,9 +213,9 @@ public class AddTransServlet extends BaseHttpServlet implements CartePluginInter
       while ( ( c = in.read() ) != -1 ) {
         xml.append( (char) c );
       }
-
       // Parse the XML, create a transformation configuration
       //
+      validateTransformation( new ByteArrayInputStream( xml.toString().getBytes() ) );
       TransConfiguration transConfiguration = TransConfiguration.fromXML( xml.toString() );
       TransMeta transMeta = transConfiguration.getTransMeta();
       transExecutionConfiguration = transConfiguration.getTransExecutionConfiguration();
@@ -202,14 +228,14 @@ public class AddTransServlet extends BaseHttpServlet implements CartePluginInter
       // Also copy the parameters over...
       //
       Map<String, String> params = transExecutionConfiguration.getParams();
-      for ( String param : params.keySet() ) {
-        String value = params.get( param );
-        transMeta.setParameterValue( param, value );
+      for ( Map.Entry<String, String> entry : params.entrySet() ) {
+        transMeta.setParameterValue( entry.getKey(), entry.getValue() );
       }
 
       // If there was a repository, we know about it at this point in time.
       //
       final Repository repository = transExecutionConfiguration.getRepository();
+      clearBowlCache( repository );
 
       String carteObjectId = UUID.randomUUID().toString();
       SimpleLoggingObject servletLoggingObject =
@@ -223,27 +249,7 @@ public class AddTransServlet extends BaseHttpServlet implements CartePluginInter
 
       if ( transExecutionConfiguration.isSetLogfile() ) {
         realLogFilename = transExecutionConfiguration.getLogFileName();
-        final LogChannelFileWriter logChannelFileWriter;
-        try {
-          FileUtil.createParentFolder( AddTransServlet.class, realLogFilename, transExecutionConfiguration
-            .isCreateParentFolder(), trans.getLogChannel(), trans );
-          logChannelFileWriter =
-            new LogChannelFileWriter( servletLoggingObject.getLogChannelId(), KettleVFS
-              .getFileObject( realLogFilename ), transExecutionConfiguration.isSetAppendLogfile() );
-          logChannelFileWriter.startLogging();
-
-          trans.addTransListener( new TransAdapter() {
-            @Override
-            public void transFinished( Trans trans ) throws KettleException {
-              if ( logChannelFileWriter != null ) {
-                logChannelFileWriter.stopLogging();
-              }
-            }
-          } );
-
-        } catch ( KettleException e ) {
-          logError( Const.getStackTracker( e ) );
-        }
+        setupLogChannelWriter( realLogFilename, transExecutionConfiguration, servletLoggingObject, trans );
 
       }
 
@@ -264,7 +270,8 @@ public class AddTransServlet extends BaseHttpServlet implements CartePluginInter
         } );
       }
 
-      String message = "Transformation '" + trans.getName() + "' was added to Carte with id " + carteObjectId;
+      String message =
+        Encode.forHtml( "Transformation '" + trans.getName() + "' was added to Carte with id " + carteObjectId );
 
       if ( useXML ) {
         // Return the log channel id as well
@@ -273,24 +280,51 @@ public class AddTransServlet extends BaseHttpServlet implements CartePluginInter
       } else {
         out.println( "<H1>" + message + "</H1>" );
         out.println( "<p><a href=\""
-          + convertContextPath( GetTransStatusServlet.CONTEXT_PATH ) + "?name=" + trans.getName() + "&id="
+          + convertContextPath( GetTransStatusServlet.CONTEXT_PATH ) + "?name=" + Encode.forUriComponent( trans.getName() ) + "&id="
           + carteObjectId + "\">Go to the transformation status page</a><p>" );
       }
+    } catch ( KettleXMLException | SAXException ex ) {
+      response.setStatus( HttpServletResponse.SC_BAD_REQUEST );
+      printError( useXML, out, ex );
     } catch ( Exception ex ) {
-      if ( useXML ) {
-        out.println( new WebResult( WebResult.STRING_ERROR, Const.getStackTracker( ex ) ) );
-      } else {
-        out.println( "<p>" );
-        out.println( "<pre>" );
-        ex.printStackTrace( out );
-        out.println( "</pre>" );
-      }
+      response.setStatus( HttpServletResponse.SC_INTERNAL_SERVER_ERROR );
+      printError( useXML, out, ex );
     }
+  }
 
-    if ( !useXML ) {
+  private void setupLogChannelWriter( String realLogFilename, TransExecutionConfiguration transExecutionConfiguration,
+                                      SimpleLoggingObject servletLoggingObject, Trans trans ) {
+    final LogChannelFileWriter logChannelFileWriter;
+    try {
+      FileUtil.createParentFolder( AddTransServlet.class, realLogFilename, transExecutionConfiguration
+        .isCreateParentFolder(), trans.getLogChannel(), trans );
+      logChannelFileWriter =
+        new LogChannelFileWriter( servletLoggingObject.getLogChannelId(), KettleVFS.getInstance( DefaultBowl.getInstance() )
+          .getFileObject( realLogFilename ), transExecutionConfiguration.isSetAppendLogfile() );
+      logChannelFileWriter.startLogging();
+
+      trans.addTransListener( new TransAdapter() {
+        @Override
+        public void transFinished( Trans trans ) throws KettleException {
+          if ( logChannelFileWriter != null ) {
+            logChannelFileWriter.stopLogging();
+          }
+        }
+      } );
+
+    } catch ( KettleException e ) {
+      logError( Const.getStackTracker( e ) );
+    }
+  }
+
+  private void printError( boolean useXML, PrintWriter out, Exception ex ) {
+    if ( useXML ) {
+      out.println( new WebResult( WebResult.STRING_ERROR, Const.getStackTracker( ex ) ) );
+    } else {
       out.println( "<p>" );
-      out.println( "</BODY>" );
-      out.println( "</HTML>" );
+      out.println( "<pre>" );
+      ex.printStackTrace( out );
+      out.println( "</pre>" );
     }
   }
 
@@ -304,5 +338,22 @@ public class AddTransServlet extends BaseHttpServlet implements CartePluginInter
 
   public String getContextPath() {
     return CONTEXT_PATH;
+  }
+
+  public void validateTransformation( InputStream is ) throws IOException, ParserConfigurationException, SAXException,
+    XPathExpressionException {
+    DocumentBuilderFactory df = DocumentBuilderFactory.newInstance();
+    df.setFeature( "http://xml.org/sax/features/external-general-entities", false );
+    df.setFeature( "http://xml.org/sax/features/external-parameter-entities", false );
+    DocumentBuilder builder = df.newDocumentBuilder();
+    Document doc = builder.parse( is );
+    if ( !doc.getDocumentElement().getNodeName().equals( "transformation_configuration" ) ) {
+      throw new SAXException( "Invalid Transformation - Missing transformation_configuration tag" );
+    }
+    XPath xPath = XPathFactory.newInstance().newXPath();
+    Node node = (Node) xPath.evaluate( "/transformation_configuration/transformation/info/name", doc, XPathConstants.NODE );
+    if ( node == null  || node.getChildNodes().getLength() > 1 || !( node.getFirstChild() instanceof DeferredTextImpl ) ) {
+      throw new SAXException( "Invalid Transformation Name" );
+    }
   }
 }

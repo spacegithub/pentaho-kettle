@@ -1,36 +1,30 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.file;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.vfs2.AllFileSelector;
 import org.apache.commons.vfs2.FileObject;
+import org.apache.commons.vfs2.FileSelectInfo;
 import org.apache.commons.vfs2.FileSystemException;
+import org.apache.commons.vfs2.FileType;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.core.ResultFile;
 import org.pentaho.di.core.RowSet;
 import org.pentaho.di.core.exception.KettleException;
-import org.pentaho.di.core.exception.KettleFileException;
 import org.pentaho.di.core.row.RowDataUtil;
 import org.pentaho.di.core.row.RowMeta;
 import org.pentaho.di.core.row.RowMetaInterface;
@@ -104,7 +98,7 @@ public abstract class BaseFileInputStep<M extends BaseFileInputMeta<?, ?, ?>, D 
     initErrorHandling();
 
     meta.additionalOutputFields.normalize();
-    data.files = meta.getFileInputList( this );
+    data.files = meta.getFileInputList( getTransMeta().getBowl(), this );
     data.currentFileIndex = 0;
 
     // If there are missing files,
@@ -185,7 +179,7 @@ public abstract class BaseFileInputStep<M extends BaseFileInputMeta<?, ?, ?>, D 
   protected boolean handleOpenFileException( Exception e ) {
     String errorMsg =
       "Couldn't open file #" + data.currentFileIndex + " : " + data.file.getName().getFriendlyURI();
-    if ( !failAfterBadFile( errorMsg ) ) { // !meta.isSkipBadFiles()) stopAll();
+    if ( !failAfterBadFile( errorMsg ) ) {
       return true;
     }
     stopAll();
@@ -247,7 +241,8 @@ public abstract class BaseFileInputStep<M extends BaseFileInputMeta<?, ?, ?>, D 
     }
 
     // get the metadata populated. Simple and easy.
-    meta.getFields( data.outputRowMeta, getStepname(), infoStep, null, this, repository, metaStore );
+    meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), infoStep, null, this, repository,
+      metaStore );
     // Create convert meta-data objects that will contain Date & Number formatters
     //
     data.convertRowMeta = data.outputRowMeta.cloneToType( ValueMetaInterface.TYPE_STRING );
@@ -274,7 +269,7 @@ public abstract class BaseFileInputStep<M extends BaseFileInputMeta<?, ?, ?>, D 
    * TODO: should we set charset for error files from content meta ? What about case for automatic charset ?
    */
   private void initErrorHandling() {
-    List<FileErrorHandler> dataErrorLineHandlers = new ArrayList<FileErrorHandler>( 2 );
+    List<FileErrorHandler> dataErrorLineHandlers = new ArrayList<>( 2 );
     if ( meta.errorHandling.lineNumberFilesDestinationDirectory != null ) {
       dataErrorLineHandlers.add( new FileErrorHandlerContentLineNumber( getTrans().getCurrentDate(),
           environmentSubstitute( meta.errorHandling.lineNumberFilesDestinationDirectory ),
@@ -293,7 +288,6 @@ public abstract class BaseFileInputStep<M extends BaseFileInputMeta<?, ?, ?>, D 
    */
   private RowMetaInterface[] filesFromPreviousStep() throws KettleException {
     RowMetaInterface[] infoStep = null;
-
     data.files.getFiles().clear();
 
     int idx = -1;
@@ -304,7 +298,7 @@ public abstract class BaseFileInputStep<M extends BaseFileInputMeta<?, ?, ?>, D 
       RowMetaInterface prevInfoFields = rowSet.getRowMeta();
       if ( idx < 0 ) {
         if ( meta.inputFiles.passingThruFields ) {
-          data.passThruFields = new HashMap<String, Object[]>();
+          data.passThruFields = new HashMap<>();
           infoStep = new RowMetaInterface[] { prevInfoFields };
           data.nrPassThruFields = prevInfoFields.size();
         }
@@ -319,15 +313,40 @@ public abstract class BaseFileInputStep<M extends BaseFileInputMeta<?, ?, ?>, D 
       }
       String fileValue = prevInfoFields.getString( fileRow, idx );
       try {
-        FileObject fileObject = KettleVFS.getFileObject( fileValue, getTransMeta() );
-        data.files.addFile( fileObject );
+        FileObject parentFileObject = KettleVFS.getInstance( getTransMeta().getBowl() )
+          .getFileObject( environmentSubstitute( fileValue ), getTransMeta() );
+        boolean isDir = ( parentFileObject != null && parentFileObject.getType() == FileType.FOLDER );
+        int startingIndex = data.files.nrOfFiles();
+
+        if ( isDir ) { // it's a directory
+          addFilesFromFolder( parentFileObject );
+        } else {  // it's a file
+          data.files.addFile( parentFileObject );
+        }
+
         if ( meta.inputFiles.passingThruFields ) {
           StringBuilder sb = new StringBuilder();
-          sb.append( data.files.nrOfFiles() > 0 ? data.files.nrOfFiles() - 1 : 0 ).append( "_" ).append( fileObject.toString() );
-          data.passThruFields.put( sb.toString(), fileRow );
+
+          // PDI-18818 + BACKLOG-34414
+          // For directories, the passThruFields should match the same row's value for each file within the directory,
+          // For a file, the passThruFields should match the current row's value.
+          if ( isDir ) {
+            for ( int fileIndex = startingIndex; fileIndex < data.files.nrOfFiles(); fileIndex++ ) {
+              FileObject file = data.files.getFile( fileIndex );
+              sb.setLength( 0 );
+              sb.append( fileIndex ).append( "_" ).append( file != null ? file.toString() : "" );
+              data.passThruFields.put( sb.toString(), fileRow );
+            }
+          } else {
+            sb.append( startingIndex ).append( "_" ).append(
+                    parentFileObject != null ? parentFileObject.toString() : "" );
+            data.passThruFields.put( sb.toString(), fileRow );
+          }
+
         }
-      } catch ( KettleFileException e ) {
+      } catch ( FileSystemException e ) {
         logError( BaseMessages.getString( PKG, "BaseFileInputStep.Log.Error.UnableToCreateFileObject", fileValue ), e );
+        throw new KettleException( e );
       }
 
       // Grab another row
@@ -343,6 +362,47 @@ public abstract class BaseFileInputStep<M extends BaseFileInputMeta<?, ?, ?>, D 
     return infoStep;
   }
 
+  /**
+   * Read the list of files recursively from a given folder
+   * @param parentFileObject
+   * @throws FileSystemException
+   */
+  private void addFilesFromFolder( FileObject parentFileObject ) throws FileSystemException {
+    final boolean subdirs = true;
+    FileObject[] fileObjects = parentFileObject.findFiles( new AllFileSelector() {
+      @Override
+      public boolean traverseDescendents( FileSelectInfo info ) {
+        return info.getDepth() == 0 || subdirs;
+      }
+
+      @Override
+      public boolean includeFile( FileSelectInfo info ) {
+        // Never return the parent directory of a file list.
+        if ( info.getDepth() == 0 ) {
+          return false;
+        }
+
+        FileObject fileObject = info.getFile();
+        try {
+          return fileObject != null && FileType.FILE.equals( fileObject.getType() );
+        } catch ( Exception ex ) {
+          // Upon error don't process the file.
+          return false;
+        }
+      }
+    } );
+    if ( fileObjects != null ) {
+      for ( int j = 0; j < fileObjects.length; j++ ) {
+        FileObject fileObject = fileObjects[ j ];
+        if ( fileObject.exists() ) {
+          data.files.addFile( fileObject );
+        }
+      }
+    }
+    if ( Utils.isEmpty( fileObjects ) ) {
+      data.files.addNonAccessibleFile( parentFileObject );
+    }
+  }
   /**
    * Close last opened file/
    */
@@ -442,7 +502,7 @@ public abstract class BaseFileInputStep<M extends BaseFileInputMeta<?, ?, ?>, D 
     data.path = KettleVFS.getFilename( file.getParent() );
     data.hidden = file.isHidden();
     data.extension = file.getName().getExtension();
-    data.uriName = file.getName().getURI();
+    data.uriName = Const.optionallyDecodeUriString( file.getName().getURI() );
     data.rootUriName = file.getName().getRootURI();
     if ( file.getType().hasContent() ) {
       data.lastModificationDateTime = new Date( file.getContent().getLastModifiedTime() );

@@ -1,26 +1,15 @@
-/*
- * *****************************************************************************
+/*! ******************************************************************************
  *
- *  Pentaho Data Integration
+ * Pentaho
  *
- *  Copyright (C) 2017-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *  *******************************************************************************
- *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use
- *  this file except in compliance with the License. You may obtain a copy of the
- *  License at
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- * *****************************************************************************
- *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
 
 package org.pentaho.di.engine.configuration.impl.pentaho;
 
@@ -36,7 +25,9 @@ import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.job.JobExecutionConfiguration;
 import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.repository.Repository;
+import org.pentaho.di.trans.DefaultTransFactoryManager;
 import org.pentaho.di.trans.TransExecutionConfiguration;
+import org.pentaho.di.trans.DefaultTransFactory;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.ui.spoon.Spoon;
 
@@ -46,6 +37,14 @@ import org.pentaho.di.ui.spoon.Spoon;
 public class DefaultRunConfigurationExecutor implements RunConfigurationExecutor {
 
   private static Class<?> PKG = DefaultRunConfigurationExecutor.class;
+  private static DefaultRunConfigurationExecutor instance;
+
+  public static DefaultRunConfigurationExecutor getInstance() {
+    if ( null == instance ) {
+      instance = new DefaultRunConfigurationExecutor();
+    }
+    return instance;
+  }
 
   @Override
   public void execute( RunConfiguration runConfiguration, ExecutionConfiguration executionConfiguration,
@@ -63,9 +62,11 @@ public class DefaultRunConfigurationExecutor implements RunConfigurationExecutor
 
     variableSpace.setVariable( "engine", null );
     variableSpace.setVariable( "engine.remote", null );
-    variableSpace.setVariable( "engine.protocol", null );
-    variableSpace.setVariable( "engine.host", null );
-    variableSpace.setVariable( "engine.port", null );
+    variableSpace.setVariable( "engine.scheme", null );
+    variableSpace.setVariable( "engine.url", null );
+
+    DefaultTransFactoryManager.getInstance().registerFactory( executionConfiguration.getRunConfiguration(),
+      new DefaultTransFactory() );
   }
 
   private void configureTransExecution( TransExecutionConfiguration transExecutionConfiguration,
@@ -105,8 +106,8 @@ public class DefaultRunConfigurationExecutor implements RunConfigurationExecutor
   }
 
   private void setSlaveServer( ExecutionConfiguration executionConfiguration, AbstractMeta meta,
-                      DefaultRunConfiguration defaultRunConfiguration,
-                      VariableSpace variableSpace ) throws KettleException {
+                               DefaultRunConfiguration defaultRunConfiguration,
+                               VariableSpace variableSpace ) throws KettleException {
     SlaveServer slaveServer = meta.findSlaveServer( defaultRunConfiguration.getServer() );
     executionConfiguration.setRemoteServer( slaveServer );
     if ( slaveServer == null ) {

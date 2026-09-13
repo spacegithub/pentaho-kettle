@@ -1,41 +1,32 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.gettablenames;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
-import org.pentaho.di.core.database.Database;
+import org.pentaho.di.core.exception.KettleDatabaseException;
 import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.exception.KettleStepException;
+import org.pentaho.di.core.exception.KettleValueException;
 import org.pentaho.di.core.row.RowDataUtil;
 import org.pentaho.di.core.row.RowMeta;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
-import org.pentaho.di.trans.step.BaseStep;
-import org.pentaho.di.trans.step.StepDataInterface;
-import org.pentaho.di.trans.step.StepInterface;
-import org.pentaho.di.trans.step.StepMeta;
-import org.pentaho.di.trans.step.StepMetaInterface;
+import org.pentaho.di.trans.step.*;
 
 /**
  * Return tables name list from Database connection *
@@ -45,7 +36,7 @@ import org.pentaho.di.trans.step.StepMetaInterface;
  *
  */
 
-public class GetTableNames extends BaseStep implements StepInterface {
+public class GetTableNames extends BaseDatabaseStep implements StepInterface {
   private static Class<?> PKG = GetTableNamesMeta.class; // for i18n purposes, needed by Translator2!!
 
   private GetTableNamesMeta meta;
@@ -113,7 +104,8 @@ public class GetTableNames extends BaseStep implements StepInterface {
         data.outputRowMeta = new RowMeta();
       }
 
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
     }
 
@@ -126,119 +118,149 @@ public class GetTableNames extends BaseStep implements StepInterface {
     if ( meta.isDynamicSchema() ) {
       System.arraycopy( data.readrow, 0, outputRow, 0, data.readrow.length );
     }
+    processIncludeCatalog( outputRow );
+    processIncludeSchema( outputRow );
+    processIncludeTable( outputRow );
+    processIncludeView( outputRow );
+    processIncludeProcedure( outputRow );
+    processIncludeSynonym( outputRow );
 
-    // Catalogs
-    if ( meta.isIncludeCatalog() ) {
-      String ObjectType = BaseMessages.getString( PKG, "GetTableNames.ObjectType.Catalog" );
-      // Views
-      String[] catalogsNames = data.db.getCatalogs();
-      int nr = catalogsNames.length;
+    if ( !meta.isDynamicSchema() ) {
+      setOutputDone();
+      return false;
+    } else {
+      return true;
+    }
+  }
 
-      for ( int i = 0; i < nr && !isStopped(); i++ ) {
+  private void processIncludeSynonym( Object[] outputRow )
+    throws KettleDatabaseException, KettleStepException, KettleValueException {
+    if ( meta.isIncludeSynonym() ) {
+      String[] synonyms = data.db.getSynonyms( data.realSchemaName, meta.isAddSchemaInOut() );
+      String ObjectType = BaseMessages.getString( PKG, "GetTableNamesDialog.ObjectType.Synonym" );
 
-        // Clone current input row
-        Object[] outputRowCatalog = outputRow.clone();
-
+      for ( int i = 0; i < synonyms.length && !isStopped(); i++ ) {
+        Object[] outputRowSyn = outputRow.clone();
         int outputIndex = data.totalpreviousfields;
 
-        String catalogName = catalogsNames[i];
-        outputRowCatalog[outputIndex++] = catalogName;
+        String synonym = synonyms[i];
+
+        outputRowSyn[outputIndex++] = synonym;
 
         if ( !Utils.isEmpty( data.realObjectTypeFieldName ) ) {
-          outputRowCatalog[outputIndex++] = ObjectType;
+          outputRowSyn[outputIndex++] = ObjectType;
         }
         if ( !Utils.isEmpty( data.realIsSystemObjectFieldName ) ) {
-          outputRowCatalog[outputIndex++] = Boolean.valueOf( data.db.isSystemTable( catalogName ) );
+          outputRowSyn[outputIndex++] = Boolean.valueOf( data.db.isSystemTable( synonym ) );
         }
         if ( !Utils.isEmpty( data.realSQLCreationFieldName ) ) {
-          outputRowCatalog[outputIndex++] = null;
+          outputRowSyn[outputIndex++] = null;
         }
         data.rownr++;
-        putRow( data.outputRowMeta, outputRowCatalog ); // copy row to output rowset(s);
+        putRow( data.outputRowMeta, outputRowSyn ); // copy row to output rowset(s);
 
-        if ( checkFeedback( getLinesRead() ) ) {
-          if ( log.isDetailed() ) {
-            logDetailed( BaseMessages.getString( PKG, "GetTableNames.LineNumber", "" + getLinesRead() ) );
-          }
-        }
-        if ( log.isRowLevel() ) {
-          logRowlevel( BaseMessages.getString( PKG, "GetTableNames.Log.PutoutRow", data.outputRowMeta
-            .getString( outputRowCatalog ) ) );
-        }
+        logInfo( outputRowSyn );
       }
     }
+  }
 
-    // Schemas
-    if ( meta.isIncludeSchema() ) {
-      String ObjectType = BaseMessages.getString( PKG, "GetTableNamesDialog.ObjectType.Schema" );
-      // Views
-      String[] schemaNames = new String[] {};
-      if ( !Utils.isEmpty( data.realSchemaName ) ) {
-        schemaNames = new String[] { data.realSchemaName };
-      } else {
-        schemaNames = data.db.getSchemas();
-      }
-      int nr = schemaNames.length;
-      for ( int i = 0; i < nr && !isStopped(); i++ ) {
-
-        // Clone current input row
-        Object[] outputRowSchema = outputRow.clone();
-
+  private void processIncludeProcedure( Object[] outputRow )
+    throws KettleDatabaseException, KettleStepException, KettleValueException {
+    if ( meta.isIncludeProcedure() ) {
+      String[] procNames = data.db.getProcedures();
+      String ObjectType = BaseMessages.getString( PKG, "GetTableNamesDialog.ObjectType.Procedure" );
+      for ( int i = 0; i < procNames.length && !isStopped(); i++ ) {
+        Object[] outputRowProc = outputRow.clone();
         int outputIndex = data.totalpreviousfields;
 
-        String schemaName = schemaNames[i];
-        outputRowSchema[outputIndex++] = schemaName;
+        String procName = procNames[i];
+        outputRowProc[outputIndex++] = procName;
 
         if ( !Utils.isEmpty( data.realObjectTypeFieldName ) ) {
-          outputRowSchema[outputIndex++] = ObjectType;
+          outputRowProc[outputIndex++] = ObjectType;
         }
         if ( !Utils.isEmpty( data.realIsSystemObjectFieldName ) ) {
-          outputRowSchema[outputIndex++] = Boolean.valueOf( data.db.isSystemTable( schemaName ) );
+          outputRowProc[outputIndex++] = Boolean.valueOf( data.db.isSystemTable( procName ) );
         }
         if ( !Utils.isEmpty( data.realSQLCreationFieldName ) ) {
-          outputRowSchema[outputIndex++] = null;
+          outputRowProc[outputIndex++] = null;
         }
         data.rownr++;
-        putRow( data.outputRowMeta, outputRowSchema ); // copy row to output rowset(s);
+        putRow( data.outputRowMeta, outputRowProc ); // copy row to output rowset(s);
 
-        if ( checkFeedback( getLinesRead() ) ) {
-          if ( log.isDetailed() ) {
-            logDetailed( BaseMessages.getString( PKG, "GetTableNames.LineNumber", "" + getLinesRead() ) );
-          }
-        }
-        if ( log.isRowLevel() ) {
-          logRowlevel( BaseMessages.getString( PKG, "GetTableNames.Log.PutoutRow", data.outputRowMeta
-            .getString( outputRowSchema ) ) );
-        }
+        logInfo( outputRowProc );
       }
     }
+  }
 
+  @VisibleForTesting
+  void processIncludeView( Object[] outputRow ) {
+    // Views
+    if ( meta.isIncludeView() ) {
+      try {
+        String[] viewNames = data.db.getViews( data.realSchemaName, meta.isAddSchemaInOut() );
+        String[] viewNamesWithoutSchema = data.db.getViews( data.realSchemaName, false );
+        String ObjectType = BaseMessages.getString( PKG, "GetTableNamesDialog.ObjectType.View" );
+        for ( int i = 0; i < viewNames.length && !isStopped(); i++ ) {
+          Object[] outputRowView = outputRow.clone();
+          int outputIndex = data.totalpreviousfields;
+
+          String viewName = viewNames[i];
+          String viewNameWithoutSchema = viewNamesWithoutSchema[i];
+          outputRowView[outputIndex++] = viewName;
+
+          if ( !Utils.isEmpty( data.realObjectTypeFieldName ) ) {
+            outputRowView[outputIndex++] = ObjectType;
+          }
+          if ( !Utils.isEmpty( data.realIsSystemObjectFieldName ) ) {
+            outputRowView[outputIndex++] = Boolean.valueOf( data.db.isSystemTable( viewNameWithoutSchema ) );
+          }
+
+          if ( !Utils.isEmpty( data.realSQLCreationFieldName ) ) {
+            outputRowView[outputIndex++] = null;
+          }
+          data.rownr++;
+          putRow( data.outputRowMeta, outputRowView ); // copy row to output rowset(s);
+
+          logInfo( outputRowView );
+        }
+      } catch ( Exception e ) {
+        // Ignore
+      }
+    }
+  }
+
+  @VisibleForTesting
+  void processIncludeTable( Object[] outputRow )
+    throws KettleDatabaseException, KettleStepException, KettleValueException {
     if ( meta.isIncludeTable() ) {
       // Tables
+
       String[] tableNames = data.db.getTablenames( data.realSchemaName, meta.isAddSchemaInOut() );
+      String[] tableNamesWithoutSchema = data.db.getTablenames( data.realSchemaName, false );
 
       String ObjectType = BaseMessages.getString( PKG, "GetTableNamesDialog.ObjectType.Table" );
-      int nr = tableNames.length;
-      for ( int i = 0; i < nr && !isStopped(); i++ ) {
+
+      for ( int i = 0; i < tableNames.length && !isStopped(); i++ ) {
         Object[] outputRowTable = outputRow.clone();
 
         int outputIndex = data.totalpreviousfields;
 
         String tableName = tableNames[i];
+        String tableNameWithoutSchema = tableNamesWithoutSchema[i];
         outputRowTable[outputIndex++] = tableName;
 
         if ( !Utils.isEmpty( data.realObjectTypeFieldName ) ) {
           outputRowTable[outputIndex++] = ObjectType;
         }
         if ( !Utils.isEmpty( data.realIsSystemObjectFieldName ) ) {
-          outputRowTable[outputIndex++] = Boolean.valueOf( data.db.isSystemTable( tableName ) );
+          outputRowTable[outputIndex++] = Boolean.valueOf( data.db.isSystemTable( tableNameWithoutSchema ) );
         }
         // Get primary key
         String pk = null;
-        String[] pkc = data.db.getPrimaryKeyColumnNames( tableName );
+        String[] pkc = data.db.getPrimaryKeyColumnNames( tableNameWithoutSchema );
         if ( pkc != null && pkc.length == 1 ) {
           pk = pkc[0];
-          pkc = null;
         }
         // return sql creation
         // handle simple primary key (one field)
@@ -246,10 +268,10 @@ public class GetTableNames extends BaseStep implements StepInterface {
           data.db
             .getCreateTableStatement(
               tableName,
-              data.db.getTableFieldsMeta( data.realSchemaName, tableName ),
+              data.db.getTableFieldsMeta( data.realSchemaName, tableNameWithoutSchema ),
               null, false, pk, true );
 
-        if ( pkc != null ) {
+        if ( pkc != null && pkc.length > 0 ) {
           // add composite primary key (several fields in primary key)
           int IndexOfLastClosedBracket = sql.lastIndexOf( ")" );
           if ( IndexOfLastClosedBracket > -1 ) {
@@ -271,135 +293,94 @@ public class GetTableNames extends BaseStep implements StepInterface {
         data.rownr++;
         putRow( data.outputRowMeta, outputRowTable ); // copy row to output rowset(s);
 
-        if ( checkFeedback( getLinesRead() ) ) {
-          if ( log.isDetailed() ) {
-            logDetailed( BaseMessages.getString( PKG, "GetTableNames.LineNumber", "" + getLinesRead() ) );
-          }
-        }
-        if ( log.isRowLevel() ) {
-          logRowlevel( BaseMessages.getString( PKG, "GetTableNames.Log.PutoutRow", data.outputRowMeta
-            .getString( outputRowTable ) ) );
-        }
+        logInfo( outputRowTable );
       }
     }
+  }
 
-    // Views
-    if ( meta.isIncludeView() ) {
-      try {
-        String[] viewNames = data.db.getViews( data.realSchemaName, meta.isAddSchemaInOut() );
-        String ObjectType = BaseMessages.getString( PKG, "GetTableNamesDialog.ObjectType.View" );
-        int nr = viewNames.length;
-        for ( int i = 0; i < nr && !isStopped(); i++ ) {
-          Object[] outputRowView = outputRow.clone();
-          int outputIndex = data.totalpreviousfields;
-
-          String viewName = viewNames[i];
-          outputRowView[outputIndex++] = viewName;
-
-          if ( !Utils.isEmpty( data.realObjectTypeFieldName ) ) {
-            outputRowView[outputIndex++] = ObjectType;
-          }
-          if ( !Utils.isEmpty( data.realIsSystemObjectFieldName ) ) {
-            outputRowView[outputIndex++] = Boolean.valueOf( data.db.isSystemTable( viewName ) );
-          }
-
-          if ( !Utils.isEmpty( data.realSQLCreationFieldName ) ) {
-            outputRowView[outputIndex++] = null;
-          }
-          data.rownr++;
-          putRow( data.outputRowMeta, outputRowView ); // copy row to output rowset(s);
-
-          if ( checkFeedback( getLinesRead() ) ) {
-            if ( log.isDetailed() ) {
-              logDetailed( BaseMessages.getString( PKG, "GetTableNames.LineNumber", "" + getLinesRead() ) );
-            }
-          }
-          if ( log.isRowLevel() ) {
-            logRowlevel( BaseMessages.getString( PKG, "GetTableNames.Log.PutoutRow", data.outputRowMeta
-              .getString( outputRowView ) ) );
-          }
-        }
-      } catch ( Exception e ) {
-        // Ignore
+  private void processIncludeSchema( Object[] outputRow )
+    throws KettleDatabaseException, KettleStepException, KettleValueException {
+    // Schemas
+    if ( meta.isIncludeSchema() ) {
+      String ObjectType = BaseMessages.getString( PKG, "GetTableNamesDialog.ObjectType.Schema" );
+      // Views
+      String[] schemaNames = new String[] {};
+      if ( !Utils.isEmpty( data.realSchemaName ) ) {
+        schemaNames = new String[] { data.realSchemaName };
+      } else {
+        schemaNames = data.db.getSchemas();
       }
-    }
-    if ( meta.isIncludeProcedure() ) {
-      String[] procNames = data.db.getProcedures();
-      String ObjectType = BaseMessages.getString( PKG, "GetTableNamesDialog.ObjectType.Procedure" );
-      int nr = procNames.length;
-      for ( int i = 0; i < nr && !isStopped(); i++ ) {
-        Object[] outputRowProc = outputRow.clone();
+      for ( int i = 0; i < schemaNames.length && !isStopped(); i++ ) {
+
+        // Clone current input row
+        Object[] outputRowSchema = outputRow.clone();
+
         int outputIndex = data.totalpreviousfields;
 
-        String procName = procNames[i];
-        outputRowProc[outputIndex++] = procName;
+        String schemaName = schemaNames[i];
+        outputRowSchema[outputIndex++] = schemaName;
 
         if ( !Utils.isEmpty( data.realObjectTypeFieldName ) ) {
-          outputRowProc[outputIndex++] = ObjectType;
+          outputRowSchema[outputIndex++] = ObjectType;
         }
         if ( !Utils.isEmpty( data.realIsSystemObjectFieldName ) ) {
-          outputRowProc[outputIndex++] = Boolean.valueOf( data.db.isSystemTable( procName ) );
+          outputRowSchema[outputIndex++] = Boolean.valueOf( data.db.isSystemTable( schemaName ) );
         }
         if ( !Utils.isEmpty( data.realSQLCreationFieldName ) ) {
-          outputRowProc[outputIndex++] = null;
+          outputRowSchema[outputIndex++] = null;
         }
         data.rownr++;
-        putRow( data.outputRowMeta, outputRowProc ); // copy row to output rowset(s);
+        putRow( data.outputRowMeta, outputRowSchema ); // copy row to output rowset(s);
 
-        if ( checkFeedback( getLinesRead() ) ) {
-          if ( log.isDetailed() ) {
-            logDetailed( BaseMessages.getString( PKG, "GetTableNames.LineNumber", "" + getLinesRead() ) );
-          }
-        }
-        if ( log.isRowLevel() ) {
-          logRowlevel( BaseMessages.getString( PKG, "GetTableNames.Log.PutoutRow", data.outputRowMeta
-            .getString( outputRowProc ) ) );
-        }
+        logInfo( outputRowSchema );
       }
     }
-    if ( meta.isIncludeSynonym() ) {
-      String[] Synonyms = data.db.getSynonyms( data.realSchemaName, meta.isAddSchemaInOut() );
-      String ObjectType = BaseMessages.getString( PKG, "GetTableNamesDialog.ObjectType.Synonym" );
+  }
 
-      int nr = Synonyms.length;
-      for ( int i = 0; i < nr && !isStopped(); i++ ) {
-        Object[] outputRowSyn = outputRow.clone();
+  private void processIncludeCatalog( Object[] outputRow )
+    throws KettleDatabaseException, KettleStepException, KettleValueException {
+    // Catalogs
+    if ( meta.isIncludeCatalog() ) {
+      String ObjectType = BaseMessages.getString( PKG, "GetTableNames.ObjectType.Catalog" );
+      // Views
+      String[] catalogsNames = data.db.getCatalogs();
+
+      for ( int i = 0; i < catalogsNames.length && !isStopped(); i++ ) {
+
+        // Clone current input row
+        Object[] outputRowCatalog = outputRow.clone();
+
         int outputIndex = data.totalpreviousfields;
 
-        String Synonym = Synonyms[i];
-
-        outputRowSyn[outputIndex++] = Synonym;
+        String catalogName = catalogsNames[i];
+        outputRowCatalog[outputIndex++] = catalogName;
 
         if ( !Utils.isEmpty( data.realObjectTypeFieldName ) ) {
-          outputRowSyn[outputIndex++] = ObjectType;
+          outputRowCatalog[outputIndex++] = ObjectType;
         }
         if ( !Utils.isEmpty( data.realIsSystemObjectFieldName ) ) {
-          outputRowSyn[outputIndex++] = Boolean.valueOf( data.db.isSystemTable( Synonym ) );
+          outputRowCatalog[outputIndex++] = Boolean.valueOf( data.db.isSystemTable( catalogName ) );
         }
         if ( !Utils.isEmpty( data.realSQLCreationFieldName ) ) {
-          outputRowSyn[outputIndex++] = null;
+          outputRowCatalog[outputIndex++] = null;
         }
         data.rownr++;
-        putRow( data.outputRowMeta, outputRowSyn ); // copy row to output rowset(s);
+        putRow( data.outputRowMeta, outputRowCatalog ); // copy row to output rowset(s);
 
-        if ( checkFeedback( getLinesRead() ) ) {
-          if ( log.isDetailed() ) {
-            logDetailed( BaseMessages.getString( PKG, "GetTableNames.LineNumber", "" + getLinesRead() ) );
-          }
-        }
-
-        if ( log.isRowLevel() ) {
-          logRowlevel( BaseMessages.getString( PKG, "GetTableNames.Log.PutoutRow", data.outputRowMeta
-            .getString( outputRowSyn ) ) );
-        }
+        logInfo( outputRowCatalog );
       }
     }
+  }
 
-    if ( !meta.isDynamicSchema() ) {
-      setOutputDone();
-      return false;
-    } else {
-      return true;
+  private void logInfo( Object[] outputRow ) throws KettleValueException {
+    if ( checkFeedback( getLinesRead() ) ) {
+      if ( log.isDetailed() ) {
+        logDetailed( BaseMessages.getString( PKG, "GetTableNames.LineNumber", "" + getLinesRead() ) );
+      }
+    }
+    if ( log.isRowLevel() ) {
+      logRowlevel( BaseMessages.getString( PKG, "GetTableNames.Log.PutoutRow", data.outputRowMeta
+        .getString( outputRow ) ) );
     }
   }
 
@@ -430,49 +411,22 @@ public class GetTableNames extends BaseStep implements StepInterface {
       try {
         // Create the output row meta-data
         data.outputRowMeta = new RowMeta();
-        meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore ); // get the
-                                                                                                      // metadata
-                                                                                                      // populated
-      } catch ( Exception e ) {
+        // get the metadata populated
+        meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+          metaStore );
+      } catch ( KettleException e ) {
         logError( "Error initializing step: " + e.toString() );
         logError( Const.getStackTracker( e ) );
         return false;
       }
-
-      data.db = new Database( this, meta.getDatabase() );
-      data.db.shareVariablesWith( this );
-      try {
-        if ( getTransMeta().isUsingUniqueConnections() ) {
-          synchronized ( getTrans() ) {
-            data.db.connect( getTrans().getTransactionId(), getPartitionID() );
-          }
-        } else {
-          data.db.connect( getPartitionID() );
-        }
-
-        if ( log.isDetailed() ) {
-          logDetailed( BaseMessages.getString( PKG, "GetTableNames.Log.ConnectedToDB" ) );
-        }
-
-        return true;
-      } catch ( KettleException e ) {
-        logError( BaseMessages.getString( PKG, "GetTableNames.Log.DBException" ) + e.getMessage() );
-        if ( data.db != null ) {
-          data.db.disconnect();
-        }
-      }
+      return true;
     }
     return false;
   }
 
-  public void dispose( StepMetaInterface smi, StepDataInterface sdi ) {
-    meta = (GetTableNamesMeta) smi;
-    data = (GetTableNamesData) sdi;
-    if ( data.db != null ) {
-      data.db.disconnect();
-      data.db = null;
-    }
-    super.dispose( smi, sdi );
+  @Override
+  protected Class<?> getPKG() {
+    return PKG;
   }
 
 }

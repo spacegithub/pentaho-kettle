@@ -1,8 +1,19 @@
 <?xml version="1.0"?>
+<!-- ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************* -->
 <window id="label-test" title="Flow Test" xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
   xmlns:pen="http://www.pentaho.org/2008/xul" onload="spoon.onLoad()">
   <menubar id="spoon-menubar">
-  
+
     <menu id="file" label="${Spoon.Menu.File}" accesskey="alt-f">
       <menupopup id="file-popup">
         <menu id="file-new" label="${Spoon.Menu.File.New}">
@@ -15,8 +26,7 @@
               command="spoon.newConnection()" />
           </menupopup>
         </menu>
-        <menuitem id="file-open" acceltext="CTRL-O" accesskey="ctrl-o" label="${Spoon.Menu.File.Open}" command="spoon.openFile()" />
-        <menuitem id="file-open-from-vfs" label="${Spoon.Menu.File.OpenVFS}" command="spoon.openFileVFSFile()" />
+        <menuitem id="file-open" acceltext="CTRL-O" accesskey="ctrl-o" label="${Spoon.Menu.File.Open}" command="spoon.openFileNew()" />
         <menu id="file-open-recent" label="${Spoon.Menu.File.Open.Recent.Popup}">
           <menupopup id="file-open-recent-popup" />
         </menu>
@@ -26,29 +36,25 @@
 
         <menuseparator id="file-separator-1"/>
         <menuitem id="file-save" acceltext="CTRL-S" accesskey="ctrl-s" label="${Spoon.Menu.File.Save}" command="spoon.saveFile()" />
-        <menuitem id="file-save-as" label="${Spoon.Menu.File.SaveAs}" command="spoon.saveFileAs()" />
-        <menuitem id="file-save-as-vfs" label="${Spoon.Menu.File.SaveAsVFS}" command="spoon.saveXMLFileToVfs()" />
+        <menuitem id="file-save-as" label="${Spoon.Menu.File.SaveAs}" command="spoon.saveAsNew()" />
         <!-- <menuitem id="file-publish" label="${Spoon.Menu.File.Publish}"/> -->
         <menuseparator id="file-separator-2"/>
         <menuitem id="file-print" label="${Spoon.Menu.File.Print}" command="spoon.printFile()" />
 
         <menuseparator id="file-separator-3"/>
         <menuitem id="file-import-from-xml" acceltext="CTRL-I" accesskey="ctrl-i" label="${Spoon.Menu.File.Import}"
-          command="spoon.importFile()" />
+          command="spoon.importFileFromXML()" />
         <menu id="file-export" label="${Spoon.Menu.File.Export.Popup}" >
           <menupopup id="export-popup">
             <menuitem id="file-export-to-xml" label="${Spoon.Menu.File.Export}" command="spoon.exportXMLFile()" />
             <menuitem id="file-export-all-to-xml" label="${Spoon.Menu.File.ExportAll}" command="spoon.exportAllXMLFile()" />
-            <!--
-            <menuitem id="file-save-as-vfs" label="${Spoon.Menu.File.SaveAsVFS}" command="spoon.saveXMLFileToVfs()" disabled="false" />                 
-            -->
           </menupopup>
         </menu>
         <menuseparator id="file-separator-4"/>
-        <menuitem id="file-quit" label="${Spoon.Menu.File.Quit}" command="spoon.quitFile(true)" />        
+        <menuitem id="file-quit" label="${Spoon.Menu.File.Quit}" command="spoon.quitFile(true)" />
       </menupopup>
     </menu>
-    
+
     <menu id="edit" label="${Spoon.Menu.Edit}">
       <menupopup id="edit-popup">
         <menuitem id="edit-undo" acceltext="CTRL-Z" accesskey="ctrl-z" label="${Spoon.Menu.Undo.NotAvailable}"
@@ -64,7 +70,7 @@
           command="spoon.paste()" />
         <menuseparator />
         <menuitem id="trans-copy-image" acceltext="CTRL-ALT-I" accesskey="ctrl-alt-i"
-          label="${Spoon.Menu.Transformation.CopyTransformationImageClipboard}" command="spoon.copyTransformationImage()" />   
+          label="${Spoon.Menu.Transformation.CopyTransformationImageClipboard}" command="spoon.copyTransformationImage()" />
         <menuseparator />
         <menuitem id="edit-clear-selection" acceltext="ESC" accesskey="esc" label="${Spoon.Menu.Edit.ClearSelection}"
           command="spoon.editUnselectAll()" />
@@ -86,7 +92,7 @@
           command="spoon.editProperties()" />
       </menupopup>
     </menu>
-    
+
     <menu id="view" label="${Spoon.Menu.View}">
       <menupopup id="view-popup">
         <menu id="view-perspectives" label="${Spoon.Menu.View.Perspectives}">
@@ -103,10 +109,10 @@
         <menuitem id="view-zoom-100pct" acceltext="HOME" accesskey="home" label="${Spoon.Menu.View.Zoom100}"
           command="spoon.zoom100Percent()" />
         <menuseparator id="view-perspective-seperator" />
-        <menuitem id="view-results" type="checkbox" label="${Spoon.Menu.View.Results}" command="spoon.showExecutionResults()"/>  
+        <menuitem id="view-results" type="checkbox" label="${Spoon.Menu.View.Results}" command="spoon.showExecutionResults()"/>
       </menupopup>
     </menu>
-  
+
     <menu id="action" label="${Spoon.Menu.Action}">
       <menupopup id="trans-popup">
         <menuitem id="process-run" acceltext="F9" accesskey="f9" label="${Spoon.Menu.Transformation.Run}"
@@ -131,12 +137,12 @@
             <menuitem id="trans-last-verify" acceltext="F7" accesskey="f7"
               label="${Spoon.Menu.Transformation.ShowLastVerifyResults}" command="spoon.showLastTransCheck()" />
             <menuitem id="trans-last-preview" acceltext="F8" accesskey="f8"
-              label="${Spoon.Menu.Transformation.ShowLastPreviewResults}" comand="spoon.showLastTransPreview()" />       
+              label="${Spoon.Menu.Transformation.ShowLastPreviewResults}" comand="spoon.showLastTransPreview()" />
           </menupopup>
         </menu>
       </menupopup>
     </menu>
-    
+
     <menu id="tools" label="${Spoon.Menu.Tools}">
       <menupopup id="tools-popup">
         <menu id="tools-data" label="${Spoon.Menu.Tools.Data.Popup}">
@@ -154,7 +160,7 @@
               label="${Spoon.Menu.Repository.ClearSharedObjectCache}" command="spoon.clearSharedObjectCache()" />
             <menuseparator />
             <menuitem id="repository-export-all" label="${Spoon.Menu.Repository.ExportAll}" command="spoon.exportRepositoryAll()" />
-            <menuitem id="repository-import-directory" label="${Spoon.Menu.Repository.ImportFiles}" command="spoon.importDirectoryToRepository()" />            
+            <menuitem id="repository-import-directory" label="${Spoon.Menu.Repository.ImportFiles}" command="spoon.importDirectoryToRepository()" />
           </menupopup>
         </menu>
         <menu id="wizard" label="${Spoon.Menu.Wizard}">
@@ -167,20 +173,17 @@
               command="spoon.ripDBWizard()" />
           </menupopup>
         </menu>
-        <!-- 
-        Menu item is blocked until Authentication feature will not be implemented. 
-        <menuitem id="authentication" label="${Spoon.Menu.Authentication}" command="spoon.showAuthenticationOptions()" 
+        <!--
+        Menu item is blocked until Authentication feature will not be implemented.
+        <menuitem id="authentication" label="${Spoon.Menu.Authentication}" command="spoon.showAuthenticationOptions()"
         /> -->
         <menuseparator />
         <menuitem id="edit-options" label="${Spoon.Menu.Edit.Options}" command="spoon.editOptions()" />
         <menuseparator />
-        <menuitem id="capability-manager" label="Capability Manager" command="spoon.editCapabilities()" />
-        <menuseparator />
         <menuitem id="help-plugins" label="${Spoon.Menu.ShowPluginInfo}" command="spoon.showPluginInfo()" />
-        
       </menupopup>
     </menu>
-    
+
     <menu id="help" label="${Spoon.Menu.Help}">
       <menupopup id="help-popup">
         <menuitem id="help-welcome" label="${Spoon.Menu.Help.Welcome}" command="spoon.showWelcomePage()" />
@@ -213,7 +216,7 @@
   </menupopup>
 
   <menupopup id="partition-schema-class">
-    <menuitem id="partition-schema-class-new" label="${Spoon.Menu.Popup.BASE.New}" command="spoon.newDatabasePartitioningSchema()" />
+    <menuitem id="partition-schema-class-new" label="${Spoon.Menu.Popup.BASE.New}" command="spoon.newPartitioningSchema()" />
   </menupopup>
 
   <menupopup id="cluster-schema-class">
@@ -241,15 +244,16 @@
   </menupopup>
 
   <menupopup id="database-inst">
-    <menuitem id="database-inst-new" label="${Spoon.Menu.Popup.CONNECTIONS.New}" command="spoon.newConnection()" />
     <menuitem id="database-inst-edit" label="${Spoon.Menu.Popup.CONNECTIONS.Edit}" command="spoon.editConnection()" />
-    <menuitem id="database-inst-duplicate" label="${Spoon.Menu.Popup.CONNECTIONS.Duplicate}" command="spoon.dupeConnection()" />
-    <menuitem id="database-inst-copy" label="${Spoon.Menu.Popup.CONNECTIONS.CopyToClipboard}" command="spoon.clipConnection()" />
+    <menuitem id="database-inst-move-project" label="${Spoon.Menu.Popup.CONNECTIONS.MoveToProject}" command="spoon.moveConnectionToProject()" />
+    <menuitem id="database-inst-move-global" label="${Spoon.Menu.Popup.MoveTo}" command="spoon.moveConnectionToGlobal()" />
+    <menuitem id="database-inst-copy-project" label="${Spoon.Menu.Popup.CONNECTIONS.CopyToProject}" command="spoon.copyConnectionToProject()" />
+    <menuitem id="database-inst-copy-global" label="${Spoon.Menu.Popup.CopyTo}" command="spoon.copyConnectionToGlobal()" />
+    <menuitem id="database-inst-duplicate" label="${Spoon.Menu.Popup.DuplicateIn}" command="spoon.dupeConnection()" />
     <menuitem id="database-inst-delete" label="${Spoon.Menu.Popup.CONNECTIONS.Delete}" command="spoon.delConnection()" />
     <menuseparator />
     <menuitem id="database-inst-sql-edit" label="${Spoon.Menu.Popup.CONNECTIONS.SQLEditor}" command="spoon.sqlConnection()" />
     <menuitem id="database-inst-clear-cache" label="${Spoon.Menu.Popup.CONNECTIONS.ClearDBCache}" command="spoon.clearDBCache('database-inst-clear-cache')"/>
-    <menuitem id="database-inst-share" label="${Spoon.Menu.Popup.CONNECTIONS.Share}" command="spoon.shareObject('database-inst-share')" />
     <menuitem id="database-inst-explore" label="${Spoon.Menu.Popup.CONNECTIONS.Explore}" command="spoon.exploreDB()" />
     <menuseparator />
     <menuitem id="database-inst-dependancy" label="${Spoon.Menu.Popup.CONNECTIONS.ShowDependancies}" command="spoon.displayDbDependancies()" />
@@ -259,10 +263,9 @@
     <menuitem id="step-inst-edit" label="${Spoon.Menu.Popup.STEPS.Edit}" command="spoon.editStep()" />
     <menuitem id="step-inst-duplicate" label="${Spoon.Menu.Popup.STEPS.Duplicate}" command="spoon.dupeStep()" />
     <menuitem id="step-inst-delete" label="${Spoon.Menu.Popup.STEPS.Delete}" command="spoon.delStep()" />
-    <menuitem id="step-inst-share" label="${Spoon.Menu.Popup.STEPS.Share}" command="spoon.shareObject('step-inst-share')" />
     <menuseparator id="step-inst-separator-1"/>
     <menuitem id="step-inst-help" label="${Spoon.Menu.Popup.STEPS.Help}" command="spoon.helpStep()" />
-    
+
   </menupopup>
 
   <menupopup id="job-entry-copy-inst">
@@ -271,7 +274,7 @@
     <menuitem id="job-entry-copy-delete" label="${Spoon.Menu.Popup.STEPS.Delete}" command="spoon.deleteJobEntryCopies()" />
     <menuseparator id="job-entry-copy-inst-separator-1"/>
     <menuitem id="job-entry-copy-help" label="${Spoon.Menu.Popup.STEPS.Help}" command="spoon.helpJobEntry()" />
-    
+
   </menupopup>
 
   <menupopup id="trans-hop-inst">
@@ -281,23 +284,37 @@
 
   <menupopup id="partition-schema-inst">
     <menuitem id="partition-schema-inst-edit" label="${Spoon.Menu.Popup.STEPS.Edit}" command="spoon.editPartitionSchema()" />
+    <menuitem id="partition-schema-inst-move-project" label="${Spoon.Menu.Popup.PARTITIONS.MoveToProject}" command="spoon.movePartitionSchemaToProject()" />
+    <menuitem id="partition-schema-inst-move-global" label="${Spoon.Menu.Popup.MoveTo}" command="spoon.movePartitionSchemaToGlobal()" />
+    <menuitem id="partition-schema-inst-copy-project" label="${Spoon.Menu.Popup.PARTITIONS.CopyToProject}" command="spoon.copyPartitionSchemaToProject()" />
+    <menuitem id="partition-schema-inst-copy-global" label="${Spoon.Menu.Popup.CopyTo}" command="spoon.copyPartitionSchemaToGlobal()" />
+    <menuitem id="partition-schema-inst-duplicate-project" label="${Spoon.Menu.Popup.PARTITIONS.DuplicateInProject}" command="spoon.dupePartitionSchema()" />
+    <menuitem id="partition-schema-inst-duplicate-global" label="${Spoon.Menu.Popup.DuplicateIn}" command="spoon.dupePartitionSchema()" />
     <menuitem id="partition-schema-inst-delete" label="${Spoon.Menu.Popup.STEPS.Delete}" command="spoon.delPartitionSchema()" />
-    <menuitem id="partition-schema-inst-share" label="${Spoon.Menu.Popup.STEPS.Share}" command="spoon.shareObject('partition-schema-inst-share')" />
   </menupopup>
 
   <menupopup id="cluster-schema-inst">
     <menuitem id="cluster-schema-inst-edit" label="${Spoon.Menu.Popup.STEPS.Edit}" command="spoon.editClusterSchema()" />
+    <menuitem id="cluster-schema-inst-move-project" label="${Spoon.Menu.Popup.CLUSTERS.MoveToProject}" command="spoon.moveClusterSchemaToProject()" />
+    <menuitem id="cluster-schema-inst-move-global" label="${Spoon.Menu.Popup.MoveTo}" command="spoon.moveClusterSchemaToGlobal()" />
+    <menuitem id="cluster-schema-inst-copy-project" label="${Spoon.Menu.Popup.CLUSTERS.CopyToProject}" command="spoon.copyClusterSchemaToProject()" />
+    <menuitem id="cluster-schema-inst-copy-global" label="${Spoon.Menu.Popup.CopyTo}" command="spoon.copyClusterSchemaToGlobal()" />
+    <menuitem id="cluster-schema-inst-duplicate-project" label="${Spoon.Menu.Popup.CLUSTERS.DuplicateInProject}" command="spoon.dupeClusterSchema()" />
+    <menuitem id="cluster-schema-inst-duplicate-global" label="${Spoon.Menu.Popup.DuplicateIn}" command="spoon.dupeClusterSchema()" />
     <menuitem id="cluster-schema-inst-delete" label="${Spoon.Menu.Popup.STEPS.Delete}" command="spoon.delClusterSchema()" />
-    <menuitem id="cluster-schema-inst-share" label="${Spoon.Menu.Popup.STEPS.Share}" command="spoon.shareObject('cluster-schema-inst-share')" />
     <menuitem id="cluster-schema-inst-monitor" label="${Spoon.Menu.Popup.CLUSTERS.Monitor}" command="spoon.monitorClusterSchema()" />
   </menupopup>
 
   <menupopup id="slave-server-inst">
     <menuitem id="slave-server-inst-edit" label="${Spoon.Menu.Popup.STEPS.Edit}" command="spoon.editSlaveServer()" />
+    <menuitem id="slave-server-inst-move-project" label="${Spoon.Menu.Popup.SLAVE_SERVER.MoveToProject}" command="spoon.moveSlaveServerToProject()" />
+    <menuitem id="slave-server-inst-move-global" label="${Spoon.Menu.Popup.MoveTo}" command="spoon.moveSlaveServerToGlobal()" />
+    <menuitem id="slave-server-inst-copy-project" label="${Spoon.Menu.Popup.SLAVE_SERVER.CopyToProject}" command="spoon.copySlaveServerToProject()" />
+    <menuitem id="slave-server-inst-copy-global" label="${Spoon.Menu.Popup.CopyTo}" command="spoon.copySlaveServerToGlobal()" />
+    <menuitem id="slave-server-inst-duplicate-project" label="${Spoon.Menu.Popup.SLAVE_SERVER.DuplicateInProject}" command="spoon.dupeSlaveServer()" />
+    <menuitem id="slave-server-inst-duplicate-global" label="${Spoon.Menu.Popup.DuplicateIn}" command="spoon.dupeSlaveServer()" />
     <menuitem id="slave-server-inst-delete" label="${Spoon.Menu.Popup.STEPS.Delete}" command="spoon.delSlaveServer()" />
-    <menuitem id="slave-server-inst-share" label="${Spoon.Menu.Popup.STEPS.Share}" command="spoon.shareObject('slave-server-inst-share')" />
     <menuitem id="slave-server-inst-monitor" label="${Spoon.Menu.Popup.SLAVE_SERVER.Monitor}" command="spoon.addSpoonSlave()" />
   </menupopup>
 
 </window>
-

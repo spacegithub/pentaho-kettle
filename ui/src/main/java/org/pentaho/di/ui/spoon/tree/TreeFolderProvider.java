@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.spoon.tree;
 
@@ -28,6 +20,9 @@ import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.ui.core.gui.GUIResource;
 import org.pentaho.di.ui.core.widget.tree.TreeNode;
 
+import java.util.Collection;
+import java.util.Optional;
+
 /**
  * Created by bmorrise on 6/26/18.
  */
@@ -35,14 +30,14 @@ public abstract class TreeFolderProvider {
 
   protected TreeManager treeManager;
 
-  public abstract void refresh( AbstractMeta meta, TreeNode treeNode, String filter );
+  public abstract void refresh( Optional<AbstractMeta> meta, TreeNode treeNode, String filter );
 
-  public Class getType() {
+  public Class<?> getType() {
     return Object.class;
   }
 
-  public void checkUpdate( AbstractMeta meta, TreeNode treeNode, String filter ) {
-    if ( treeManager.shouldUpdate( meta, getTitle() ) ) {
+  public void checkUpdate( Optional<AbstractMeta> meta, TreeNode treeNode, String filter ) {
+    if ( treeManager.shouldUpdate( getTitle() ) ) {
       treeNode.removeAll();
       refresh( meta, treeNode, filter );
     }
@@ -54,8 +49,12 @@ public abstract class TreeFolderProvider {
     return Utils.isEmpty( string ) || Utils.isEmpty( filter ) || string.toUpperCase().contains( filter.toUpperCase() );
   }
 
-  public void create( AbstractMeta meta, TreeNode parent ) {
-    refresh( meta, createTreeNode( parent, getTitle(), GUIResource.getInstance().getImageFolder() ), null );
+  public void create( Optional<AbstractMeta> meta, TreeNode parent ) {
+    refresh( meta, createTreeNode( parent, getTitle(), getTreeImage() ), null );
+  }
+
+  protected Image getTreeImage() {
+    return GUIResource.getInstance().getImageConfigurations();
   }
 
   public TreeNode createTreeNode( TreeNode parent, String text, Image image ) {
@@ -69,5 +68,14 @@ public abstract class TreeFolderProvider {
 
   public void setTreeManager( TreeManager treeManager ) {
     this.treeManager = treeManager;
+  }
+
+  protected boolean containsIgnoreCase( Collection<String> stringList, String nodeName ) {
+    for ( String treeNodeName : stringList ){
+      if ( treeNodeName.equalsIgnoreCase( nodeName )) {
+        return true;
+      }
+    }
+    return false;
   }
 }

@@ -1,42 +1,38 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step.jms;
 
 import org.pentaho.di.core.injection.Injection;
-import org.pentaho.di.core.row.RowMeta;
-import org.pentaho.di.core.row.RowMetaInterface;
-import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.core.util.serialization.Sensitive;
+import org.pentaho.di.trans.step.jms.context.ActiveMQProvider;
 import org.pentaho.di.trans.step.jms.context.JmsProvider;
+import org.pentaho.di.trans.step.jms.context.WrappedWebsphereMQProvider;
+import org.pentaho.metaverse.api.analyzer.kettle.annotations.Metaverse;
 
 import javax.jms.Destination;
 import javax.jms.JMSContext;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.pentaho.di.i18n.BaseMessages.getString;
 import static org.pentaho.di.trans.step.jms.JmsConstants.PKG;
+import static org.pentaho.di.trans.step.jms.JmsProducerMeta.JMS_SERVER_METAVERSE;
+import static org.pentaho.di.trans.step.jms.JmsProducerMeta.JMS_DESTINATION_METAVERSE;
 import static org.pentaho.di.trans.step.jms.context.JmsProvider.ConnectionType.ACTIVEMQ;
 import static org.pentaho.di.trans.step.jms.context.JmsProvider.DestinationType.QUEUE;
+import static org.pentaho.dictionary.DictionaryConst.LINK_WRITESTO;
 
 
 /**
@@ -47,29 +43,31 @@ import static org.pentaho.di.trans.step.jms.context.JmsProvider.DestinationType.
  */
 public class JmsDelegate {
 
+  @Metaverse.Node ( name = JMS_DESTINATION_METAVERSE, type = JMS_DESTINATION_METAVERSE, link = LINK_WRITESTO, linkDirection = "IN" )
   @Injection ( name = "DESTINATION" ) public String destinationName = "";
 
+  @Metaverse.Property ( name = "IBMMQ Url", parentNodeName = JMS_SERVER_METAVERSE )
   @Injection ( name = "IBMMQ_URL" ) public String ibmUrl = "";
 
+  @Metaverse.Property ( name = "IBMMQ Username", parentNodeName = JMS_SERVER_METAVERSE )
   @Injection ( name = "IBMMQ_USERNAME" ) public String ibmUsername = "";
 
   @Sensitive @Injection ( name = "IBMMQ_PASSWORD" ) public String ibmPassword = "";
 
+  @Metaverse.Property ( name = "AMQ Url", parentNodeName = JMS_SERVER_METAVERSE )
   @Injection ( name = "AMQ_URL" ) public String amqUrl = "";
 
+  @Metaverse.Property ( name = "AMQ Username", parentNodeName = JMS_SERVER_METAVERSE )
   @Injection ( name = "AMQ_USERNAME" ) public String amqUsername = "";
 
   @Sensitive @Injection ( name = "AMQ_PASSWORD" ) public String amqPassword = "";
 
+  @Metaverse.Node ( name = JMS_SERVER_METAVERSE, type = JMS_SERVER_METAVERSE )
+  @Metaverse.Property ( name = JMS_SERVER_METAVERSE, parentNodeName = JMS_SERVER_METAVERSE )
   @Injection( name = "CONNECTION_TYPE" ) public String connectionType = ACTIVEMQ.name();
 
+  @Metaverse.Property ( name = "Destination Type", parentNodeName = JMS_DESTINATION_METAVERSE )
   @Injection ( name = "DESTINATION_TYPE" ) public String destinationType = QUEUE.name();
-
-  @Injection ( name = "RECEIVE_TIMEOUT" ) public String receiveTimeout = "0";
-
-  @Injection ( name = "MESSAGE_FIELD_NAME" ) public String messageField = "message";
-
-  @Injection ( name = "DESTINATION_FIELD_NAME" ) public String destinationField = "destination";
 
   @Injection ( name = "SSL_ENABLED", group = "SSL_GROUP" ) public boolean sslEnabled = false;
 
@@ -99,11 +97,19 @@ public class JmsDelegate {
 
   @Injection ( name = "AMQ_SSL_TRUST_ALL", group = "SSL_GROUP" ) public String amqSslTrustAll = "";
 
-  final List<JmsProvider> jmsProviders;
+  @Injection ( name = "SSL_USE_DEFAULT_CONTEXT", group = "SSL_GROUP" ) public boolean sslUseDefaultContext = false;
+
+  List<JmsProvider> jmsProviders;
 
   public JmsDelegate( List<JmsProvider> jmsProviders ) {
     super();
     this.jmsProviders = jmsProviders;
+  }
+
+  public JmsDelegate() {
+    jmsProviders = new ArrayList<>();
+    jmsProviders.add( new ActiveMQProvider() );
+    jmsProviders.add( new WrappedWebsphereMQProvider() );
   }
 
   Destination getDestination( ) {
@@ -126,7 +132,7 @@ public class JmsDelegate {
   }
 
   public String getConnectionUrl() {
-    return connectionType.equals( ACTIVEMQ ) ? amqUrl : ibmUrl;
+    return connectionType.equals( ACTIVEMQ.name() ) ? amqUrl : ibmUrl;
   }
 
   public String getDestinationName() {
@@ -135,19 +141,5 @@ public class JmsDelegate {
 
   public String getDestinationType() {
     return destinationType;
-  }
-
-  public String getReceiveTimeout() {
-    return receiveTimeout;
-  }
-
-  /**
-   * Creates a rowMeta for output field names
-   */
-  RowMetaInterface getRowMeta() {
-    RowMeta rowMeta = new RowMeta();
-    rowMeta.addValueMeta( new ValueMetaString( messageField ) );
-    rowMeta.addValueMeta( new ValueMetaString( destinationField ) );
-    return rowMeta;
   }
 }

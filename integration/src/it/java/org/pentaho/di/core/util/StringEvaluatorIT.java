@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.util;
 
@@ -92,7 +84,7 @@ public class StringEvaluatorIT {
     assertEquals( evaluator.getCount(), series3.length );
     assertEquals( evaluator.getMaxLength(), 8 );
     StringEvaluationResult result = evaluator.getStringEvaluationResults().get( 0 );
-    assertEquals( "Not a number detected", result.getConversionMeta().getType(), ValueMetaInterface.TYPE_NUMBER );
+    assertEquals( "Not a number detected", result.getConversionMeta().getType(), ValueMetaInterface.TYPE_BIGNUMBER );
 
     int nrEmpty = result.getNrNull();
     assertEquals( nrEmpty, 1 );
@@ -112,7 +104,7 @@ public class StringEvaluatorIT {
     assertEquals( evaluator.getCount(), series4.length );
     assertEquals( evaluator.getMaxLength(), 13 );
     StringEvaluationResult result = evaluator.getStringEvaluationResults().get( 0 );
-    assertEquals( "Not a number detected", result.getConversionMeta().getType(), ValueMetaInterface.TYPE_NUMBER );
+    assertEquals( "Not a number detected", result.getConversionMeta().getType(), ValueMetaInterface.TYPE_BIGNUMBER );
 
     int nrEmpty = result.getNrNull();
     assertEquals( nrEmpty, 1 );
@@ -128,9 +120,9 @@ public class StringEvaluatorIT {
     }
     assertEquals( values.length, eval.getCount() );
     StringEvaluationResult result = eval.getAdvicedResult();
-    assertEquals( "Not a number detected", ValueMetaInterface.TYPE_NUMBER, result.getConversionMeta().getType() );
+    assertEquals( "Not a number detected", ValueMetaInterface.TYPE_BIGNUMBER, result.getConversionMeta().getType() );
     assertEquals( "Precision not correct", 2, result.getConversionMeta().getPrecision() );
-    assertEquals( "Currency format mask is incorrect", "$#,##0.00;($#,##0.00)", result
+    assertEquals( "Currency format mask is incorrect", "$#,###.00;($#,###.00)", result
       .getConversionMeta().getConversionMask() );
   }
 
@@ -153,9 +145,9 @@ public class StringEvaluatorIT {
       }
       assertEquals( values.length, eval.getCount() );
       StringEvaluationResult result = eval.getAdvicedResult();
-      assertEquals( "Not a number detected", ValueMetaInterface.TYPE_NUMBER, result.getConversionMeta().getType() );
-      assertEquals( "Precision not correct", 2, result.getConversionMeta().getPrecision() );
-      assertEquals( "Currency format mask is incorrect", "£#,##0.00", result.getConversionMeta().getConversionMask() );
+      assertEquals( "Not a number detected", ValueMetaInterface.TYPE_BIGNUMBER, result.getConversionMeta().getType() );
+      assertEquals( "Precision not correct", 3, result.getConversionMeta().getPrecision() );
+      assertEquals( "Currency format mask is incorrect", "£#,##0.000", result.getConversionMeta().getConversionMask() );
     } finally {
       Locale.setDefault( orig );
     }
@@ -204,7 +196,7 @@ public class StringEvaluatorIT {
       }
       assertEquals( goodValues.length, eval.getCount() );
       StringEvaluationResult result = eval.getAdvicedResult();
-      assertEquals( "Not a number detected", result.getConversionMeta().getTypeDesc(), "Number" );
+      assertEquals( "Not a Bignumber detected", result.getConversionMeta().getTypeDesc(), "BigNumber" );
 
       eval = new StringEvaluator();
       for ( String value : badValues ) {
@@ -212,7 +204,7 @@ public class StringEvaluatorIT {
       }
       assertEquals( badValues.length, eval.getCount() );
       result = eval.getAdvicedResult();
-      assertFalse( "Number detected", result.getConversionMeta().getType() == ValueMetaInterface.TYPE_NUMBER );
+      assertFalse( "Number detected", result.getConversionMeta().getType() == ValueMetaInterface.TYPE_BIGNUMBER );
     } finally {
       Locale.setDefault( orig );
     }
@@ -237,7 +229,7 @@ public class StringEvaluatorIT {
       eval.evaluateString( value );
     }
     StringEvaluationResult result = eval.getAdvicedResult();
-    assertEquals( "Number", result.getConversionMeta().getTypeDesc() );
+    assertEquals( "BigNumber", result.getConversionMeta().getTypeDesc() );
     assertEquals( 8, result.getConversionMeta().getPrecision() );
     assertEquals( 13, result.getConversionMeta().getLength() );
   }
@@ -282,7 +274,7 @@ public class StringEvaluatorIT {
       StringEvaluationResult numericResult = doEvaluation( new StringEvaluator(), samples );
       ValueMetaInterface meta = numericResult.getConversionMeta();
       assertTrue( Integer.toString( meta.getType() ), ValueMetaBase.isNumeric( meta.getType() ) );
-      assertEquals( "#,##0.00;(#,##0.00)", meta.getConversionMask() );
+      assertEquals( "#,###;(#,###)", meta.getConversionMask() );
     } finally {
       Locale.setDefault( environmentLocale );
     }
@@ -299,7 +291,7 @@ public class StringEvaluatorIT {
       StringEvaluationResult numericResult = doEvaluation( new StringEvaluator(), samples );
       ValueMetaInterface meta = numericResult.getConversionMeta();
       assertTrue( Integer.toString( meta.getType() ), ValueMetaBase.isNumeric( meta.getType() ) );
-      assertEquals( "#,##0.00;(#,##0.00)", meta.getConversionMask() );
+      assertEquals( "#,###.00;(#,###.00)", meta.getConversionMask() );
     } finally {
       Locale.setDefault( environmentLocale );
     }

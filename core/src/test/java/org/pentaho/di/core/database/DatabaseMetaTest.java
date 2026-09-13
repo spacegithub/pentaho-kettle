@@ -1,26 +1,37 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
 
+
+
 package org.pentaho.di.core.database;
+
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
+import org.junit.Test;
+import org.pentaho.di.core.KettleClientEnvironment;
+import org.pentaho.di.core.RowMetaAndData;
+import org.pentaho.di.core.encryption.Encr;
+import org.pentaho.di.core.exception.KettleDatabaseException;
+import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.exception.KettlePluginException;
+import org.pentaho.di.core.plugins.DatabasePluginType;
+import org.pentaho.di.core.row.RowMeta;
+import org.pentaho.di.core.row.RowMetaInterface;
+import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.di.core.row.value.ValueMetaNone;
+import org.pentaho.di.core.row.value.ValueMetaPluginType;
+import org.pentaho.di.junit.rules.RestorePDIEnvironment;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -34,35 +45,19 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
-import org.pentaho.di.core.RowMetaAndData;
-import org.pentaho.di.core.exception.KettleDatabaseException;
-import org.pentaho.di.core.exception.KettlePluginException;
-import org.pentaho.di.core.plugins.DatabasePluginType;
-import org.pentaho.di.core.row.RowMeta;
-import org.pentaho.di.core.row.RowMetaInterface;
-import org.pentaho.di.core.row.ValueMetaInterface;
-import org.pentaho.di.core.row.value.ValueMetaNone;
-import org.pentaho.di.core.row.value.ValueMetaPluginType;
-import org.pentaho.di.core.KettleClientEnvironment;
-import org.pentaho.di.core.exception.KettleException;
-import org.pentaho.di.junit.rules.RestorePDIEnvironment;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -200,7 +195,7 @@ public class DatabaseMetaTest {
     doCallRealMethod().when( databaseMeta2 ).getName();
     doCallRealMethod().when( databaseMeta2 ).setDisplayName( anyString() );
     doCallRealMethod().when( databaseMeta2 ).getDisplayName();
-    doCallRealMethod().when( databaseMeta2 ).verifyAndModifyDatabaseName( any( ArrayList.class ), anyString() );
+    doCallRealMethod().when( databaseMeta2 ).verifyAndModifyDatabaseName( any( ArrayList.class ), eq( null ) );
     databaseMeta2.setDatabaseInterface( odbm2 );
     databaseMeta2.setName( "test" );
 
@@ -402,6 +397,27 @@ public class DatabaseMetaTest {
   }
 
   @Test
+  public void supportsOptionalExtraOptions() throws KettleDatabaseException {
+    DatabaseMeta dbmeta = new DatabaseMeta( "rs", "Redshift", "JDBC", "amazon-host", "stuff", "5432", "jerry", null );
+    Properties props = dbmeta.getAttributes();
+    props.setProperty( RedshiftDatabaseMeta.JDBC_AUTH_METHOD, RedshiftDatabaseMeta.STANDARD_CREDENTIALS );
+    props.setProperty( RedshiftDatabaseMeta.IAM_ACCESS_KEY_ID, Encr.encryptPassword( "key" ) );
+    props.setProperty( RedshiftDatabaseMeta.IAM_SECRET_ACCESS_KEY, Encr.encryptPassword( "secret" ) );
+    props.setProperty( RedshiftDatabaseMeta.IAM_SESSION_TOKEN, Encr.encryptPassword( "token" ) );
+    assertFalse( dbmeta.getURL().contains( "AccessKeyID" ) );
+    assertFalse( dbmeta.getURL().contains( "secret" ) );
+    assertFalse( dbmeta.getURL().startsWith( "jdbc:redshift:iam:" ) );
+    props.setProperty( RedshiftDatabaseMeta.JDBC_AUTH_METHOD, RedshiftDatabaseMeta.IAM_CREDENTIALS );
+    assertTrue( dbmeta.getURL().contains( "AccessKeyID" ) );
+    assertTrue( dbmeta.getURL().contains( "secret" ) );
+    assertTrue( dbmeta.getURL().startsWith( "jdbc:redshift:iam:" ) );
+    props.setProperty( RedshiftDatabaseMeta.JDBC_AUTH_METHOD, RedshiftDatabaseMeta.PROFILE_CREDENTIALS );
+    props.setProperty( RedshiftDatabaseMeta.IAM_PROFILE_NAME, "default" );
+    assertTrue( dbmeta.getURL().startsWith( "jdbc:redshift:iam:" ) );
+    assertTrue( dbmeta.getURL().contains( "Profile=default" ) );
+  }
+
+  @Test
   public void testfindDatabase() throws KettleDatabaseException {
     List<DatabaseMeta> databases = new ArrayList<DatabaseMeta>();
     databases.add( new DatabaseMeta( "  1", "Infobright", "JDBC", null, "stub:stub", null, null, null ) );
@@ -413,4 +429,58 @@ public class DatabaseMetaTest {
     Assert.assertNotNull( DatabaseMeta.findDatabase( databases, " 1 " ) );
   }
 
+  @Test
+  public void testIsNeedUpdateTrue() {
+    DatabaseMeta meta = new DatabaseMeta();
+    meta.setNeedUpdate( true );
+    assertTrue( meta.isNeedUpdate() );
+  }
+
+  @Test
+  public void testIsNeedUpdateFalse() {
+    DatabaseMeta meta = new DatabaseMeta();
+    meta.setNeedUpdate( false );
+    assertFalse( meta.isNeedUpdate() );
+  }
+
+  @Test
+  public void testGetSQLListOfSchemas() {
+    DatabaseMeta databaseMeta = spy( new DatabaseMeta() );
+    DatabaseInterface databaseInterface = mock( DatabaseInterface.class );
+    databaseMeta.setDatabaseInterface( databaseInterface );
+    databaseMeta.getSQLListOfSchemas();
+    verify( databaseInterface ).getSQLListOfSchemas( databaseMeta );
+  }
+
+  @Test
+  public void testSetDatabaseType() {
+    DatabaseMeta dbmeta = new DatabaseMeta( "test", "Oracle", "JDBC", "localhost", "stuff", "5432", "jerry", null );
+    assertEquals( "Oracle", dbmeta.getDatabaseInterface().getPluginName() );
+
+    dbmeta.setDatabaseType( "Redshift" );
+
+    assertEquals( "Redshift", dbmeta.getDatabaseInterface().getPluginName() );
+    assertEquals( "test", dbmeta.getName() );
+    assertEquals( DatabaseMeta.getAccessType( "JDBC" ), dbmeta.getAccessType() );
+    assertEquals( "stuff", dbmeta.getDatabaseName() );
+    assertEquals( "localhost", dbmeta.getHostname() );
+    assertEquals( "5432", dbmeta.getDatabasePortNumberString() );
+    assertEquals( "jerry", dbmeta.getUsername() );
+  }
+
+  @Test
+  public void testReplaceMeta() {
+    DatabaseMeta origMeta = new DatabaseMeta( "test1", "Oracle", "JDBC", "localhost1", "stuff1", "0000", "Marry", null );
+    DatabaseMeta dbmeta = new DatabaseMeta( "test", "Redshift", "JDBC", "localhost", "stuff", "5432", "Jerry", null );
+
+    origMeta.replaceMeta( dbmeta, true );
+
+    assertEquals( "Redshift", origMeta.getDatabaseInterface().getPluginName() );
+    assertEquals( "test", origMeta.getName() );
+    assertEquals( DatabaseMeta.getAccessType( "JDBC" ), origMeta.getAccessType() );
+    assertEquals( "stuff", origMeta.getDatabaseName() );
+    assertEquals( "localhost", origMeta.getHostname() );
+    assertEquals( "5432", origMeta.getDatabasePortNumberString() );
+    assertEquals( "Jerry", origMeta.getUsername() );
+  }
 }

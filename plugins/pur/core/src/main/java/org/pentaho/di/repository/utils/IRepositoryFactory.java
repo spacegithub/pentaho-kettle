@@ -1,19 +1,16 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.utils;
 
 import org.pentaho.di.core.exception.KettleException;
@@ -89,18 +86,21 @@ public interface IRepositoryFactory {
       ICacheManager cacheManager = PentahoSystem.getCacheManager( session );
 
       String sessionName = session.getName();
-      Repository repository = (Repository) cacheManager.getFromRegionCache( REGION, sessionName );
-      if ( repository == null ) {
-        logger.debug( "Repository not cached for user: " + sessionName + ". Creating new Repository." );
-        repository = delegate.connect( repositoryName );
-        if ( !cacheManager.cacheEnabled( REGION ) ) {
-          cacheManager.addCacheRegion( REGION );
+      try {
+        return (Repository) cacheManager.getOrCreateFromRegionCache( REGION, sessionName, () -> {
+          logger.debug( "Repository not cached for user: " + sessionName + ". Creating new Repository." );
+          try {
+            return delegate.connect( repositoryName );
+          } catch ( KettleException e ) {
+            throw new IllegalStateException( "Failed to create repository for user: " + sessionName, e );
+          }
+        } );
+      } catch ( IllegalStateException e ) {
+        if ( e.getCause() instanceof KettleException kettleException ) {
+          throw kettleException;
         }
-        cacheManager.putInRegionCache( REGION, sessionName, repository );
-      } else {
-        logger.debug( "Repository was cached for user: " + sessionName );
+        throw e;
       }
-      return repository;
     }
   }
 

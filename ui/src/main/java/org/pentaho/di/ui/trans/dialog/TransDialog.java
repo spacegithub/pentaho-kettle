@@ -1,27 +1,20 @@
 // CHECKSTYLE:FileLength:OFF
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
 
+
+
 package org.pentaho.di.ui.trans.dialog;
+
 import java.util.ArrayList;
 
 import org.eclipse.swt.SWT;
@@ -52,13 +45,10 @@ import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.Props;
-import org.pentaho.di.core.database.Database;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.logging.ChannelLogTable;
-import org.pentaho.di.core.logging.LogStatus;
 import org.pentaho.di.core.logging.LogTableField;
 import org.pentaho.di.core.logging.LogTableInterface;
 import org.pentaho.di.core.logging.MetricsLogTable;
@@ -69,12 +59,12 @@ import org.pentaho.di.core.parameters.DuplicateParamException;
 import org.pentaho.di.core.parameters.UnknownParamException;
 import org.pentaho.di.core.plugins.PluginInterface;
 import org.pentaho.di.core.plugins.PluginRegistry;
-import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.repository.KettleRepositoryLostException;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
+import org.pentaho.di.shared.DatabaseManagementInterface;
 import org.pentaho.di.trans.TransDependency;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.TransMeta.TransformationType;
@@ -94,6 +84,8 @@ import org.pentaho.di.ui.core.widget.FieldDisabledListener;
 import org.pentaho.di.ui.core.widget.TableView;
 import org.pentaho.di.ui.core.widget.TextVar;
 import org.pentaho.di.ui.repository.RepositoryDirectoryUI;
+import org.pentaho.di.ui.spoon.Spoon;
+import org.pentaho.di.ui.spoon.tree.provider.DBConnectionFolderProvider;
 import org.pentaho.di.ui.trans.step.BaseStepDialog;
 
 
@@ -918,7 +910,17 @@ public class TransDialog extends Dialog {
         getDatabaseDialog().setDatabaseMeta( databaseMeta );
 
         if ( getDatabaseDialog().open() != null ) {
-          transMeta.addDatabase( getDatabaseDialog().getDatabaseMeta() );
+          try {
+            DatabaseManagementInterface dbMgr =
+              Spoon.getInstance().getManagementBowl().getManager( DatabaseManagementInterface.class );
+            dbMgr.add( getDatabaseDialog().getDatabaseMeta() );
+            // Refresh left hand tree
+            Spoon.getInstance().refreshTree( DBConnectionFolderProvider.STRING_CONNECTIONS );
+          } catch ( KettleException dbe ) {
+            new ErrorDialog(
+              shell, BaseMessages.getString( PKG, "TransDialog.ErrorAddingDatabase.Title" ), BaseMessages
+                .getString( PKG, "TransDialog.ErrorAddingDatabase.Message" ), dbe );
+          }
           wLogconnection.add( getDatabaseDialog().getDatabaseMeta().getName() );
           wLogconnection.select( wLogconnection.getItemCount() - 1 );
         }
@@ -2177,7 +2179,6 @@ public class TransDialog extends Dialog {
     wUniqueConnections.setSelection( transMeta.isUsingUniqueConnections() );
     wShowFeedback.setSelection( transMeta.isFeedbackShown() );
     wFeedbackSize.setText( Integer.toString( transMeta.getFeedbackSize() ) );
-    wSharedObjectsFile.setText( Const.NVL( transMeta.getSharedObjectsFile(), "" ) );
     wManageThreads.setSelection( transMeta.isUsingThreadPriorityManagment() );
     wTransformationType.setText( transMeta.getTransformationType().getDescription() );
 
@@ -2315,7 +2316,6 @@ public class TransDialog extends Dialog {
 
     transMeta.setFeedbackShown( wShowFeedback.getSelection() );
     transMeta.setFeedbackSize( Const.toInt( wFeedbackSize.getText(), Const.ROWS_UPDATE ) );
-    transMeta.setSharedObjectsFile( wSharedObjectsFile.getText() );
     transMeta.setUsingThreadPriorityManagment( wManageThreads.getSelection() );
     transMeta.setTransformationType( TransformationType.values()[Const.indexOfString( wTransformationType
       .getText(), TransformationType.getTransformationTypesDescriptions() )] );
@@ -2460,56 +2460,15 @@ public class TransDialog extends Dialog {
 
       for ( LogTableInterface logTable : new LogTableInterface[] {
         transLogTable, performanceLogTable, channelLogTable, stepLogTable, metricsLogTable, } ) {
-        if ( logTable.getDatabaseMeta() != null && !Utils.isEmpty( logTable.getTableName() ) ) {
-          // OK, we have something to work with!
-          //
-          Database db = null;
-          try {
-            db = new Database( transMeta, logTable.getDatabaseMeta() );
-            db.shareVariablesWith( transMeta );
-            db.connect();
+        StringBuilder ddl = logTable.generateTableSQL( logTable, transMeta );
 
-            StringBuilder ddl = new StringBuilder();
-
-            RowMetaInterface fields = logTable.getLogRecord( LogStatus.START, null, null ).getRowMeta();
-            String tableName = db.environmentSubstitute( logTable.getTableName() );
-            String schemaTable =
-              logTable.getDatabaseMeta().getQuotedSchemaTableCombination(
-                db.environmentSubstitute( logTable.getSchemaName() ), tableName );
-            String createTable = db.getDDL( schemaTable, fields );
-
-            if ( !Utils.isEmpty( createTable ) ) {
-              ddl.append( "-- " ).append( logTable.getLogTableType() ).append( Const.CR );
-              ddl.append( "--" ).append( Const.CR ).append( Const.CR );
-              ddl.append( createTable ).append( Const.CR );
-            }
-
-            java.util.List<RowMetaInterface> indexes = logTable.getRecommendedIndexes();
-            for ( int i = 0; i < indexes.size(); i++ ) {
-              RowMetaInterface index = indexes.get( i );
-              if ( !index.isEmpty() ) {
-                String createIndex =
-                  db.getCreateIndexStatement( schemaTable, "IDX_" + tableName + "_" + ( i + 1 ), index
-                    .getFieldNames(), false, false, false, true );
-                if ( !Utils.isEmpty( createIndex ) ) {
-                  ddl.append( createIndex );
-                }
-              }
-            }
-
-            if ( ddl.length() > 0 ) {
-              allOK = false;
-              SQLEditor sqledit =
-                new SQLEditor(
-                  transMeta, shell, SWT.NONE, logTable.getDatabaseMeta(), transMeta.getDbCache(), ddl
-                    .toString() );
-              sqledit.open();
-            }
-          } finally {
-            if ( db != null ) {
-              db.disconnect();
-            }
-          }
+        if ( ddl.length() > 0 ) {
+          allOK = false;
+          SQLEditor sqledit =
+            new SQLEditor(
+              transMeta, shell, SWT.NONE, logTable.getDatabaseMeta(), transMeta.getDbCache(), ddl
+              .toString() );
+          sqledit.open();
         }
       }
 

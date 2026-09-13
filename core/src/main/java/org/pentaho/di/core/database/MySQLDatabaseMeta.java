@@ -1,32 +1,32 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.database;
 
 import com.google.common.collect.Sets;
+
 import org.pentaho.di.core.Const;
+import org.pentaho.di.core.exception.KettleDatabaseException;
 import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.util.Utils;
+import org.pentaho.di.i18n.BaseMessages;
 
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSetMetaData;
+
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -37,15 +37,24 @@ import java.util.Set;
  */
 
 public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInterface {
+  private static final Class<?> PKG = MySQLDatabaseMeta.class;
 
   private static final int VARCHAR_LIMIT = 65_535;
 
+  private static String driverClass = "";
+
   private static final Set<String>
-    SHORT_MESSAGE_EXCEPTIONS =
-    Sets.newHashSet( "com.mysql.jdbc.PacketTooBigException", "com.mysql.jdbc.MysqlDataTruncation" );
+    shortMessageExceptions =
+    Sets.newHashSet( "com.mysql.jdbc.PacketTooBigException", "com.mysql.jdbc.MysqlDataTruncation",
+      "com.mysql.cj.jdbc.exceptions.PacketTooBigException",
+      "com.mysql.cj.jdbc.exceptions.MysqlDataTruncation" );
+
+  public MySQLDatabaseMeta() {
+    determineDriverClass();
+  }
 
   @Override public int[] getAccessTypeList() {
-    return new int[] { DatabaseMeta.TYPE_ACCESS_NATIVE, DatabaseMeta.TYPE_ACCESS_ODBC, DatabaseMeta.TYPE_ACCESS_JNDI };
+    return new int[] { DatabaseMeta.TYPE_ACCESS_NATIVE, DatabaseMeta.TYPE_ACCESS_JNDI };
   }
 
   @Override public int getDefaultDatabasePort() {
@@ -85,30 +94,39 @@ public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInter
   /**
    * @see org.pentaho.di.core.database.DatabaseInterface#getNotFoundTK(boolean)
    */
-  @Override public int getNotFoundTK( boolean use_autoinc ) {
-    if ( supportsAutoInc() && use_autoinc ) {
+  @Override public int getNotFoundTK( boolean useAutoinc ) {
+    if ( supportsAutoInc() && useAutoinc ) {
       return 1;
     }
-    return super.getNotFoundTK( use_autoinc );
+    return super.getNotFoundTK( useAutoinc );
   }
 
+  /*
+  * Fix for BACKLOG-33475 Upgrade bulkload support to include MySQL 8.0
+  * Change necessary since the jdbc driver for MySQL 5.7 and 8.0 package name changed from
+  * org.gjt.mm.mysql.Driver to com.mysql.cj.jdbc.Driver
+  * */
   @Override public String getDriverClass() {
-    if ( getAccessType() == DatabaseMeta.TYPE_ACCESS_ODBC ) {
-      return "sun.jdbc.odbc.JdbcOdbcDriver";
-    } else {
-      return "org.gjt.mm.mysql.Driver";
+    return determineDriverClass();
+  }
+
+  private static String determineDriverClass() {
+    if ( driverClass.isEmpty() ) {
+      try {
+        driverClass = "com.mysql.cj.jdbc.Driver";
+        Class.forName( driverClass );
+      } catch ( ClassNotFoundException e ) {
+        driverClass = "com.mysql.jdbc.Driver";
+      }
     }
+    return driverClass;
   }
 
   @Override public String getURL( String hostname, String port, String databaseName ) {
-    if ( getAccessType() == DatabaseMeta.TYPE_ACCESS_ODBC ) {
-      return "jdbc:odbc:" + databaseName;
+    if ( Utils.isEmpty( port ) ) {
+      return "jdbc:mysql://" + hostname + "/" + databaseName;
     } else {
-      if ( Utils.isEmpty( port ) ) {
-        return "jdbc:mysql://" + hostname + "/" + databaseName;
-      } else {
-        return "jdbc:mysql://" + hostname + ":" + port + "/" + databaseName;
-      }
+      return "jdbc:mysql://" + hostname + ":" + port + "/" + databaseName;
     }
   }
 
@@ -163,7 +181,7 @@ public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInter
    *   The column defined as a value
    * @param tk
    *   the name of the technical key field
-   * @param use_autoinc
+   * @param useAutoinc
    *   whether or not this field uses auto increment
    * @param pk
    *   the name of the primary key field
@@ -171,9 +189,9 @@ public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInter
    *   whether or not to add a semi-colon behind the statement.
    * @return the SQL statement to add a column to the specified table
    */
-  @Override public String getAddColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  @Override public String getAddColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
     String pk, boolean semicolon ) {
-    return "ALTER TABLE " + tablename + " ADD " + getFieldDefinition( v, tk, pk, use_autoinc, true, false );
+    return "ALTER TABLE " + tablename + " ADD " + getFieldDefinition( v, tk, pk, useAutoinc, true, false );
   }
 
   /**
@@ -185,7 +203,7 @@ public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInter
    *   The column defined as a value
    * @param tk
    *   the name of the technical key field
-   * @param use_autoinc
+   * @param useAutoinc
    *   whether or not this field uses auto increment
    * @param pk
    *   the name of the primary key field
@@ -194,12 +212,12 @@ public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInter
    * @return the SQL statement to modify a column in the specified table
    */
   @Override public String getModifyColumnStatement( String tablename, ValueMetaInterface v, String tk,
-    boolean use_autoinc, String pk, boolean semicolon ) {
-    return "ALTER TABLE " + tablename + " MODIFY " + getFieldDefinition( v, tk, pk, use_autoinc, true, false );
+                                                    boolean useAutoinc, String pk, boolean semicolon ) {
+    return "ALTER TABLE " + tablename + " MODIFY " + getFieldDefinition( v, tk, pk, useAutoinc, true, false );
   }
 
-  @Override public String getFieldDefinition( ValueMetaInterface v, String tk, String pk, boolean use_autoinc,
-    boolean add_fieldname, boolean add_cr ) {
+  @Override public String getFieldDefinition( ValueMetaInterface v, String tk, String pk, boolean useAutoinc,
+                                              boolean addFieldName, boolean addCr ) {
     String retval = "";
 
     String fieldname = v.getName();
@@ -209,7 +227,7 @@ public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInter
     int length = v.getLength();
     int precision = v.getPrecision();
 
-    if ( add_fieldname ) {
+    if ( addFieldName ) {
       retval += fieldname + " ";
     }
 
@@ -233,7 +251,7 @@ public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInter
         if ( fieldname.equalsIgnoreCase( tk ) || // Technical key
           fieldname.equalsIgnoreCase( pk ) // Primary key
         ) {
-          if ( use_autoinc ) {
+          if ( useAutoinc ) {
             retval += "BIGINT AUTO_INCREMENT NOT NULL PRIMARY KEY";
           } else {
             retval += "BIGINT NOT NULL PRIMARY KEY";
@@ -293,7 +311,7 @@ public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInter
         break;
     }
 
-    if ( add_cr ) {
+    if ( addCr ) {
       retval += Const.CR;
     }
 
@@ -383,7 +401,7 @@ public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInter
    * @return extra help text on the supported options on the selected database platform.
    */
   @Override public String getExtraOptionsHelpText() {
-    return "http://dev.mysql.com/doc/refman/5.0/en/connector-j-reference-configuration-properties.html";
+    return "https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-configuration-properties.html";
   }
 
   @Override public String[] getUsedLibraries() {
@@ -462,13 +480,25 @@ public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInter
 
   @Override public boolean fullExceptionLog( Exception e ) {
     Throwable cause = ( e == null ? null : e.getCause() );
-    return !( cause != null && SHORT_MESSAGE_EXCEPTIONS.contains( cause.getClass().getName() ) );
+    return !( cause != null && shortMessageExceptions.contains( cause.getClass().getName() ) );
   }
 
   @Override
   public void addDefaultOptions() {
+    //These options don't appear to get into the UI since it creates the DatabaseMeta with a hard coded Oracle type.
+    // Since it is called from the constuctor, I'm leaving it in, in case some other placed creates it but this
+    //appears to be implemented code that serves no purpose anymore.  See getDefaultOptions below.
     addExtraOption( getPluginId(), "defaultFetchSize", "500" );
     addExtraOption( getPluginId(), "useCursorFetch", "true" );
+  }
+
+  @Override
+  public Map<String, String> getDefaultOptions() {
+    Map<String, String> defaultOptions = new HashMap<>();
+    defaultOptions.put( getPluginId() + ".defaultFetchSize", "500" );
+    defaultOptions.put( getPluginId() + ".useCursorFetch", "true" );
+
+    return defaultOptions;
   }
 
   @Override
@@ -479,5 +509,30 @@ public class MySQLDatabaseMeta extends BaseDatabaseMeta implements DatabaseInter
   @Override
   public int getMaxTextFieldLength() {
     return Integer.MAX_VALUE;
+  }
+
+  /**
+   * Returns the column name for a MySQL field checking if the driver major version is "greater than" or "lower or equal" to 3.
+   *
+   * @param dbMetaData
+   * @param rsMetaData
+   * @param index
+   * @return The column label if version is greater than 3 or the column name if version is lower or equal to 3.
+   * @throws KettleDatabaseException
+   */
+  public String getLegacyColumnName( DatabaseMetaData dbMetaData, ResultSetMetaData rsMetaData, int index ) throws KettleDatabaseException {
+    if ( dbMetaData == null ) {
+      throw new KettleDatabaseException( BaseMessages.getString( PKG, "MySQLDatabaseMeta.Exception.LegacyColumnNameNoDBMetaDataException" ) );
+    }
+
+    if ( rsMetaData == null ) {
+      throw new KettleDatabaseException( BaseMessages.getString( PKG, "MySQLDatabaseMeta.Exception.LegacyColumnNameNoRSMetaDataException" ) );
+    }
+
+    try {
+      return dbMetaData.getDriverMajorVersion() > 3 ? rsMetaData.getColumnLabel( index ) : rsMetaData.getColumnName( index );
+    } catch ( Exception e ) {
+      throw new KettleDatabaseException( String.format( "%s: %s", BaseMessages.getString( PKG, "MySQLDatabaseMeta.Exception.LegacyColumnNameException" ), e.getMessage() ), e );
+    }
   }
 }

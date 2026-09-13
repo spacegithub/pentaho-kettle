@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.fileinput.text;
 
@@ -53,7 +45,7 @@ public class TextFileInputReader implements IBaseFileInputReader {
 
   private final CompressionInputStream in;
 
-  private final InputStreamReader isr;
+  private final BufferedInputStreamReader isr;
 
   protected long lineInFile;
 
@@ -61,12 +53,15 @@ public class TextFileInputReader implements IBaseFileInputReader {
 
   protected long lineNumberInFile;
 
+  protected long linesWritten;
+
   public TextFileInputReader( IBaseFileInputStepControl step, TextFileInputMeta meta, TextFileInputData data,
       FileObject file, LogChannelInterface log ) throws Exception {
     this.step = step;
     this.meta = meta;
     this.data = data;
     this.log = log;
+    this.linesWritten = step.getLinesWritten();
 
     CompressionProvider provider =
         CompressionProviderFactory.getInstance().getCompressionProviderByName( meta.content.fileCompression );
@@ -84,11 +79,11 @@ public class TextFileInputReader implements IBaseFileInputReader {
 
     if ( bom.bomExist() ) {
       // if BOM exist, use it instead defined charset
-      isr = new InputStreamReader( inStream, bom.getCharset() );
+      isr = new BufferedInputStreamReader( new InputStreamReader( inStream, bom.getCharset() ) );
     } else if ( meta.getEncoding() != null && meta.getEncoding().length() > 0 ) {
-      isr = new InputStreamReader( inStream, meta.getEncoding() );
+      isr = new BufferedInputStreamReader( new InputStreamReader( inStream, meta.getEncoding() ) );
     } else {
-      isr = new InputStreamReader( inStream );
+      isr = new BufferedInputStreamReader( new InputStreamReader( inStream ) );
     }
 
     String encoding = isr.getEncoding();
@@ -120,14 +115,8 @@ public class TextFileInputReader implements IBaseFileInputReader {
 
     // See if we need to skip the document header lines...
     if ( meta.content.layoutPaged ) {
-      for ( int i = 0; i < meta.content.nrLinesDocHeader; i++ ) {
-        // Just skip these...
-        TextFileInputUtils.getLine( log, isr, data.encodingType, data.fileFormatType, data.lineStringBuilder ); // header
-                                                                                                                // and
-        // footer: not
-        // wrapped
-        lineNumberInFile++;
-      }
+      lineNumberInFile = TextFileInputUtils.skipLines( log, isr, data.encodingType, data.fileFormatType, data.lineStringBuilder,
+        meta.content.nrLinesDocHeader, meta.getEnclosure(), meta.getEscapeCharacter(), lineNumberInFile );
     }
 
     for ( int i = 0; i < bufferSize && !data.doneReading; i++ ) {
@@ -216,7 +205,7 @@ public class TextFileInputReader implements IBaseFileInputReader {
           // Read a normal line on a page of data.
           data.pageLinesRead++;
           lineInFile++;
-          long useNumber = meta.content.rowNumberByFile ? lineInFile : step.getLinesWritten() + 1;
+          long useNumber = meta.content.rowNumberByFile ? lineInFile : linesWritten + 1;
           r =
               TextFileInputUtils.convertLineToRow( log, textLine, meta, data.currentPassThruFieldsRow,
                   data.nrPassThruFields, data.outputRowMeta, data.convertRowMeta, data.filename, useNumber,
@@ -305,7 +294,7 @@ public class TextFileInputReader implements IBaseFileInputReader {
           if ( data.filePlayList.isProcessingNeeded( textLine.file, textLine.lineNumber,
               AbstractFileErrorHandler.NO_PARTS ) ) {
             lineInFile++;
-            long useNumber = meta.content.rowNumberByFile ? lineInFile : step.getLinesWritten() + 1;
+            long useNumber = meta.content.rowNumberByFile ? lineInFile : linesWritten + 1;
             r =
                 TextFileInputUtils.convertLineToRow( log, textLine, meta, data.currentPassThruFieldsRow,
                     data.nrPassThruFields, data.outputRowMeta, data.convertRowMeta, data.filename, useNumber,
@@ -354,6 +343,7 @@ public class TextFileInputReader implements IBaseFileInputReader {
         log.logRowlevel( "Putting row: " + data.outputRowMeta.getString( r ) );
       }
       step.putRow( data.outputRowMeta, r );
+      linesWritten++;
 
       if ( step.getLinesInput() >= meta.content.rowLimit && meta.content.rowLimit > 0 ) {
         close();
@@ -418,8 +408,13 @@ public class TextFileInputReader implements IBaseFileInputReader {
   }
 
   protected boolean tryToReadLine( boolean applyFilter ) throws KettleFileException {
-    String line;
-    line = TextFileInputUtils.getLine( log, isr, data.encodingType, data.fileFormatType, data.lineStringBuilder );
+
+    TextFileLine textFileLine = TextFileInputUtils
+      .getLine( log, isr, data.encodingType, data.fileFormatType, data.lineStringBuilder,
+      meta.getEnclosure(), meta.getEscapeCharacter(), lineNumberInFile );
+    String line = textFileLine.line;
+    lineNumberInFile = textFileLine.lineNumber;
+
     if ( line != null ) {
       // when there is no header, check the filter for the first line
       if ( applyFilter ) {

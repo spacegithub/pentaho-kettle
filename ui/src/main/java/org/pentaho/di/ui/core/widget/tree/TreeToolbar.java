@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.core.widget.tree;
 
@@ -47,10 +39,15 @@ public class TreeToolbar extends Composite {
 
   private PropsUI props = PropsUI.getInstance();
   private Text selectionFilter;
+  private ToolItem refreshButton;
   private ToolItem expandAll;
   private ToolItem collapseAll;
 
   public TreeToolbar( Composite composite, int i ) {
+    this( composite, i, false );
+  }
+  
+  public TreeToolbar( Composite composite, int i, boolean includeRefresh ) {
     super( composite, i );
 
     FormLayout formLayout = new FormLayout();
@@ -74,6 +71,10 @@ public class TreeToolbar extends Composite {
     /*
     This contains a map with all the unnamed transformation (just a filename)
    */
+    if ( includeRefresh ) {
+      refreshButton = new ToolItem( treeTb, SWT.PUSH );
+      refreshButton.setImage( GUIResource.getInstance().getImageRefreshEnabled() );
+    }
     expandAll = new ToolItem( treeTb, SWT.PUSH );
     expandAll.setImage( GUIResource.getInstance().getImageExpandAll() );
     collapseAll = new ToolItem( treeTb, SWT.PUSH );
@@ -148,6 +149,10 @@ public class TreeToolbar extends Composite {
 
   public void addSearchModifyListener( ModifyListener modifyListener ) {
     selectionFilter.addModifyListener( modifyListener );
+  }
+
+  public void addRefreshListener( SelectionAdapter selectionAdapter ) {
+    refreshButton.addSelectionListener( selectionAdapter );
   }
 
   public void addExpandAllListener( SelectionAdapter selectionAdapter ) {

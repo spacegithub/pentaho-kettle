@@ -1,19 +1,16 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.pur.metastore;
 
 import org.pentaho.di.core.Const;
@@ -371,14 +368,31 @@ public class PurRepositoryMetaStore extends MemoryMetaStore implements IMetaStor
   @Override
   public List<IMetaStoreElement> getElements( String namespace, IMetaStoreElementType elementType )
     throws MetaStoreException {
+    return getElements( namespace, elementType, true, null );
+  }
+
+  @Override
+  public List<IMetaStoreElement> getElements( String namespace, IMetaStoreElementType elementType, boolean lock,
+                                              List<MetaStoreException> exceptionList ) throws MetaStoreException {
     List<IMetaStoreElement> elements = new ArrayList<IMetaStoreElement>();
 
     RepositoryFile typeFolder = validateElementTypeRepositoryFolder( namespace, elementType );
     List<RepositoryFile> children = getChildren( typeFolder.getId() );
     removeHiddenFilesFromList( children );
     for ( RepositoryFile child : children ) {
-      IMetaStoreElement element = getElement( namespace, elementType, child.getId().toString() );
-      elements.add( element );
+      try {
+        IMetaStoreElement element = getElement( namespace, elementType, child.getId().toString() );
+        elements.add( element );
+      } catch ( Exception e ) {
+        // If we are collecting exceptions instead of fatally exiting, add to the list of exceptions and continue
+        if ( exceptionList != null ) {
+          exceptionList.add( new MetaStoreException( "Could not load metaStore element '" + child.getId().toString()
+            + "'", e ) );
+        } else {
+          // Strict run. abort list
+          throw e;
+        }
+      }
     }
 
     return elements;
@@ -387,7 +401,8 @@ public class PurRepositoryMetaStore extends MemoryMetaStore implements IMetaStor
   @Override
   public IMetaStoreElement getElementByName( String namespace, IMetaStoreElementType elementType, String name )
     throws MetaStoreException {
-    for ( IMetaStoreElement element : getElements( namespace, elementType ) ) {
+    for ( IMetaStoreElement element : getElements( namespace, elementType, true,
+      new ArrayList<MetaStoreException>() ) ) {
       if ( element.getName().equals( name ) ) {
         return element;
       }

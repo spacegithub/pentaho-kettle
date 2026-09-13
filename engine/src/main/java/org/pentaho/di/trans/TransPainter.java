@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans;
 
@@ -138,6 +130,8 @@ public class TransPainter extends BasePainter<TransHopMeta, StepMeta> {
     Point thumb = getThumb( area, max );
     offset = getOffset( thumb, area );
 
+    // Make sure the canvas is scaled 100%
+    gc.setTransform( 0, 0, 0, 1.0f );
     // First clear the image in the background color
     gc.setBackground( EColor.BACKGROUND );
     gc.fillRectangle( 0, 0, area.x, area.y );
@@ -163,7 +157,7 @@ public class TransPainter extends BasePainter<TransHopMeta, StepMeta> {
   }
 
   private void drawTrans( Point thumb ) {
-    if ( !shadow && gridSize > 1 ) {
+    if ( !Const.isRunningOnWebspoonMode() && !shadow && gridSize > 1 ) {
       drawGrid();
     }
 
@@ -772,7 +766,7 @@ public class TransPainter extends BasePainter<TransHopMeta, StepMeta> {
       gc.drawText( clusterMessage, x - textExtent.x + 1, y - textExtent.y + 1 );
     }
 
-    if ( stepMeta.getCopies() != 1 && !partitioned ) {
+    if ( !stepMeta.getCopiesString().equals( "1" ) && !partitioned ) {
       gc.setBackground( EColor.BACKGROUND );
       gc.setForeground( EColor.BLACK );
       String copies = "x" + stepMeta.getCopiesString();

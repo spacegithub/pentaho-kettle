@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.cluster.dialog;
 
@@ -46,6 +38,7 @@ import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
+import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
 import org.pentaho.di.cluster.SlaveServer;
@@ -518,10 +511,25 @@ public class SlaveServerDialog extends Dialog {
     dispose();
   }
 
+  private String trim( String orig ) {
+    if ( orig == null ) {
+      return orig;
+    }
+    return orig.trim();
+  }
+
   public void ok() {
     getInfo();
 
-    if ( !slaveServer.getName().equals( originalServer.getName() ) ) {
+    if ( slaveServer.getName().isEmpty() ) {
+      showMessage( BaseMessages.getString( PKG, "SlaveServerDialog.SlaveServerNoName" ) );
+      return;
+    }
+    String newName = trim( slaveServer.getName() );
+    slaveServer.setName( newName );
+    String origName = trim( originalServer.getName() );
+    if ( !newName.equals( origName ) ) {
+      DialogUtils.removeMatchingObject( origName, existingServers );
       if ( DialogUtils.objectWithTheSameNameExists( slaveServer, existingServers ) ) {
         String title = BaseMessages.getString( PKG, "SlaveServerDialog.SlaveServerNameExists.Title" );
         String message =
@@ -535,7 +543,7 @@ public class SlaveServerDialog extends Dialog {
       }
     }
 
-    originalServer.setName( slaveServer.getName() );
+    originalServer.setName( newName );
     originalServer.setHostname( slaveServer.getHostname() );
     originalServer.setPort( slaveServer.getPort() );
     originalServer.setWebAppName( slaveServer.getWebAppName() );
@@ -559,7 +567,7 @@ public class SlaveServerDialog extends Dialog {
 
   // Get dialog info in securityService
   private void getInfo() {
-    slaveServer.setName( wName.getText() );
+    slaveServer.setName( wName.getText().trim() );
     slaveServer.setHostname( wHostname.getText() );
     slaveServer.setPort( wPort.getText() );
     slaveServer.setWebAppName( wWebAppName.getText() );
@@ -602,5 +610,11 @@ public class SlaveServerDialog extends Dialog {
         + slaveServer.getHostname()
         + BaseMessages.getString( PKG, "SlaveServer.ExceptionUnableGetReplay.Error2" ), e );
     }
+  }
+
+  private void showMessage( String message ) {
+    MessageBox mb = new MessageBox( shell, SWT.OK | SWT.ICON_ERROR );
+    mb.setMessage( message );
+    mb.open();
   }
 }

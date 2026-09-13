@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.ssh;
 
@@ -40,7 +32,6 @@ import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
-import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
@@ -59,17 +50,21 @@ import org.pentaho.di.trans.step.BaseStepMeta;
 import org.pentaho.di.trans.step.StepDialogInterface;
 import org.pentaho.di.trans.steps.ssh.SSHData;
 import org.pentaho.di.trans.steps.ssh.SSHMeta;
+import org.pentaho.di.trans.steps.ssh.SshConnectionParameters;
+import org.pentaho.di.core.ssh.SshConnection;
 import org.pentaho.di.ui.core.PropsUI;
 import org.pentaho.di.ui.core.dialog.EnterNumberDialog;
 import org.pentaho.di.ui.core.dialog.EnterTextDialog;
 import org.pentaho.di.ui.core.dialog.ErrorDialog;
 import org.pentaho.di.ui.core.dialog.PreviewRowsDialog;
+import org.pentaho.di.ui.core.events.dialog.FilterType;
+import org.pentaho.di.ui.core.events.dialog.SelectionAdapterFileDialogText;
+import org.pentaho.di.ui.core.events.dialog.SelectionAdapterOptions;
+import org.pentaho.di.ui.core.events.dialog.SelectionOperation;
 import org.pentaho.di.ui.core.widget.LabelTextVar;
 import org.pentaho.di.ui.core.widget.StyledTextComp;
 import org.pentaho.di.ui.trans.dialog.TransPreviewProgressDialog;
 import org.pentaho.di.ui.trans.step.BaseStepDialog;
-
-import com.trilead.ssh2.Connection;
 
 public class SSHDialog extends BaseStepDialog implements StepDialogInterface {
   private static Class<?> PKG = SSHMeta.class; // for i18n purposes, needed by Translator2!!
@@ -336,23 +331,6 @@ public class SSHDialog extends BaseStepDialog implements StepDialogInterface {
     fdbFilename.right = new FormAttachment( 100, -margin );
     fdbFilename.top = new FormAttachment( wUseKey, margin );
     wbFilename.setLayoutData( fdbFilename );
-    wbFilename.addSelectionListener( new SelectionAdapter() {
-      @Override
-      public void widgetSelected( SelectionEvent e ) {
-        FileDialog dialog = new FileDialog( shell, SWT.SAVE );
-        dialog.setFilterExtensions( new String[] { "*.pem", "*" } );
-        if ( wPrivateKey.getText() != null ) {
-          dialog.setFileName( transMeta.environmentSubstitute( wPrivateKey.getText() ) );
-        }
-        dialog.setFilterNames( new String[] {
-          BaseMessages.getString( PKG, "System.FileType.PEMFiles" ),
-          BaseMessages.getString( PKG, "System.FileType.AllFiles" ) } );
-        if ( dialog.open() != null ) {
-          wPrivateKey.setText( dialog.getFilterPath()
-            + System.getProperty( "file.separator" ) + dialog.getFileName() );
-        }
-      }
-    } );
 
     // Private key
     wPrivateKey =
@@ -366,6 +344,10 @@ public class SSHDialog extends BaseStepDialog implements StepDialogInterface {
     fdPrivateKey.top = new FormAttachment( wUseKey, margin );
     fdPrivateKey.right = new FormAttachment( wbFilename, -margin );
     wPrivateKey.setLayoutData( fdPrivateKey );
+
+    wbFilename.addSelectionListener( new SelectionAdapterFileDialogText( log, wPrivateKey.getTextWidget(), transMeta,
+      new SelectionAdapterOptions( transMeta.getBowl(), SelectionOperation.FILE,
+        new FilterType[] { FilterType.PEM, FilterType.ALL }, FilterType.PEM ) ) );
 
     // Passphraseline
     wPassphrase =
@@ -870,24 +852,32 @@ public class SSHDialog extends BaseStepDialog implements StepDialogInterface {
     String proxyusername = transMeta.environmentSubstitute( wProxyUsername.getText() );
     String proxypassword = Utils.resolvePassword( transMeta,  wProxyPassword.getText() );
 
-    Connection conn = null;
-    try {
-      conn =
-        SSHData.OpenConnection(
-          servername, nrPort, username, password, wUseKey.getSelection(), keyFilename, passphrase, timeOut,
-          transMeta, proxyhost, proxyport, proxyusername, proxypassword );
+    try ( SshConnection conn = SSHData.openSshConnection(
+          SshConnectionParameters.builder()
+              .bowl( transMeta.getBowl() )
+              .server( servername )
+              .port( nrPort )
+              .username( username )
+              .password( password )
+              .useKey( wUseKey.getSelection() )
+              .keyFilename( keyFilename )
+              .passPhrase( passphrase )
+              .timeOut( timeOut )
+              .space( transMeta )
+              .proxyhost( proxyhost )
+              .proxyport( proxyport )
+              .proxyusername( proxyusername )
+              .proxypassword( proxypassword )
+              .build() ) ) {
+
+      // Actually test the connection by connecting
+      conn.connect();
       testOK = true;
 
     } catch ( Exception e ) {
       errMsg = e.getMessage();
-    } finally {
-      if ( conn != null ) {
-        try {
-          conn.close();
-        } catch ( Exception e ) { /* Ignore */
-        }
-      }
     }
+
     if ( testOK ) {
       MessageBox mb = new MessageBox( shell, SWT.OK | SWT.ICON_INFORMATION );
       mb.setMessage( BaseMessages.getString( PKG, "SSHDialog.Connected.OK", servername, username ) + Const.CR );

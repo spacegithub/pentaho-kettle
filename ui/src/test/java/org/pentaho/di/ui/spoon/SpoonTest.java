@@ -1,30 +1,37 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.spoon;
 
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Mockito.*;
-import static junit.framework.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,8 +52,6 @@ import org.pentaho.di.core.KettleEnvironment;
 import org.pentaho.di.core.LastUsedFile;
 import org.pentaho.di.core.NotePadMeta;
 import org.pentaho.di.core.exception.KettleException;
-import org.pentaho.di.core.extension.ExtensionPointHandler;
-import org.pentaho.di.core.extension.KettleExtensionPoint;
 import org.pentaho.di.core.gui.Point;
 import org.pentaho.di.core.logging.LogChannelInterface;
 import org.pentaho.di.i18n.BaseMessages;
@@ -54,12 +59,12 @@ import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.junit.rules.RestorePDIEngineEnvironment;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.ObjectRevision;
+import org.pentaho.di.repository.Repository;
 import org.pentaho.di.repository.RepositoryDirectory;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
 import org.pentaho.di.repository.RepositoryObject;
 import org.pentaho.di.repository.RepositoryObjectType;
 import org.pentaho.di.repository.RepositorySecurityProvider;
-import org.pentaho.di.repository.Repository;
 import org.pentaho.di.trans.TransHopMeta;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.StepErrorMeta;
@@ -71,10 +76,8 @@ import org.pentaho.di.ui.core.FileDialogOperation;
 import org.pentaho.di.ui.core.PropsUI;
 import org.pentaho.di.ui.spoon.delegates.SpoonDelegates;
 import org.pentaho.di.ui.spoon.delegates.SpoonTabsDelegate;
-import org.pentaho.metastore.stores.delegate.DelegatingMetaStore;
 import org.pentaho.xul.swt.tab.TabItem;
 import org.pentaho.xul.swt.tab.TabSet;
-import org.powermock.api.mockito.PowerMockito;
 
 /**
  * Spoon tests
@@ -97,11 +100,13 @@ public class SpoonTest {
 
   @Before
   public void setUp() throws KettleException {
-    doCallRealMethod().when( spoon ).copySelected( any( TransMeta.class ), anyListOf( StepMeta.class ),
-        anyListOf( NotePadMeta.class ) );
+    doCallRealMethod().when( spoon ).copySelected( any( TransMeta.class ), anyList(),
+      anyList() );
     doCallRealMethod().when( spoon ).pasteXML( any( TransMeta.class ), anyString(), any( Point.class ) );
     doCallRealMethod().when( spoon ).delHop( any( TransMeta.class ), any( TransHopMeta.class ) );
     when( spoon.getLog() ).thenReturn( log );
+
+    spoon.metaStoreSupplier = () -> null;
 
     KettleEnvironment.init();
   }
@@ -152,7 +157,7 @@ public class SpoonTest {
   }
 
   /**
-   * test copy one step with error handling 
+   * test copy one step with error handling
    * @see http://jira.pentaho.com/browse/PDI-13358
    * 
    * @throws KettleException
@@ -432,16 +437,15 @@ public class SpoonTest {
   @Test
   public void testJobToRepSaveToFile() throws Exception {
     JobMeta mockJobMeta = mock( JobMeta.class );
-
     prepareSetSaveTests( spoon, log, mockSpoonPerspective, mockJobMeta, false, false, MainSpoonPerspective.ID, true,
-        true, null, null, true, true );
+        true, LastUsedFile.FILE_TYPE_JOB, null, false, true );
 
     doCallRealMethod().when( spoon ).saveToFile( mockJobMeta );
+    doCallRealMethod().when( spoon ).saveToFile( mockJobMeta, false );
+    doCallRealMethod().when( spoon ).saveToRepository( any( AbstractMeta.class ) );
     assertTrue( spoon.saveToFile( mockJobMeta ) );
     verify( mockJobMeta ).setRepository( spoon.rep );
-    verify( mockJobMeta ).setMetaStore( spoon.metaStore );
-
-    verify( mockJobMeta ).setFilename( null );
+    verify( mockJobMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( spoon.delegates.tabs ).renameTabs();
     verify( spoon ).enableMenus();
@@ -455,9 +459,10 @@ public class SpoonTest {
         true, null, "filename", true, true );
 
     doCallRealMethod().when( spoon ).saveToFile( mockJobMeta );
+    doCallRealMethod().when( spoon ).saveToFile( mockJobMeta, false );
     assertTrue( spoon.saveToFile( mockJobMeta ) );
     verify( mockJobMeta ).setRepository( spoon.rep );
-    verify( mockJobMeta ).setMetaStore( spoon.metaStore );
+    verify( mockJobMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( spoon.delegates.tabs ).renameTabs();
     verify( spoon ).enableMenus();
@@ -469,12 +474,13 @@ public class SpoonTest {
 
     prepareSetSaveTests( spoon, log, mockSpoonPerspective, mockJobMeta, true, false, "NotMainSpoonPerspective", true,
         true, null, null, true, true );
-
     doCallRealMethod().when( spoon ).saveToFile( mockJobMeta );
+    doCallRealMethod().when( spoon ).saveToFile( mockJobMeta, false );
     doReturn( true ).when( spoon ).saveFileAs( mockJobMeta );
+    doReturn( true ).when( spoon ).saveAsNew( mockJobMeta, false, FileDialogOperation.SAVE_AS );
     assertTrue( spoon.saveToFile( mockJobMeta ) );
     verify( mockJobMeta ).setRepository( spoon.rep );
-    verify( mockJobMeta ).setMetaStore( spoon.metaStore );
+    verify( mockJobMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( spoon.delegates.tabs ).renameTabs();
     verify( spoon ).enableMenus();
@@ -488,10 +494,11 @@ public class SpoonTest {
         true, null, null, true, false );
 
     doCallRealMethod().when( spoon ).saveToFile( mockJobMeta );
+    doCallRealMethod().when( spoon ).saveToFile( mockJobMeta, false );
     doReturn( true ).when( spoon ).saveFileAs( mockJobMeta );
     assertFalse( spoon.saveToFile( mockJobMeta ) );
     verify( mockJobMeta ).setRepository( spoon.rep );
-    verify( mockJobMeta ).setMetaStore( spoon.metaStore );
+    verify( mockJobMeta ).setMetaStore( spoon.getMetaStore() );
 
     // repo is null, meta filename is null and meta.canSave() returns false, therefore none of the save methods are
     // called on the meta and the meta isn't actually saved - tabs should not be renamed
@@ -500,6 +507,7 @@ public class SpoonTest {
 
     // now mock mockJobMeta.canSave() to return true, such that saveFileAs is called (also mocked to return true)
     doReturn( true ).when( mockJobMeta ).canSave();
+    doReturn( true ).when( spoon ).saveAsNew( mockJobMeta, false, FileDialogOperation.SAVE_AS );
     spoon.saveToFile( mockJobMeta );
     // and verify that renameTabs is called
     verify( spoon.delegates.tabs ).renameTabs();
@@ -510,14 +518,14 @@ public class SpoonTest {
     TransMeta mockTransMeta = mock( TransMeta.class );
 
     prepareSetSaveTests( spoon, log, mockSpoonPerspective, mockTransMeta, false, false, MainSpoonPerspective.ID, true,
-        true, null, null, true, true );
+        true, LastUsedFile.FILE_TYPE_TRANSFORMATION, null, false, true );
 
     doCallRealMethod().when( spoon ).saveToFile( mockTransMeta );
+    doCallRealMethod().when( spoon ).saveToFile( mockTransMeta, false );
+    doCallRealMethod().when( spoon ).saveToRepository( any( AbstractMeta.class ) );
     assertTrue( spoon.saveToFile( mockTransMeta ) );
     verify( mockTransMeta ).setRepository( spoon.rep );
-    verify( mockTransMeta ).setMetaStore( spoon.metaStore );
-
-    verify( mockTransMeta ).setFilename( null );
+    verify( mockTransMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( spoon.delegates.tabs ).renameTabs();
     verify( spoon ).enableMenus();
@@ -534,7 +542,7 @@ public class SpoonTest {
     doCallRealMethod().when( spoon ).saveFileAs( mockJobMeta );
     assertTrue( spoon.saveFileAs( mockJobMeta ) );
     verify( mockJobMeta ).setRepository( spoon.rep );
-    verify( mockJobMeta ).setMetaStore( spoon.metaStore );
+    verify( mockJobMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( mockJobMeta ).setObjectId( null );
     verify( mockJobMeta ).setFilename( null );
@@ -554,7 +562,7 @@ public class SpoonTest {
     doCallRealMethod().when( spoon ).saveFileAs( mockJobMeta );
     assertFalse( spoon.saveFileAs( mockJobMeta ) );
     verify( mockJobMeta ).setRepository( spoon.rep );
-    verify( mockJobMeta ).setMetaStore( spoon.metaStore );
+    verify( mockJobMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( mockJobMeta ).setObjectId( null );
     verify( mockJobMeta ).setFilename( null );
@@ -573,7 +581,7 @@ public class SpoonTest {
     doCallRealMethod().when( spoon ).saveFileAs( mockJobMeta );
     assertTrue( spoon.saveFileAs( mockJobMeta ) );
     verify( mockJobMeta ).setRepository( spoon.rep );
-    verify( mockJobMeta ).setMetaStore( spoon.metaStore );
+    verify( mockJobMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( spoon.delegates.tabs ).findTabMapEntry( mockJobMeta );
     verify( spoon ).enableMenus();
@@ -590,7 +598,7 @@ public class SpoonTest {
     doCallRealMethod().when( spoon ).saveFileAs( mockJobMeta );
     assertFalse( spoon.saveFileAs( mockJobMeta ) );
     verify( mockJobMeta ).setRepository( spoon.rep );
-    verify( mockJobMeta ).setMetaStore( spoon.metaStore );
+    verify( mockJobMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( spoon ).enableMenus();
   }
@@ -606,7 +614,7 @@ public class SpoonTest {
     doCallRealMethod().when( spoon ).saveFileAs( mockTransMeta );
     assertTrue( spoon.saveFileAs( mockTransMeta ) );
     verify( mockTransMeta ).setRepository( spoon.rep );
-    verify( mockTransMeta ).setMetaStore( spoon.metaStore );
+    verify( mockTransMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( mockTransMeta ).setObjectId( null );
     verify( mockTransMeta ).setFilename( null );
@@ -626,7 +634,7 @@ public class SpoonTest {
     doCallRealMethod().when( spoon ).saveFileAs( mockTransMeta );
     assertFalse( spoon.saveFileAs( mockTransMeta ) );
     verify( mockTransMeta ).setRepository( spoon.rep );
-    verify( mockTransMeta ).setMetaStore( spoon.metaStore );
+    verify( mockTransMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( mockTransMeta ).setObjectId( null );
     verify( mockTransMeta ).setFilename( null );
@@ -645,7 +653,7 @@ public class SpoonTest {
     doCallRealMethod().when( spoon ).saveFileAs( mockTransMeta );
     assertTrue( spoon.saveFileAs( mockTransMeta ) );
     verify( mockTransMeta ).setRepository( spoon.rep );
-    verify( mockTransMeta ).setMetaStore( spoon.metaStore );
+    verify( mockTransMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( spoon.delegates.tabs ).findTabMapEntry( mockTransMeta );
     verify( spoon ).enableMenus();
@@ -662,7 +670,7 @@ public class SpoonTest {
     doCallRealMethod().when( spoon ).saveFileAs( mockTransMeta );
     assertFalse( spoon.saveFileAs( mockTransMeta ) );
     verify( mockTransMeta ).setRepository( spoon.rep );
-    verify( mockTransMeta ).setMetaStore( spoon.metaStore );
+    verify( mockTransMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( spoon ).enableMenus();
   }
@@ -675,9 +683,10 @@ public class SpoonTest {
         true, null, null, false, true );
 
     doCallRealMethod().when( spoon ).saveToFile( mockTransMeta );
+    doCallRealMethod().when( spoon ).saveToFile( mockTransMeta, false );
     assertTrue( spoon.saveToFile( mockTransMeta ) );
     verify( mockTransMeta ).setRepository( spoon.rep );
-    verify( mockTransMeta ).setMetaStore( spoon.metaStore );
+    verify( mockTransMeta ).setMetaStore( spoon.getMetaStore() );
 
     verify( mockTransMeta, never() ).setFilename( null );
 
@@ -686,16 +695,39 @@ public class SpoonTest {
   }
 
   @Test
-  public void saveToRepository() throws Exception {
-    JobMeta mockJobMeta = mock( JobMeta.class );
+  public void saveToRepositoryJobSuccessfulSaveChecksDuplicate() throws Exception {
+    assertSaveToRepositoryChecksDuplicate( mock( JobMeta.class ), LastUsedFile.FILE_TYPE_JOB, RepositoryObjectType.JOB,
+      true );
+  }
 
-    prepareSetSaveTests( spoon, log, mockSpoonPerspective, mockJobMeta, false, false, "NotMainSpoonPerspective", true,
-      true, "filename", null, true, false );
+  @Test
+  public void saveToRepositoryJobFailedSaveChecksDuplicate() throws Exception {
+    assertSaveToRepositoryChecksDuplicate( mock( JobMeta.class ), LastUsedFile.FILE_TYPE_JOB, RepositoryObjectType.JOB,
+      false );
+  }
+
+  @Test
+  public void saveToRepositoryTransformationChecksDuplicateType() throws Exception {
+    assertSaveToRepositoryChecksDuplicate( mock( TransMeta.class ), LastUsedFile.FILE_TYPE_TRANSFORMATION,
+      RepositoryObjectType.TRANSFORMATION, true );
+  }
+
+  @Test
+  public void saveToRepositoryTransformationFailedSaveChecksDuplicate() throws Exception {
+    assertSaveToRepositoryChecksDuplicate( mock( TransMeta.class ), LastUsedFile.FILE_TYPE_TRANSFORMATION,
+      RepositoryObjectType.TRANSFORMATION, false );
+  }
+
+  private void assertSaveToRepositoryChecksDuplicate( AbstractMeta metaData, String fileType,
+                                                      RepositoryObjectType objectType, boolean saveConfirmed )
+    throws Exception {
+    prepareSetSaveTests( spoon, log, mockSpoonPerspective, metaData, false, false, "NotMainSpoonPerspective", true,
+      true, fileType, null, true, false );
 
     RepositoryDirectoryInterface dirMock = mock( RepositoryDirectoryInterface.class );
     doReturn( "my/path" ).when( dirMock ).getPath();
-    doReturn( dirMock ).when( mockJobMeta ).getRepositoryDirectory();
-    doReturn( "trans" ).when( mockJobMeta ).getName();
+    doReturn( dirMock ).when( metaData ).getRepositoryDirectory();
+    doReturn( "trans" ).when( metaData ).getName();
 
     RepositoryDirectoryInterface newDirMock = mock( RepositoryDirectoryInterface.class );
     doReturn( "my/new/path" ).when( newDirMock ).getPath();
@@ -704,31 +736,104 @@ public class SpoonTest {
 
     FileDialogOperation fileDlgOp = mock( FileDialogOperation.class );
     doReturn( repositoryObject ).when( fileDlgOp ).getRepositoryObject();
-    doReturn( fileDlgOp ).when( spoon ).getFileDialogOperation( FileDialogOperation.SAVE,
-      FileDialogOperation.ORIGIN_SPOON );
+    doReturn( fileDlgOp ).when( spoon ).getFileDialogOperation( any(), eq( FileDialogOperation.SAVE ),
+      eq( FileDialogOperation.ORIGIN_SPOON ) );
     doReturn( "newTrans" ).when( repositoryObject ).getName();
+
+    doCallRealMethod().when( spoon ).saveToRepository( metaData, true );
+
+    doReturn( saveConfirmed ).when( spoon ).saveToRepositoryConfirmed( metaData );
+    spoon.saveToRepository( metaData, true );
+
+    verify( spoon.rep, times( 1 ) ).exists( "newTrans", newDirMock, objectType );
+    verify( spoon, Mockito.description( "Expected repository save confirmation to be invoked once" ) )
+      .saveToRepositoryConfirmed( metaData );
+    verify( metaData, times( 1 ) ).setRepositoryDirectory( newDirMock );
+    verify( metaData, times( 1 ) ).setName( "newTrans" );
+    if ( saveConfirmed ) {
+      verify( spoon.delegates.tabs, times( 1 ) ).renameTabs();
+      verify( metaData, never() ).setRepositoryDirectory( dirMock );
+      verify( metaData, never() ).setName( "trans" );
+    } else {
+      verify( spoon.delegates.tabs, never() ).renameTabs();
+      verify( metaData, times( 1 ) ).setRepositoryDirectory( dirMock );
+      verify( metaData, times( 1 ) ).setName( "trans" );
+    }
+  }
+
+  @Test
+  public void saveToRepositoryDoesNotSaveWhenOverwriteDeclined() throws Exception {
+    JobMeta mockJobMeta = mock( JobMeta.class );
+    prepareSetSaveTests( spoon, log, mockSpoonPerspective, mockJobMeta, false, false, "NotMainSpoonPerspective", true,
+      true, LastUsedFile.FILE_TYPE_JOB, null, true, false );
+
+    RepositoryDirectoryInterface originalDir = mock( RepositoryDirectoryInterface.class );
+    doReturn( originalDir ).when( mockJobMeta ).getRepositoryDirectory();
+    doReturn( "original" ).when( mockJobMeta ).getName();
+
+    RepositoryDirectoryInterface targetDir = mock( RepositoryDirectoryInterface.class );
+    RepositoryObject repositoryObject = mock( RepositoryObject.class );
+    doReturn( targetDir ).when( repositoryObject ).getRepositoryDirectory();
+    doReturn( "existing" ).when( repositoryObject ).getName();
+
+    FileDialogOperation fileDlgOp = mock( FileDialogOperation.class );
+    doReturn( repositoryObject ).when( fileDlgOp ).getRepositoryObject();
+    doReturn( fileDlgOp ).when( spoon ).getFileDialogOperation( any(), eq( FileDialogOperation.SAVE ),
+      eq( FileDialogOperation.ORIGIN_SPOON ) );
+    doReturn( true ).when( spoon.rep ).exists( "existing", targetDir, RepositoryObjectType.JOB );
+    doReturn( false ).when( spoon ).confirmRepositoryOverwrite( mockJobMeta, repositoryObject );
     doCallRealMethod().when( spoon ).saveToRepository( mockJobMeta, true );
 
-    // mock a successful save
-    doReturn( true ).when( spoon ).saveToRepositoryConfirmed( mockJobMeta );
-    spoon.saveToRepository( mockJobMeta, true );
-    // verify that the meta name and directory have been updated and renameTabs is called
-    verify( spoon.delegates.tabs, times( 1 ) ).renameTabs();
-    verify( mockJobMeta, times( 1 ) ).setRepositoryDirectory( newDirMock );
-    verify( mockJobMeta, never() ).setRepositoryDirectory( dirMock ); // verify that the dir is never set back
-    verify( mockJobMeta, times( 1 ) ).setName( "newTrans" );
-    verify( mockJobMeta, never()  ).setName( "trans" ); // verify that the name is never set back
+    assertFalse( spoon.saveToRepository( mockJobMeta, true ) );
 
-    // mock a failed save
-    doReturn( false ).when( spoon ).saveToRepositoryConfirmed( mockJobMeta );
-    spoon.saveToRepository( mockJobMeta, true );
-    // verify that the meta name and directory have not changed and renameTabs is not called (only once form the
-    // previous test)
-    verify( spoon.delegates.tabs, times( 1 ) ).renameTabs();
-    verify( mockJobMeta, times( 2 ) ).setRepositoryDirectory( newDirMock );
-    verify( mockJobMeta, times( 1 ) ).setRepositoryDirectory( dirMock ); // verify that the dir is set back
-    verify( mockJobMeta, times( 2 ) ).setName( "newTrans" );
-    verify( mockJobMeta, times( 1 ) ).setName( "trans" ); // verify that the name is set back
+    verify( spoon, Mockito.description( "Expected overwrite confirmation to be presented for an existing repository object" ) )
+      .confirmRepositoryOverwrite( mockJobMeta, repositoryObject );
+    verify( spoon, never() ).saveToRepositoryConfirmed( mockJobMeta );
+    verify( mockJobMeta, never() ).setRepositoryDirectory( targetDir );
+    verify( mockJobMeta, never() ).setName( "existing" );
+    verify( spoon.delegates.tabs, never() ).renameTabs();
+  }
+
+  @Test
+  public void saveToRepositoryReturnsFalseWhenNameDialogIsCancelled() throws Exception {
+    JobMeta mockJobMeta = mock( JobMeta.class );
+    prepareSetSaveTests( spoon, log, mockSpoonPerspective, mockJobMeta, false, false, "NotMainSpoonPerspective", true,
+      true, LastUsedFile.FILE_TYPE_JOB, null, true, false );
+
+    RepositoryDirectoryInterface currentDir = mock( RepositoryDirectoryInterface.class );
+    doReturn( currentDir ).when( mockJobMeta ).getRepositoryDirectory();
+    doReturn( "current/path" ).when( currentDir ).getPath();
+
+    FileDialogOperation fileDlgOp = mock( FileDialogOperation.class );
+    doReturn( fileDlgOp ).when( spoon ).getFileDialogOperation( any(), eq( FileDialogOperation.SAVE ),
+      eq( FileDialogOperation.ORIGIN_SPOON ) );
+    doReturn( null ).when( fileDlgOp ).getRepositoryObject();
+    doCallRealMethod().when( spoon ).saveToRepository( mockJobMeta, true );
+
+    assertFalse( spoon.saveToRepository( mockJobMeta, true ) );
+
+    verify( spoon, never() ).saveToRepositoryConfirmed( mockJobMeta );
+    verify( spoon.rep, never() ).exists( anyString(), any( RepositoryDirectoryInterface.class ),
+      any( RepositoryObjectType.class ) );
+  }
+
+  @Test
+  public void saveToRepositoryWithoutNamePromptUsesDefaultDirectory() throws Exception {
+    JobMeta mockJobMeta = mock( JobMeta.class );
+    prepareSetSaveTests( spoon, log, mockSpoonPerspective, mockJobMeta, false, false, "NotMainSpoonPerspective", true,
+      true, LastUsedFile.FILE_TYPE_JOB, null, true, false );
+
+    RepositoryDirectoryInterface defaultDir = mock( RepositoryDirectoryInterface.class );
+    doReturn( null ).when( mockJobMeta ).getRepositoryDirectory();
+    doReturn( defaultDir ).when( spoon.rep ).getDefaultSaveDirectory( mockJobMeta );
+    doReturn( true ).when( spoon ).saveToRepositoryConfirmed( mockJobMeta );
+    doCallRealMethod().when( spoon ).saveToRepository( mockJobMeta, false );
+
+    assertTrue( spoon.saveToRepository( mockJobMeta, false ) );
+
+    verify( mockJobMeta ).setRepositoryDirectory( defaultDir );
+    verify( spoon ).saveToRepositoryConfirmed( mockJobMeta );
+    verify( spoon, never() ).getFileDialogOperation( any(), anyString(), anyString() );
   }
 
   private static void prepareSetSaveTests( Spoon spoon, LogChannelInterface log, SpoonPerspective spoonPerspective,
@@ -740,22 +845,22 @@ public class SpoonTest {
     TabItem mockTabItem = mock( TabItem.class );
 
     Repository mockRepository = mock( Repository.class );
-    DelegatingMetaStore mockMetaStore = mock( DelegatingMetaStore.class );
 
     spoon.rep = repIsNull ? null : mockRepository;
-    spoon.metaStore = mockMetaStore;
+    spoon.metaStoreSupplier = () -> null;
     spoon.delegates = mock( SpoonDelegates.class );
     spoon.delegates.tabs = mock( SpoonTabsDelegate.class );
     spoon.props = mock( PropsUI.class );
 
     doReturn( mock( LogChannelInterface.class ) ).when( spoon ).getLog();
     doReturn( perspectiveID ).when( spoonPerspective ).getId();
+    doReturn( metaData ).when( spoonPerspective ).getActiveMeta();
 
     doReturn( basicLevel ).when( log ).isBasic();
     doReturn( basicLevel ).when( log ).isDetailed();
     doReturn( mockTabMapEntry ).when( spoon.delegates.tabs ).findTabMapEntry( any() );
     doReturn( mockTabItem ).when( mockTabMapEntry ).getTabItem();
-    doReturn( saveToRepository ).when( spoon ).saveToRepository( metaData, true );
+    doReturn( saveToRepository ).when( spoon ).saveToRepository( eq( metaData ), anyBoolean() );
     doReturn( saveXMLFile ).when( spoon ).saveXMLFile( metaData, false );
     if ( objectIdIsNull ) {
       doReturn( null ).when( metaData ).getObjectId();
@@ -775,6 +880,7 @@ public class SpoonTest {
     doReturn( saveXMLFile ).when( spoon ).save( metaData, filename, false );
 
     doReturn( fileType ).when( metaData ).getFileType();
+	doReturn( mockRepository ).when( spoon ).getRepository();
   }
 
   @Test
@@ -783,7 +889,7 @@ public class SpoonTest {
     String fileName = "fileName";
 
     setLoadLastUsedJobLocalWithRepository( false, repositoryName, null, fileName, true );
-    verify( spoon ).openFile( fileName, true );
+    verify( spoon ).openFile( fileName, null, true );
   }
 
   @Test
@@ -792,7 +898,7 @@ public class SpoonTest {
     String fileName = "fileName";
 
     setLoadLastUsedJobLocalWithRepository( false, repositoryName, null, fileName, true );
-    verify( spoon ).openFile( fileName, false );
+    verify( spoon ).openFile( fileName, null, false );
   }
 
   @Test
@@ -810,7 +916,7 @@ public class SpoonTest {
     String fileName = "fileName";
 
     setLoadLastUsedJobLocalWithRepository( false, repositoryName, null, fileName, false );
-    verify( spoon ).openFile( fileName, false );
+    verify( spoon ).openFile( fileName, null, false );
   }
 
   @Test
@@ -829,7 +935,7 @@ public class SpoonTest {
     String fileName = "fileName";
 
     setLoadLastUsedJobLocalWithRepository( false, repositoryName, null, fileName, true, true );
-    verify( spoon ).openFile( fileName, true );
+    verify( spoon ).openFile( fileName, null, true );
   }
 
   @Test
@@ -838,7 +944,7 @@ public class SpoonTest {
     String fileName = "fileName";
 
     setLoadLastUsedJobLocalWithRepository( false, repositoryName, null, fileName, true, true );
-    verify( spoon ).openFile( fileName, false );
+    verify( spoon ).openFile( fileName, null, false );
   }
 
   @Test
@@ -856,7 +962,7 @@ public class SpoonTest {
     String fileName = "fileName";
 
     setLoadLastUsedJobLocalWithRepository( false, repositoryName, null, fileName, false, true );
-    verify( spoon ).openFile( fileName, false );
+    verify( spoon ).openFile( fileName, null, false );
   }
 
   @Test

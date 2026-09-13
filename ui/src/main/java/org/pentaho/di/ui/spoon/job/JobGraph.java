@@ -1,25 +1,17 @@
 // CHECKSTYLE:FileLength:OFF
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.spoon.job;
 
@@ -133,7 +125,6 @@ import org.pentaho.di.repository.Repository;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
 import org.pentaho.di.repository.RepositoryObjectType;
 import org.pentaho.di.repository.RepositoryOperation;
-import org.pentaho.di.shared.SharedObjects;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.TransPainter;
@@ -1477,6 +1468,7 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
    * Allows for magnifying to any percentage entered by the user...
    */
   private void readMagnification() {
+    float previousMagnification = magnification;
     String possibleText = zoomLabel.getText();
     possibleText = possibleText.replace( "%", "" );
 
@@ -1484,13 +1476,17 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
     try {
       possibleFloatMagnification = Float.parseFloat( possibleText ) / 100;
       magnification = possibleFloatMagnification;
+      if ( magnification < MIN_ZOOM || magnification > MAX_ZOOM ) {
+        magnification = previousMagnification;
+        log.logError( "Invalid zoom value: " + zoomLabel.getText() );
+        throw new IllegalArgumentException( );
+      }
       if ( zoomLabel.getText().indexOf( '%' ) < 0 ) {
         zoomLabel.setText( zoomLabel.getText().concat( "%" ) );
       }
     } catch ( Exception e ) {
       MessageBox mb = new MessageBox( shell, SWT.YES | SWT.ICON_ERROR );
-      mb.setMessage( BaseMessages.getString( PKG, "TransGraph.Dialog.InvalidZoomMeasurement.Message", zoomLabel
-        .getText() ) );
+      mb.setMessage( BaseMessages.getString( PKG, "TransGraph.Dialog.InvalidZoomMeasurement.Message", String.valueOf( (int) ( MIN_ZOOM * 100 ) ), String.valueOf( (int) MAX_ZOOM * 100 ) ) );
       mb.setText( BaseMessages.getString( PKG, "TransGraph.Dialog.InvalidZoomMeasurement.Title" ) );
       mb.open();
     }
@@ -1571,7 +1567,7 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
 
   public boolean setFocus() {
     xulDomContainer.addEventHandler( this );
-    return canvas.setFocus();
+    return super.setFocus();
   }
 
   /**
@@ -1896,7 +1892,7 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
           for ( int i = 0; i < referencedObjects.length; i++ ) {
             final int index = i;
             String referencedObject = referencedObjects[i];
-            Action action = new Action( referencedObject, Action.AS_DROP_DOWN_MENU ) {
+            Action action = new Action( referencedObject, Action.AS_PUSH_BUTTON ) {
               public void run() {
                 loadReferencedObject( jobEntry, index );
               }
@@ -2521,7 +2517,8 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
   protected void loadReferencedObject( JobEntryCopy jobEntryCopy, int index ) {
     try {
       Object referencedMeta =
-        jobEntryCopy.getEntry().loadReferencedObject( index, spoon.rep, spoon.metaStore, jobMeta );
+          jobEntryCopy.getEntry().loadReferencedObject( jobMeta.getBowl(), index, spoon.rep, spoon.getMetaStore(),
+            jobMeta );
       if ( referencedMeta == null ) {
         // Compatible re-try for older plugins.
         referencedMeta =
@@ -2588,7 +2585,7 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
   @SuppressWarnings( "deprecation" )
   private Object compatibleJobEntryLoadReferencedObject( JobEntryInterface entry, int index, Repository rep,
     JobMeta jobMeta2 ) throws KettleException {
-    return entry.loadReferencedObject( index, spoon.rep, jobMeta );
+    return entry.loadReferencedObject( jobMeta.getBowl(), index, spoon.rep, jobMeta );
   }
 
   protected void openTransformation( JobEntryTrans entry, JobEntryCopy jobEntryCopy ) {
@@ -2608,8 +2605,8 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
 
           // Open the file or create a new one!
           //
-          if ( KettleVFS.fileExists( exactFilename ) ) {
-            launchTransMeta = new TransMeta( exactFilename );
+          if ( KettleVFS.getInstance( jobMeta.getBowl() ).fileExists( exactFilename ) ) {
+            launchTransMeta = new TransMeta( jobMeta.getBowl(), exactFilename );
           } else {
             launchTransMeta = new TransMeta();
           }
@@ -2638,7 +2635,7 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
 
           boolean exists = spoon.rep.getTransformationID( exactTransname, repositoryDirectoryInterface ) != null;
           if ( !exists ) {
-            launchTransMeta = new TransMeta( null, exactTransname );
+            launchTransMeta = new TransMeta( (String)null, exactTransname );
           } else {
             launchTransMeta =
               spoon.rep.loadTransformation( exactTransname, spoon.rep.findDirectory( jobMeta
@@ -2711,8 +2708,9 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
 
           // Open the file or create a new one!
           //
-          if ( KettleVFS.fileExists( exactFilename ) ) {
-            launchJobMeta = new JobMeta( jobMeta, exactFilename, spoon.rep, spoon.metaStore, null );
+          if ( KettleVFS.getInstance( jobMeta.getBowl() ).fileExists( exactFilename ) ) {
+            launchJobMeta = new JobMeta( jobMeta.getBowl(), jobMeta, exactFilename, spoon.rep, spoon.getMetaStore(),
+              null );
           } else {
             launchJobMeta = new JobMeta();
           }
@@ -3210,9 +3208,9 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
     //
     if ( jd.isSharedObjectsFileChanged() ) {
       try {
-        SharedObjects sharedObjects =
-          rep != null ? rep.readJobMetaSharedObjects( jobMeta ) : jobMeta.readSharedObjects();
-        spoon.sharedObjectsFileMap.put( sharedObjects.getFilename(), sharedObjects );
+        if ( rep != null ) {
+          rep.readJobMetaSharedObjects( jobMeta );
+        }
       } catch ( Exception e ) {
         new ErrorDialog( spoon.getShell(),
           BaseMessages.getString( PKG, "Spoon.Dialog.ErrorReadingSharedObjects.Title" ),
@@ -3465,7 +3463,7 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
 
     // If the job is not running, start the transformation...
     //
-    if ( job == null || job.isFinished() && !job.isActive() ) {
+    if ( job == null || ( job.isFinished() || job.isStopped() ) && !job.isActive() ) {
       // Auto save feature...
       //
       handleJobMetaChanges( jobMeta );
@@ -3494,11 +3492,13 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
             }
 
             JobMeta runJobMeta;
+            spoon.forceRefreshTree();
 
             if ( spoon.rep != null ) {
               runJobMeta = spoon.rep.loadJob( jobMeta.getName(), jobMeta.getRepositoryDirectory(), null, null );
             } else {
-              runJobMeta = new JobMeta( null, jobMeta.getFilename(), null, jobMeta.getMetaStore(), null );
+              runJobMeta = new JobMeta( jobMeta.getBowl(), null, jobMeta.getFilename(), null, jobMeta.getMetaStore(),
+                null );
             }
 
             String spoonObjectId = UUID.randomUUID().toString();

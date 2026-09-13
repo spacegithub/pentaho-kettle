@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.xslt;
 
@@ -32,6 +24,7 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.stream.StreamSource;
 
 import org.apache.commons.vfs2.FileObject;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.trans.step.BaseStepData;
@@ -74,23 +67,23 @@ public class XsltData extends BaseStepData implements StepDataInterface {
     setOutputProperties = false;
   }
 
-  public Transformer getTemplate( String xslFilename, boolean isAfile ) throws Exception {
+  public Transformer getTemplate( Bowl bowl, String xslFilename, boolean isAfile ) throws Exception {
     Transformer template = transformers.get( xslFilename );
     if ( template != null ) {
       template.clearParameters();
       return template;
     }
 
-    return createNewTemplate( xslFilename, isAfile );
+    return createNewTemplate( bowl, xslFilename, isAfile );
   }
 
-  private Transformer createNewTemplate( String xslSource, boolean isAfile ) throws Exception {
+  private Transformer createNewTemplate( Bowl bowl, String xslSource, boolean isAfile ) throws Exception {
     FileObject file = null;
     InputStream xslInputStream = null;
     Transformer transformer = null;
     try {
       if ( isAfile ) {
-        file = KettleVFS.getFileObject( xslSource );
+        file = KettleVFS.getInstance( bowl ).getFileObject( xslSource );
         xslInputStream = KettleVFS.getInputStream( file );
       } else {
         xslInputStream = new ByteArrayInputStream( xslSource.getBytes( "UTF-8" ) );

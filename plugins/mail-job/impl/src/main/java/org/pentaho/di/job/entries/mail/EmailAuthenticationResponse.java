@@ -1,0 +1,49 @@
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+package org.pentaho.di.job.entries.mail;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+@JsonIgnoreProperties( ignoreUnknown = true )
+public class EmailAuthenticationResponse implements IEmailAuthenticationResponse {
+  @JsonProperty( "access_token" )
+  private String accessToken;
+
+  @JsonProperty( "token_type" )
+  private String tokenType;
+
+  @JsonProperty( "expires_in" )
+  private Integer expiresIn;
+
+  @JsonProperty( "ext_expires_in" )
+  private Integer extExpiresIn;
+
+  @JsonProperty( "refresh_token" )
+  private String refreshToken;
+
+  @JsonProperty( "scope" )
+  private String scope;
+
+  @JsonProperty( "id_token" )
+  private String idToken;
+
+  public String getAccessToken() {
+    return accessToken == null ? "" : accessToken;
+  }
+
+  public String getRefreshToken() {
+    return refreshToken;
+  }
+
+}

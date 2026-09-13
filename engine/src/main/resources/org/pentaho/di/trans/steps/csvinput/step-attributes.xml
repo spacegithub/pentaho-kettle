@@ -1,3 +1,14 @@
+<!-- ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************* -->
 <attributes>  
 
   <!-- Top level attributes -->
@@ -13,6 +24,7 @@
   <attribute id="PARALLEL"> <xmlcode>parallel</xmlcode>  <repcode/> <description>CsvInputDialog.RunningInParallel.Label</description> <tooltip/> <valuetype>Boolean</valuetype> <parentid/></attribute>
   <attribute id="NEWLINE_POSSIBLE"> <xmlcode>newline_possible</xmlcode>  <repcode/> <description>CsvInputDialog.NewlinePossible.Label</description> <tooltip/> <valuetype>Boolean</valuetype> <parentid/></attribute>
   <attribute id="ADD_FILENAME_RESULT"> <xmlcode>add_filename_result</xmlcode>  <repcode/> <description>CsvInputDialog.AddResult.Label</description> <tooltip>CsvInputDialog.AddResult.Tooltip</tooltip> <valuetype>Boolean</valuetype> <parentid/></attribute>
+  <attribute id="FORMAT"> <xmlcode>format</xmlcode>  <repcode/> <description>CsvInputDialog.Format.Label</description> <tooltip/> <valuetype>String</valuetype> <parentid/> </attribute>
   <attribute id="ENCODING"> <xmlcode>encoding</xmlcode>  <repcode/> <description>CsvInputDialog.Encoding.Label</description> <tooltip/> <valuetype>String</valuetype> <parentid/> </attribute>
 
   <!-- The fields grid defining all CSV Input fields -->

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.csvinput;
 
@@ -27,7 +19,7 @@ import java.nio.charset.StandardCharsets;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.ClassRule;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 
 import org.junit.BeforeClass;
@@ -38,6 +30,8 @@ import org.pentaho.di.core.logging.LoggingObjectInterface;
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.junit.rules.RestorePDIEngineEnvironment;
 import org.pentaho.di.trans.step.RowAdapter;
+import org.pentaho.di.trans.step.StepDataInterface;
+import org.pentaho.di.trans.steps.StepMockUtil;
 import org.pentaho.di.trans.steps.mock.StepMockHelper;
 import org.pentaho.di.trans.steps.textfileinput.TextFileInputField;
 
@@ -78,13 +72,14 @@ public class CsvInputUnicodeTest extends CsvInputUnitTestBase {
   private static final String TEST_DATA_UTF16BE_BOM =
       String.format( new String( UTF16BE_BOM, StandardCharsets.UTF_16BE ) + TEST_DATA2, ONE_CHAR_DELIM );
 
-  private static StepMockHelper<?, ?> stepMockHelper;
+  private static StepMockHelper<CsvInputMeta, StepDataInterface> stepMockHelper;
 
   @BeforeClass
   public static void setUp() throws KettleException {
-    stepMockHelper =
-      new StepMockHelper<CsvInputMeta, CsvInputData>( "CsvInputTest", CsvInputMeta.class, CsvInputData.class );
-    Mockito.when( stepMockHelper.logChannelInterfaceFactory.create( Matchers.any(), Matchers.any( LoggingObjectInterface.class ) ) )
+    stepMockHelper = StepMockUtil
+      .getStepMockHelper( CsvInputMeta.class, "CsvInputUnicodeTest" );
+    Mockito.when(
+      stepMockHelper.logChannelInterfaceFactory.create( ArgumentMatchers.any(), ArgumentMatchers.any( LoggingObjectInterface.class ) ) )
       .thenReturn( stepMockHelper.logChannelInterface );
     Mockito.when( stepMockHelper.trans.isRunning() ).thenReturn( true );
   }
@@ -189,7 +184,7 @@ public class CsvInputUnicodeTest extends CsvInputUnitTestBase {
     csvInput.init( meta, data );
     csvInput.addRowListener( new RowAdapter() {
       @Override
-      public void rowWrittenEvent( RowMetaInterface rowMeta, Object[] row ) throws KettleStepException {
+      public void rowWrittenEvent( RowMetaInterface rowMeta, Object[] row ) {
         for ( int i = 0; i < rowMeta.size(); i++ ) {
           Assert.assertEquals( "Value", row[ i ] );
         }

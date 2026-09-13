@@ -1,47 +1,47 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.http;
 
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.Authenticator;
-import java.net.MalformedURLException;
-import java.net.PasswordAuthentication;
-import java.net.URL;
-import java.net.URLConnection;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-
+import org.apache.http.HttpException;
+import org.apache.http.HttpHeaders;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpRequest;
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpStatus;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.AuthCache;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.conn.routing.HttpRoute;
+import org.apache.http.conn.routing.HttpRoutePlanner;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.auth.BasicScheme;
+import org.apache.http.impl.client.BasicAuthCache;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.conn.DefaultProxyRoutePlanner;
+import org.apache.http.protocol.HttpContext;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.core.ResultFile;
 import org.pentaho.di.core.RowMetaAndData;
@@ -51,6 +51,7 @@ import org.pentaho.di.core.exception.KettleDatabaseException;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleXMLException;
 import org.pentaho.di.core.row.value.ValueMetaString;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.core.xml.XMLHandler;
@@ -68,12 +69,24 @@ import org.pentaho.di.resource.ResourceReference;
 import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URLConnection;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+
 /**
  * This defines an HTTP job entry.
  *
  * @author Matt
  * @since 05-11-2003
- *
  */
 public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInterface {
   private static Class<?> PKG = JobEntryHTTP.class; // for i18n purposes, needed by Translator2!!
@@ -81,7 +94,32 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
   private static final String URL_FIELDNAME = "URL";
   private static final String UPLOADFILE_FIELDNAME = "UPLOAD";
   private static final String TARGETFILE_FIELDNAME = "DESTINATION";
+  private static final String SCHEMA_FILE = "file";
 
+  private static final String STR_10_SPACES = "          ";
+  private static final String STR_6_SPACES = "      ";
+
+  private static final String TAG_URL = "url";
+  private static final String TAG_TARGET_FILENAME = "targetfilename";
+  private static final String TAG_FILE_APPENDED = "file_appended";
+  private static final String TAG_DATE_TIME_ADDED = "date_time_added";
+  private static final String TAG_TARGET_FILENAME_EXTENSION = "targetfilename_extension";
+  private static final String TAG_TARGET_FILENAME_EXTENTION = "targetfilename_extention";
+  private static final String TAG_UPLOAD_FILENAME = "uploadfilename";
+  private static final String TAG_RUN_EVERY_ROW = "run_every_row";
+  private static final String TAG_URL_FIELDNAME = "url_fieldname";
+  private static final String TAG_UPLOAD_FIELDNAME = "upload_fieldname";
+  private static final String TAG_DEST_FIELDNAME = "dest_fieldname";
+  private static final String TAG_USERNAME = "username";
+  private static final String TAG_PASSWORD = "password";
+  private static final String TAG_PROXY_HOST = "proxy_host";
+  private static final String TAG_PROXY_PORT = "proxy_port";
+  private static final String TAG_NON_PROXY_HOSTS = "non_proxy_hosts";
+  private static final String TAG_ADD_FILENAME_RESULT = "addfilenameresult";
+  private static final String TAG_HEADERS = "headers";
+  private static final String TAG_HEADER = "header";
+  private static final String TAG_HEADER_NAME = "header_name";
+  private static final String TAG_HEADER_VALUE = "header_value";
 
   // Base info
   private String url;
@@ -122,6 +160,9 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
 
   private String[] headerValue;
 
+  // Response status
+  private int responseStatusCode = 0;
+
   public JobEntryHTTP( String n ) {
     super( n, "" );
     url = null;
@@ -133,8 +174,8 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
   }
 
   private void allocate( int nrHeaders ) {
-    headerName = new String[nrHeaders];
-    headerValue = new String[nrHeaders];
+    headerName = new String[ nrHeaders ];
+    headerValue = new String[ nrHeaders ];
   }
 
   @Override
@@ -155,77 +196,77 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
 
     retval.append( super.getXML() );
 
-    retval.append( "      " ).append( XMLHandler.addTagValue( "url", url ) );
-    retval.append( "      " ).append( XMLHandler.addTagValue( "targetfilename", targetFilename ) );
-    retval.append( "      " ).append( XMLHandler.addTagValue( "file_appended", fileAppended ) );
-    retval.append( "      " ).append( XMLHandler.addTagValue( "date_time_added", dateTimeAdded ) );
+    retval.append( STR_6_SPACES ).append(XMLHandler.addTagValue(TAG_URL, url));
+    retval.append( STR_6_SPACES ).append(XMLHandler.addTagValue(TAG_TARGET_FILENAME, targetFilename));
+    retval.append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_FILE_APPENDED, fileAppended ) );
+    retval.append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_DATE_TIME_ADDED, dateTimeAdded ) );
     retval
-      .append( "      " ).append( XMLHandler.addTagValue( "targetfilename_extension", targetFilenameExtension ) );
-    retval.append( "      " ).append( XMLHandler.addTagValue( "uploadfilename", uploadFilename ) );
+      .append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_TARGET_FILENAME_EXTENSION, targetFilenameExtension ) );
+    retval.append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_UPLOAD_FILENAME, uploadFilename ) );
 
-    retval.append( "      " ).append( XMLHandler.addTagValue( "run_every_row", runForEveryRow ) );
-    retval.append( "      " ).append( XMLHandler.addTagValue( "url_fieldname", urlFieldname ) );
-    retval.append( "      " ).append( XMLHandler.addTagValue( "upload_fieldname", uploadFieldname ) );
-    retval.append( "      " ).append( XMLHandler.addTagValue( "dest_fieldname", destinationFieldname ) );
+    retval.append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_RUN_EVERY_ROW, runForEveryRow ) );
+    retval.append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_URL_FIELDNAME, urlFieldname ) );
+    retval.append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_UPLOAD_FIELDNAME, uploadFieldname ) );
+    retval.append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_DEST_FIELDNAME, destinationFieldname ) );
 
-    retval.append( "      " ).append( XMLHandler.addTagValue( "username", username ) );
-    retval.append( "      " ).append(
-      XMLHandler.addTagValue( "password", Encr.encryptPasswordIfNotUsingVariables( password ) ) );
+    retval.append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_USERNAME, username ) );
+    retval.append( STR_6_SPACES ).append(
+      XMLHandler.addTagValue( TAG_PASSWORD, Encr.encryptPasswordIfNotUsingVariables( password ) ) );
 
-    retval.append( "      " ).append( XMLHandler.addTagValue( "proxy_host", proxyHostname ) );
-    retval.append( "      " ).append( XMLHandler.addTagValue( "proxy_port", proxyPort ) );
-    retval.append( "      " ).append( XMLHandler.addTagValue( "non_proxy_hosts", nonProxyHosts ) );
-    retval.append( "      " ).append( XMLHandler.addTagValue( "addfilenameresult", addfilenameresult ) );
-    retval.append( "      <headers>" ).append( Const.CR );
+    retval.append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_PROXY_HOST, proxyHostname ) );
+    retval.append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_PROXY_PORT, proxyPort ) );
+    retval.append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_NON_PROXY_HOSTS, nonProxyHosts ) );
+    retval.append( STR_6_SPACES ).append( XMLHandler.addTagValue( TAG_ADD_FILENAME_RESULT, addfilenameresult ) );
+    retval.append( "      <" ).append( TAG_HEADERS ).append( '>' ).append( Const.CR );
     if ( headerName != null ) {
       for ( int i = 0; i < headerName.length; i++ ) {
-        retval.append( "        <header>" ).append( Const.CR );
-        retval.append( "          " ).append( XMLHandler.addTagValue( "header_name", headerName[i] ) );
-        retval.append( "          " ).append( XMLHandler.addTagValue( "header_value", headerValue[i] ) );
-        retval.append( "        </header>" ).append( Const.CR );
+        retval.append( "        <" ).append( TAG_HEADER ).append( '>' ).append( Const.CR );
+        retval.append( STR_10_SPACES ).append( XMLHandler.addTagValue( TAG_HEADER_NAME, headerName[ i ] ) );
+        retval.append( STR_10_SPACES ).append( XMLHandler.addTagValue( TAG_HEADER_VALUE, headerValue[ i ] ) );
+        retval.append( "        </" ).append( TAG_HEADER ).append( '>' ).append( Const.CR );
       }
     }
-    retval.append( "      </headers>" ).append( Const.CR );
+    retval.append( "      </" ).append( TAG_HEADERS ).append( '>' ).append( Const.CR );
 
     return retval.toString();
   }
 
   @Override
   public void loadXML( Node entrynode, List<DatabaseMeta> databases, List<SlaveServer> slaveServers,
-    Repository rep, IMetaStore metaStore ) throws KettleXMLException {
+                       Repository rep, IMetaStore metaStore ) throws KettleXMLException {
     try {
       super.loadXML( entrynode, databases, slaveServers );
-      url = XMLHandler.getTagValue( entrynode, "url" );
-      targetFilename = XMLHandler.getTagValue( entrynode, "targetfilename" );
-      fileAppended = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, "file_appended" ) );
-      dateTimeAdded = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, "date_time_added" ) );
-      targetFilenameExtension = Const.NVL( XMLHandler.getTagValue( entrynode, "targetfilename_extension" ),
-          XMLHandler.getTagValue( entrynode, "targetfilename_extention" ) );
+      url = XMLHandler.getTagValue( entrynode, TAG_URL );
+      targetFilename = XMLHandler.getTagValue( entrynode, TAG_TARGET_FILENAME );
+      fileAppended = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, TAG_FILE_APPENDED ) );
+      dateTimeAdded = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, TAG_DATE_TIME_ADDED ) );
+      targetFilenameExtension = Const.NVL( XMLHandler.getTagValue( entrynode, TAG_TARGET_FILENAME_EXTENSION ),
+        XMLHandler.getTagValue( entrynode, TAG_TARGET_FILENAME_EXTENTION ) );
 
-      uploadFilename = XMLHandler.getTagValue( entrynode, "uploadfilename" );
+      uploadFilename = XMLHandler.getTagValue( entrynode, TAG_UPLOAD_FILENAME );
 
-      urlFieldname = XMLHandler.getTagValue( entrynode, "url_fieldname" );
-      uploadFieldname = XMLHandler.getTagValue( entrynode, "upload_fieldname" );
-      destinationFieldname = XMLHandler.getTagValue( entrynode, "dest_fieldname" );
-      runForEveryRow = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, "run_every_row" ) );
+      urlFieldname = XMLHandler.getTagValue( entrynode, TAG_URL_FIELDNAME );
+      uploadFieldname = XMLHandler.getTagValue( entrynode, TAG_UPLOAD_FIELDNAME );
+      destinationFieldname = XMLHandler.getTagValue( entrynode, TAG_DEST_FIELDNAME );
+      runForEveryRow = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, TAG_RUN_EVERY_ROW ) );
 
-      username = XMLHandler.getTagValue( entrynode, "username" );
-      password = Encr.decryptPasswordOptionallyEncrypted( XMLHandler.getTagValue( entrynode, "password" ) );
+      username = XMLHandler.getTagValue( entrynode, TAG_USERNAME );
+      password = Encr.decryptPasswordOptionallyEncrypted( XMLHandler.getTagValue( entrynode, TAG_PASSWORD ) );
 
-      proxyHostname = XMLHandler.getTagValue( entrynode, "proxy_host" );
-      proxyPort = XMLHandler.getTagValue( entrynode, "proxy_port" );
-      nonProxyHosts = XMLHandler.getTagValue( entrynode, "non_proxy_hosts" );
+      proxyHostname = XMLHandler.getTagValue( entrynode, TAG_PROXY_HOST );
+      proxyPort = XMLHandler.getTagValue( entrynode, TAG_PROXY_PORT );
+      nonProxyHosts = XMLHandler.getTagValue( entrynode, TAG_NON_PROXY_HOSTS );
       addfilenameresult =
-        "Y".equalsIgnoreCase( Const.NVL( XMLHandler.getTagValue( entrynode, "addfilenameresult" ), "Y" ) );
-      Node headers = XMLHandler.getSubNode( entrynode, "headers" );
+        "Y".equalsIgnoreCase( Const.NVL( XMLHandler.getTagValue( entrynode, TAG_ADD_FILENAME_RESULT ), "Y" ) );
+      Node headers = XMLHandler.getSubNode( entrynode, TAG_HEADERS );
 
       // How many field headerName?
-      int nrHeaders = XMLHandler.countNodes( headers, "header" );
+      int nrHeaders = XMLHandler.countNodes( headers, TAG_HEADER );
       allocate( nrHeaders );
       for ( int i = 0; i < nrHeaders; i++ ) {
-        Node fnode = XMLHandler.getSubNodeByNr( headers, "header", i );
-        headerName[i] = XMLHandler.getTagValue( fnode, "header_name" );
-        headerValue[i] = XMLHandler.getTagValue( fnode, "header_value" );
+        Node fnode = XMLHandler.getSubNodeByNr( headers, TAG_HEADER, i );
+        headerName[ i ] = XMLHandler.getTagValue( fnode, TAG_HEADER_NAME );
+        headerValue[ i ] = XMLHandler.getTagValue( fnode, TAG_HEADER_VALUE );
       }
     } catch ( KettleXMLException xe ) {
       throw new KettleXMLException( "Unable to load job entry of type 'HTTP' from XML node", xe );
@@ -233,82 +274,80 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
   }
 
   @Override
-  public void loadRep( Repository rep, IMetaStore metaStore, ObjectId id_jobentry, List<DatabaseMeta> databases,
-    List<SlaveServer> slaveServers ) throws KettleException {
+  public void loadRep( Repository rep, IMetaStore metaStore, ObjectId idJobEntry, List<DatabaseMeta> databases,
+                       List<SlaveServer> slaveServers ) throws KettleException {
     try {
-      url = rep.getJobEntryAttributeString( id_jobentry, "url" );
-      targetFilename = rep.getJobEntryAttributeString( id_jobentry, "targetfilename" );
-      fileAppended = rep.getJobEntryAttributeBoolean( id_jobentry, "file_appended" );
-      dateTimeAdded = rep.getJobEntryAttributeBoolean( id_jobentry, "date_time_added" );
-      targetFilenameExtension = Const.NVL( rep.getJobEntryAttributeString( id_jobentry, "targetfilename_extension" ),
-          rep.getJobEntryAttributeString( id_jobentry, "targetfilename_extention" ) );
+      url = rep.getJobEntryAttributeString( idJobEntry, TAG_URL );
+      targetFilename = rep.getJobEntryAttributeString( idJobEntry, TAG_TARGET_FILENAME );
+      fileAppended = rep.getJobEntryAttributeBoolean( idJobEntry, TAG_FILE_APPENDED );
+      dateTimeAdded = rep.getJobEntryAttributeBoolean( idJobEntry, TAG_DATE_TIME_ADDED );
+      targetFilenameExtension = Const.NVL( rep.getJobEntryAttributeString( idJobEntry, TAG_TARGET_FILENAME_EXTENSION ),
+        rep.getJobEntryAttributeString( idJobEntry, TAG_TARGET_FILENAME_EXTENTION ) );
 
-      uploadFilename = rep.getJobEntryAttributeString( id_jobentry, "uploadfilename" );
+      uploadFilename = rep.getJobEntryAttributeString( idJobEntry, TAG_UPLOAD_FILENAME );
 
-      urlFieldname = rep.getJobEntryAttributeString( id_jobentry, "url_fieldname" );
-      uploadFieldname = rep.getJobEntryAttributeString( id_jobentry, "upload_fieldname" );
-      destinationFieldname = rep.getJobEntryAttributeString( id_jobentry, "dest_fieldname" );
-      runForEveryRow = rep.getJobEntryAttributeBoolean( id_jobentry, "run_every_row" );
+      urlFieldname = rep.getJobEntryAttributeString( idJobEntry, TAG_URL_FIELDNAME );
+      uploadFieldname = rep.getJobEntryAttributeString( idJobEntry, TAG_UPLOAD_FIELDNAME );
+      destinationFieldname = rep.getJobEntryAttributeString( idJobEntry, TAG_DEST_FIELDNAME );
+      runForEveryRow = rep.getJobEntryAttributeBoolean( idJobEntry, TAG_RUN_EVERY_ROW );
 
-      username = rep.getJobEntryAttributeString( id_jobentry, "username" );
+      username = rep.getJobEntryAttributeString( idJobEntry, TAG_USERNAME );
       password =
-        Encr.decryptPasswordOptionallyEncrypted( rep.getJobEntryAttributeString( id_jobentry, "password" ) );
+        Encr.decryptPasswordOptionallyEncrypted( rep.getJobEntryAttributeString( idJobEntry, TAG_PASSWORD ) );
 
-      proxyHostname = rep.getJobEntryAttributeString( id_jobentry, "proxy_host" );
-      proxyPort = rep.getJobEntryAttributeString( id_jobentry, "proxy_port" ); // backward compatible.
+      proxyHostname = rep.getJobEntryAttributeString( idJobEntry, TAG_PROXY_HOST );
+      proxyPort = rep.getJobEntryAttributeString( idJobEntry, TAG_PROXY_PORT ); // backward compatible.
 
-      nonProxyHosts = rep.getJobEntryAttributeString( id_jobentry, "non_proxy_hosts" );
-      addfilenameresult =
-        "Y".equalsIgnoreCase( Const
-          .NVL( rep.getJobEntryAttributeString( id_jobentry, "addfilenameresult" ), "Y" ) );
+      nonProxyHosts = rep.getJobEntryAttributeString( idJobEntry, TAG_NON_PROXY_HOSTS );
+      addfilenameresult = rep.getJobEntryAttributeBoolean( idJobEntry, TAG_ADD_FILENAME_RESULT );
 
       // How many headerName?
-      int argnr = rep.countNrJobEntryAttributes( id_jobentry, "header_name" );
+      int argnr = rep.countNrJobEntryAttributes( idJobEntry, TAG_HEADER_NAME );
       allocate( argnr );
 
       for ( int a = 0; a < argnr; a++ ) {
-        headerName[a] = rep.getJobEntryAttributeString( id_jobentry, a, "header_name" );
-        headerValue[a] = rep.getJobEntryAttributeString( id_jobentry, a, "header_value" );
+        headerName[ a ] = rep.getJobEntryAttributeString( idJobEntry, a, TAG_HEADER_NAME );
+        headerValue[ a ] = rep.getJobEntryAttributeString( idJobEntry, a, TAG_HEADER_VALUE );
       }
     } catch ( KettleException dbe ) {
-      throw new KettleException( "Unable to load job entry of type 'HTTP' from the repository for id_jobentry="
-        + id_jobentry, dbe );
+      throw new KettleException( "Unable to load job entry of type 'HTTP' from the repository for idJobEntry="
+        + idJobEntry, dbe );
     }
   }
 
   @Override
-  public void saveRep( Repository rep, IMetaStore metaStore, ObjectId id_job ) throws KettleException {
+  public void saveRep( Repository rep, IMetaStore metaStore, ObjectId idJob ) throws KettleException {
     try {
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "url", url );
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "targetfilename", targetFilename );
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "file_appended", fileAppended );
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "date_time_added", dateTimeAdded );
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "targetfilename_extension", targetFilenameExtension );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_URL, url );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_TARGET_FILENAME, targetFilename );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_FILE_APPENDED, fileAppended );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_DATE_TIME_ADDED, dateTimeAdded );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_TARGET_FILENAME_EXTENSION, targetFilenameExtension );
 
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "uploadfilename", uploadFilename );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_UPLOAD_FILENAME, uploadFilename );
 
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "url_fieldname", urlFieldname );
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "upload_fieldname", uploadFieldname );
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "dest_fieldname", destinationFieldname );
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "run_every_row", runForEveryRow );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_URL_FIELDNAME, urlFieldname );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_UPLOAD_FIELDNAME, uploadFieldname );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_DEST_FIELDNAME, destinationFieldname );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_RUN_EVERY_ROW, runForEveryRow );
 
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "username", username );
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "password", Encr
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_USERNAME, username );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_PASSWORD, Encr
         .encryptPasswordIfNotUsingVariables( password ) );
 
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "proxy_host", proxyHostname );
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "proxy_port", proxyPort );
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "non_proxy_hosts", nonProxyHosts );
-      rep.saveJobEntryAttribute( id_job, getObjectId(), "addfilenameresult", addfilenameresult );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_PROXY_HOST, proxyHostname );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_PROXY_PORT, proxyPort );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_NON_PROXY_HOSTS, nonProxyHosts );
+      rep.saveJobEntryAttribute( idJob, getObjectId(), TAG_ADD_FILENAME_RESULT, addfilenameresult );
       if ( headerName != null ) {
         for ( int i = 0; i < headerName.length; i++ ) {
-          rep.saveJobEntryAttribute( id_job, getObjectId(), i, "header_name", headerName[i] );
-          rep.saveJobEntryAttribute( id_job, getObjectId(), i, "header_value", headerValue[i] );
+          rep.saveJobEntryAttribute( idJob, getObjectId(), i, TAG_HEADER_NAME, headerName[ i ] );
+          rep.saveJobEntryAttribute( idJob, getObjectId(), i, TAG_HEADER_VALUE, headerValue[ i ] );
         }
       }
     } catch ( KettleDatabaseException dbe ) {
       throw new KettleException(
-        "Unable to load job entry of type 'HTTP' to the repository for id_job=" + id_job, dbe );
+        "Unable to load job entry of type 'HTTP' to the repository for idJob=" + idJob, dbe );
     }
   }
 
@@ -320,8 +359,7 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
   }
 
   /**
-   * @param url
-   *          The URL to set.
+   * @param url The URL to set.
    */
   public void setUrl( String url ) {
     this.url = url;
@@ -335,8 +373,7 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
   }
 
   /**
-   * @param targetFilename
-   *          The target filename to set.
+   * @param targetFilename The target filename to set.
    */
   public void setTargetFilename( String targetFilename ) {
     this.targetFilename = targetFilename;
@@ -354,8 +391,8 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
     return addfilenameresult;
   }
 
-  public void setAddFilenameToResult( boolean addfilenameresult ) {
-    this.addfilenameresult = addfilenameresult;
+  public void setAddFilenameToResult( boolean addFilenameResult ) {
+    this.addfilenameresult = addFilenameResult;
   }
 
   public String getPassword() {
@@ -406,6 +443,10 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
     this.headerValue = headerValue;
   }
 
+  public int getResponseStatusCode() {
+    return responseStatusCode;
+  }
+
   /**
    * We made this one synchronized in the JVM because otherwise, this is not thread safe. In that case if (on an
    * application server for example) several HTTP's are running at the same time, you get into problems because the
@@ -415,30 +456,16 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
   public synchronized Result execute( Result previousResult, int nr ) {
     Result result = previousResult;
     result.setResult( false );
+    responseStatusCode = 0;
 
     logBasic( BaseMessages.getString( PKG, "JobHTTP.StartJobEntry" ) );
 
     // Get previous result rows...
     List<RowMetaAndData> resultRows;
-    String urlFieldnameToUse, uploadFieldnameToUse, destinationFieldnameToUse;
 
-    if ( Utils.isEmpty( urlFieldname ) ) {
-      urlFieldnameToUse = URL_FIELDNAME;
-    } else {
-      urlFieldnameToUse = urlFieldname;
-    }
-
-    if ( Utils.isEmpty( uploadFieldname ) )  {
-      uploadFieldnameToUse = UPLOADFILE_FIELDNAME;
-    } else {
-      uploadFieldnameToUse = uploadFieldname;
-    }
-
-    if ( Utils.isEmpty( destinationFieldname ) )  {
-      destinationFieldnameToUse = TARGETFILE_FIELDNAME;
-    } else {
-      destinationFieldnameToUse = destinationFieldname;
-    }
+    String urlFieldnameToUse = Utils.isEmpty( urlFieldname ) ? URL_FIELDNAME : urlFieldname;
+    String uploadFieldnameToUse = Utils.isEmpty( uploadFieldname ) ? UPLOADFILE_FIELDNAME : uploadFieldname;
+    String destinationFieldnameToUse = Utils.isEmpty( destinationFieldname ) ? TARGETFILE_FIELDNAME : destinationFieldname;
 
     if ( runForEveryRow ) {
       resultRows = previousResult.getRows();
@@ -448,56 +475,26 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
         return result;
       }
     } else {
-      resultRows = new ArrayList<RowMetaAndData>();
+      resultRows = new ArrayList<>();
       RowMetaAndData row = new RowMetaAndData();
-      row.addValue(
-        new ValueMetaString( urlFieldnameToUse ), environmentSubstitute( url ) );
-      row.addValue(
-        new ValueMetaString( uploadFieldnameToUse ), environmentSubstitute( uploadFilename ) );
-      row.addValue(
-        new ValueMetaString( destinationFieldnameToUse ), environmentSubstitute( targetFilename ) );
+      row.addValue( new ValueMetaString( urlFieldnameToUse ), environmentSubstitute( url ) );
+      row.addValue( new ValueMetaString( uploadFieldnameToUse ), environmentSubstitute( uploadFilename ) );
+      row.addValue( new ValueMetaString( destinationFieldnameToUse ), environmentSubstitute( targetFilename ) );
       resultRows.add( row );
     }
-
-    URL server = null;
-
-    String beforeProxyHost = System.getProperty( "http.proxyHost" );
-    String beforeProxyPort = System.getProperty( "http.proxyPort" );
-    String beforeNonProxyHosts = System.getProperty( "http.nonProxyHosts" );
 
     for ( int i = 0; i < resultRows.size() && result.getNrErrors() == 0; i++ ) {
       RowMetaAndData row = resultRows.get( i );
 
       OutputStream outputFile = null;
-      OutputStream uploadStream = null;
-      BufferedInputStream fileStream = null;
       InputStream input = null;
 
       try {
         String urlToUse = environmentSubstitute( row.getString( urlFieldnameToUse, "" ) );
         String realUploadFile = environmentSubstitute( row.getString( uploadFieldnameToUse, "" ) );
-        String realTargetFile = environmentSubstitute( row.getString(  destinationFieldnameToUse,  "" ) );
+        String realTargetFile = environmentSubstitute( row.getString( destinationFieldnameToUse, "" ) );
 
         logBasic( BaseMessages.getString( PKG, "JobHTTP.Log.ConnectingURL", urlToUse ) );
-
-        if ( !Utils.isEmpty( proxyHostname ) ) {
-          System.setProperty( "http.proxyHost", environmentSubstitute( proxyHostname ) );
-          System.setProperty( "http.proxyPort", environmentSubstitute( proxyPort ) );
-          if ( nonProxyHosts != null ) {
-            System.setProperty( "http.nonProxyHosts", environmentSubstitute( nonProxyHosts ) );
-          }
-        }
-
-        if ( !Utils.isEmpty( username ) ) {
-          Authenticator.setDefault( new Authenticator() {
-            @Override
-            protected PasswordAuthentication getPasswordAuthentication() {
-              String realPassword = Encr.decryptPasswordOptionallyEncrypted( environmentSubstitute( password ) );
-              return new PasswordAuthentication( environmentSubstitute( username ), realPassword != null
-                ? realPassword.toCharArray() : new char[] {} );
-            }
-          } );
-        }
 
         if ( dateTimeAdded ) {
           SimpleDateFormat daf = new SimpleDateFormat();
@@ -514,70 +511,16 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
         }
 
         // Create the output File...
-        outputFile = KettleVFS.getOutputStream( realTargetFile, this, fileAppended );
+        outputFile = KettleVFS.getInstance( parentJobMeta.getBowl() )
+          .getOutputStream( realTargetFile, this, fileAppended );
 
-        // Get a stream for the specified URL
-        server = new URL( urlToUse );
-        URLConnection connection = server.openConnection();
+        URI uri = (new URIBuilder( urlToUse )).build();
 
-        // if we have HTTP headers, add them
-        if ( !Utils.isEmpty( headerName ) ) {
-          if ( log.isDebug() ) {
-            log.logDebug( BaseMessages.getString( PKG, "JobHTTP.Log.HeadersProvided" ) );
-          }
-          for ( int j = 0; j < headerName.length; j++ ) {
-            if ( !Utils.isEmpty( headerValue[j] ) ) {
-              connection.setRequestProperty(
-                environmentSubstitute( headerName[j] ), environmentSubstitute( headerValue[j] ) );
-              if ( log.isDebug() ) {
-                log.logDebug( BaseMessages.getString(
-                  PKG, "JobHTTP.Log.HeaderSet", environmentSubstitute( headerName[j] ),
-                  environmentSubstitute( headerValue[j] ) ) );
-              }
-            }
-          }
+        if ( SCHEMA_FILE.equalsIgnoreCase( uri.getScheme() ) ) {
+          input = getResultFromFileSchema( uri );
+        } else {
+          input = getResultFromHttpSchema( realUploadFile, uri );
         }
-
-        connection.setDoOutput( true );
-
-        // See if we need to send a file over?
-        if ( !Utils.isEmpty( realUploadFile ) ) {
-          if ( log.isDetailed() ) {
-            logDetailed( BaseMessages.getString( PKG, "JobHTTP.Log.SendingFile", realUploadFile ) );
-          }
-
-          // Grab an output stream to upload data to web server
-          uploadStream = connection.getOutputStream();
-          fileStream = new BufferedInputStream( new FileInputStream( new File( realUploadFile ) ) );
-          try {
-            int c;
-            while ( ( c = fileStream.read() ) >= 0 ) {
-              uploadStream.write( c );
-            }
-          } finally {
-            // Close upload and file
-            if ( uploadStream != null ) {
-              uploadStream.close();
-              uploadStream = null;
-            }
-            if ( fileStream != null ) {
-              fileStream.close();
-              fileStream = null;
-            }
-          }
-          if ( log.isDetailed() ) {
-            logDetailed( BaseMessages.getString( PKG, "JobHTTP.Log.FinishedSendingFile" ) );
-          }
-        }
-
-        if ( log.isDetailed() ) {
-          logDetailed( BaseMessages.getString( PKG, "JobHTTP.Log.StartReadingReply" ) );
-        }
-
-        // Read the result from the server...
-        input = connection.getInputStream();
-        Date date = new Date( connection.getLastModified() );
-        logBasic( BaseMessages.getString( PKG, "JobHTTP.Log.ReplayInfo", connection.getContentType(), date ) );
 
         int oneChar;
         long bytesRead = 0L;
@@ -592,8 +535,9 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
           // Add to the result files...
           ResultFile resultFile =
             new ResultFile(
-              ResultFile.FILE_TYPE_GENERAL, KettleVFS.getFileObject( realTargetFile, this ), parentJob
-                .getJobname(), toString() );
+              ResultFile.FILE_TYPE_GENERAL, KettleVFS.getInstance( parentJobMeta.getBowl() )
+                .getFileObject( realTargetFile, this ), parentJob
+              .getJobname(), toString() );
           result.getResultFiles().put( resultFile.getFile().toString(), resultFile );
         }
 
@@ -613,13 +557,6 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
       } finally {
         // Close it all
         try {
-          if ( uploadStream != null ) {
-            uploadStream.close(); // just to make sure
-          }
-          if ( fileStream != null ) {
-            fileStream.close(); // just to make sure
-          }
-
           if ( input != null ) {
             input.close();
           }
@@ -630,16 +567,134 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
           logError( BaseMessages.getString( PKG, "JobHTTP.Error.CanNotCloseStream", e.getMessage() ) );
           result.setNrErrors( 1 );
         }
-
-        // Set the proxy settings back as they were on the system!
-        System.setProperty( "http.proxyHost", Const.NVL( beforeProxyHost, "" ) );
-        System.setProperty( "http.proxyPort", Const.NVL( beforeProxyPort, "" ) );
-        System.setProperty( "http.nonProxyHosts", Const.NVL( beforeNonProxyHosts, "" ) );
       }
-
     }
 
     return result;
+  }
+
+  private InputStream getResultFromFileSchema( URI uri ) throws IOException {
+    URLConnection connection = uri.toURL().openConnection();
+    connection.setDoOutput( true );
+    Date date = new Date( connection.getLastModified() );
+    logBasic( BaseMessages.getString( PKG, "JobHTTP.Log.ReplayInfo", connection.getContentType(), date ) );
+    return connection.getInputStream();
+  }
+
+  private InputStream getResultFromHttpSchema( String realUploadFile, URI uri ) throws IOException, KettleException {
+    HttpClient client = null;
+    HttpClientBuilder clientBuilder = HttpClientBuilder.create();
+    if ( !Utils.isEmpty( username ) ) {
+      String realPassword = Encr.decryptPasswordOptionallyEncrypted( environmentSubstitute( password ) );
+      String realUser = environmentSubstitute( username );
+      UsernamePasswordCredentials credentials =
+        new UsernamePasswordCredentials( realUser, realPassword != null ? realPassword : "" );
+      CredentialsProvider provider = new BasicCredentialsProvider();
+      provider.setCredentials( AuthScope.ANY, credentials );
+      clientBuilder.setDefaultCredentialsProvider( provider );
+    }
+
+    String proxyHostnameValue = environmentSubstitute( proxyHostname );
+    String proxyPortValue = environmentSubstitute( proxyPort );
+    String nonProxyHostsValue = environmentSubstitute( nonProxyHosts );
+    if ( !Utils.isEmpty( proxyHostnameValue ) ) {
+      HttpHost proxy = new HttpHost( proxyHostnameValue, Integer.parseInt( proxyPortValue ) );
+      clientBuilder.setProxy( proxy );
+      if ( !Utils.isEmpty( nonProxyHostsValue ) ) {
+        HttpRoutePlanner routePlanner = new DefaultProxyRoutePlanner( proxy ) {
+          @Override
+          public HttpRoute determineRoute(
+                  final HttpHost host,
+                  final HttpRequest request,
+                  final HttpContext context ) throws HttpException {
+            String hostName = host.getHostName();
+            if ( hostName.matches( nonProxyHostsValue ) ) {
+              // Return direct route
+              return new HttpRoute( host );
+            }
+            return super.determineRoute( host, request, context );
+          }
+        };
+        clientBuilder.setRoutePlanner( routePlanner );
+      }
+    }
+
+    client = clientBuilder.build();
+
+    HttpRequestBase httpRequestBase;
+    // See if we need to send a file over?
+    if ( !Utils.isEmpty( realUploadFile ) ) {
+      if ( log.isDetailed() ) {
+        logDetailed( BaseMessages.getString( PKG, "JobHTTP.Log.SendingFile", realUploadFile ) );
+      }
+      httpRequestBase = new HttpPost( uri );
+
+      // Get content of file
+      String content = new String( Files.readAllBytes( Paths.get( realUploadFile ) ) );
+
+      // upload data to web server
+
+      StringEntity requestEntity = new StringEntity( content );
+      requestEntity.setContentType( "application/x-www-form-urlencoded" );
+      ( (HttpPost) httpRequestBase ).setEntity( requestEntity );
+      if ( log.isDetailed() ) {
+        logDetailed( BaseMessages.getString( PKG, "JobHTTP.Log.FinishedSendingFile" ) );
+      }
+    } else {
+      httpRequestBase = new HttpGet( uri );
+    }
+
+
+    // if we have HTTP headers, add them
+    if ( !Utils.isEmpty( headerName ) ) {
+      if ( log.isDebug() ) {
+        log.logDebug( BaseMessages.getString( PKG, "JobHTTP.Log.HeadersProvided" ) );
+      }
+      for ( int j = 0; j < headerName.length; j++ ) {
+        if ( !Utils.isEmpty( headerValue[ j ] ) ) {
+          httpRequestBase
+            .addHeader( environmentSubstitute( headerName[ j ] ), environmentSubstitute( headerValue[ j ] ) );
+          if ( log.isDebug() ) {
+            log.logDebug( BaseMessages.getString(
+              PKG, "JobHTTP.Log.HeaderSet", environmentSubstitute( headerName[ j ] ),
+              environmentSubstitute( headerValue[ j ] ) ) );
+          }
+        }
+      }
+    }
+
+    // Get a stream for the specified URL
+    HttpResponse response = null;
+    if ( !Utils.isEmpty( proxyHostname ) ) {
+      HttpHost target = new HttpHost( uri.getHost(), uri.getPort(), uri.getScheme() );
+      // Create AuthCache instance
+      AuthCache authCache = new BasicAuthCache();
+      // Generate BASIC scheme object and add it to the local auth cache
+      BasicScheme basicAuth = new BasicScheme();
+      authCache.put( target, basicAuth );
+      // Add AuthCache to the execution context
+      HttpClientContext localContext = HttpClientContext.create();
+      localContext.setAuthCache( authCache );
+      response = client.execute( target, httpRequestBase, localContext );
+    } else {
+      response = client.execute( httpRequestBase );
+    }
+    responseStatusCode = response.getStatusLine().getStatusCode();
+
+    if ( HttpStatus.SC_OK != responseStatusCode ) {
+      throw new KettleException( "StatusCode: " + responseStatusCode );
+    }
+
+    if ( log.isDetailed() ) {
+      logDetailed( BaseMessages.getString( PKG, "JobHTTP.Log.StartReadingReply" ) );
+    }
+
+    logBasic( BaseMessages.getString( PKG, "JobHTTP.Log.ReplayInfo",
+      response.getEntity().getContentType(),
+      response.getLastHeader( HttpHeaders.DATE ).getValue() ) );
+
+    // Read the result from the server...
+    return response.getEntity().getContent();
   }
 
   @Override
@@ -663,8 +718,7 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
   }
 
   /**
-   * @param getFieldname
-   *          The Result URL Fieldname to set.
+   * @param getFieldname The Result URL Fieldname to set.
    */
   public void setUrlFieldname( String getFieldname ) {
     this.urlFieldname = getFieldname;
@@ -708,8 +762,7 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
   }
 
   /**
-   * @param runForEveryRow
-   *          The runForEveryRow to set.
+   * @param runForEveryRow The runForEveryRow to set.
    */
   public void setRunForEveryRow( boolean runForEveryRow ) {
     this.runForEveryRow = runForEveryRow;
@@ -723,8 +776,7 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
   }
 
   /**
-   * @param fileAppended
-   *          The fileAppended to set.
+   * @param fileAppended The fileAppended to set.
    */
   public void setFileAppended( boolean fileAppended ) {
     this.fileAppended = fileAppended;
@@ -738,8 +790,7 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
   }
 
   /**
-   * @param dateTimeAdded
-   *          The dateTimeAdded to set.
+   * @param dateTimeAdded The dateTimeAdded to set.
    */
   public void setDateTimeAdded( boolean dateTimeAdded ) {
     this.dateTimeAdded = dateTimeAdded;
@@ -753,8 +804,7 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
   }
 
   /**
-   * @param uploadFilenameExtension
-   *          The uploadFilenameExtension to set.
+   * @param uploadFilenameExtension The uploadFilenameExtension to set.
    */
   public void setTargetFilenameExtension( String uploadFilenameExtension ) {
     this.targetFilenameExtension = uploadFilenameExtension;
@@ -770,9 +820,8 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
   }
 
   /**
-   * @param uploadFilenameExtension
-   *          The uploadFilenameExtension to set.
-   * @deprecated Use {@link JobEntryHTTP#setTargetFilenameExtension( String uploadFilenameExtension )} instead
+   * @param uploadFilenameExtension The uploadFilenameExtension to set.
+   * @deprecated Use {@link JobEntryHTTP#setTargetFilenameExtension(String uploadFilenameExtension)} instead
    */
   @Deprecated
   public void setTargetFilenameExtention( String uploadFilenameExtension ) {
@@ -791,15 +840,14 @@ public class JobEntryHTTP extends JobEntryBase implements Cloneable, JobEntryInt
 
   @Override
   public void check( List<CheckResultInterface> remarks, JobMeta jobMeta, VariableSpace space,
-    Repository repository, IMetaStore metaStore ) {
-    JobEntryValidatorUtils.andValidator().validate( this, "targetFilename", remarks,
-        AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
-    JobEntryValidatorUtils.andValidator().validate( this, "targetFilenameExtention", remarks,
-        AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
-    JobEntryValidatorUtils.andValidator().validate( this, "uploadFilename", remarks,
-        AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
-    JobEntryValidatorUtils.andValidator().validate( this, "proxyPort", remarks,
-        AndValidator.putValidators( JobEntryValidatorUtils.integerValidator() ) );
+                     Repository repository, IMetaStore metaStore ) {
+    JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "targetFilename", remarks,
+      AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
+    JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "targetFilenameExtention", remarks,
+      AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
+    JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "uploadFilename", remarks,
+      AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
+    JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "proxyPort", remarks,
+      AndValidator.putValidators( JobEntryValidatorUtils.integerValidator() ) );
   }
-
 }

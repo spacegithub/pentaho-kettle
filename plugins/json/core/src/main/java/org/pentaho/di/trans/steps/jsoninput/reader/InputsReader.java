@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2016-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.jsoninput.reader;
 
@@ -56,7 +48,7 @@ public class InputsReader implements Iterable<InputStream> {
   }
 
   @Override
-  public Iterator<InputStream> iterator() {
+  public CloseableIterator<InputStream> iterator() {
     if ( !meta.isInFields() || meta.getIsAFile() ) {
       Iterator<FileObject> files;
       if ( meta.inputFiles.acceptingFilenames ) {
@@ -71,7 +63,7 @@ public class InputsReader implements Iterable<InputStream> {
       }
       return new FileContentIterator( files, data, errorHandler );
     } else if ( meta.isReadUrl() ) {
-      return  new URLContentIterator( errorHandler, getFieldIterator() );
+      return new URLContentIterator( errorHandler, getFieldIterator() );
     } else {
       // direct content
       return new ChainedIterator<InputStream, String>( getFieldIterator(), errorHandler ) {
@@ -99,10 +91,11 @@ public class InputsReader implements Iterable<InputStream> {
 
   }
 
-  protected abstract class ChainedIterator<T, C> implements Iterator<T> {
+  protected abstract class ChainedIterator<T, C> implements CloseableIterator<T> {
 
     protected Iterator<C> inner;
     protected ErrorHandler handler;
+    protected boolean closed = false;
 
     ChainedIterator( Iterator<C> inner, ErrorHandler handler ) {
       this.inner = inner;
@@ -111,17 +104,19 @@ public class InputsReader implements Iterable<InputStream> {
 
     @Override
     public boolean hasNext() {
-      return inner.hasNext();
+      return !isClosed() && inner.hasNext();
     }
 
     @Override
     public T next() {
-      try {
-        return tryNext();
-      } catch ( Exception e ) {
-        handler.error( e );
-        return null;
+      if ( !isClosed() ) {
+        try {
+          return tryNext();
+        } catch ( Exception e ) {
+          handler.error( e );
+        }
       }
+      return null;
     }
 
     @Override
@@ -130,6 +125,17 @@ public class InputsReader implements Iterable<InputStream> {
     }
 
     protected abstract T tryNext() throws Exception;
+
+    @Override
+    public void close() throws IOException {
+      closed = true;
+      inner = null;
+      handler = null;
+    }
+
+    public boolean isClosed() {
+      return closed || ( null == inner );
+    }
   }
 
   protected class FileContentIterator extends ChainedIterator<InputStream, FileObject> {
@@ -163,6 +169,23 @@ public class InputsReader implements Iterable<InputStream> {
       }
       return null;
     }
+
+    @Override
+    public void close() throws IOException {
+      if ( !isClosed() ) {
+        super.close();
+
+        if ( data.file != null ) {
+          try {
+            data.file.close();
+          } catch ( FileSystemException e ) {
+            handler.fileCloseError( data.file, e );
+          }
+
+          data.file = null;
+        }
+      }
+    }
   }
 
   protected class FileNamesIterator extends ChainedIterator<FileObject, String> {
@@ -177,7 +200,8 @@ public class InputsReader implements Iterable<InputStream> {
     @Override
     public FileObject tryNext() throws KettleFileException {
       String fileName = step.environmentSubstitute( inner.next() );
-      return fileName == null ? null : KettleVFS.getFileObject( fileName, vars );
+      return fileName == null ? null : KettleVFS.getInstance( step.getTransMeta().getBowl() )
+        .getFileObject( fileName, vars );
     }
   }
 
@@ -187,7 +211,8 @@ public class InputsReader implements Iterable<InputStream> {
       super( urls, handler );
     }
 
-    @Override protected InputStream tryNext() throws Exception {
+    @Override
+    protected InputStream tryNext() throws Exception {
       if ( hasNext() ) {
         URL url = new URL( step.environmentSubstitute( inner.next() ) );
         URLConnection connection = url.openConnection();
@@ -197,7 +222,7 @@ public class InputsReader implements Iterable<InputStream> {
     }
   }
 
-  protected class StringFieldIterator implements Iterator<String> {
+  protected class StringFieldIterator implements CloseableIterator<String> {
 
     private RowIterator rowIter;
     private int idx;
@@ -224,7 +249,7 @@ public class InputsReader implements Iterable<InputStream> {
     }
   }
 
-  protected class RowIterator implements Iterator<Object[]> {
+  protected class RowIterator implements CloseableIterator<Object[]> {
 
     private StepInterface step;
     private ErrorHandler errorHandler;

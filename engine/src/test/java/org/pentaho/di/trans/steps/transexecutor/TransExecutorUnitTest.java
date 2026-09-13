@@ -1,30 +1,25 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.transexecutor;
 
 import java.util.Arrays;
+import java.util.HashMap;
+
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -42,15 +37,19 @@ import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.core.logging.LogChannel;
 import org.pentaho.di.core.logging.LogChannelInterface;
 import org.pentaho.di.core.logging.LogLevel;
+import org.pentaho.di.core.parameters.UnknownParamException;
 import org.pentaho.di.core.row.RowMeta;
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.core.variables.VariableSpace;
+import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.junit.rules.RestorePDIEngineEnvironment;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
+import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.step.StepMeta;
+import org.pentaho.di.trans.step.StepMetaInterface;
 import org.pentaho.di.trans.steps.StepMockUtil;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -59,6 +58,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doNothing;
@@ -66,6 +67,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -96,7 +98,7 @@ public class TransExecutorUnitTest {
 
     internalTrans = spy( new Trans() );
     internalTrans.setLog( mock( LogChannelInterface.class ) );
-    doNothing().when( internalTrans ).prepareExecution( any( String[].class ) );
+    doNothing().when( internalTrans ).prepareExecution( nullable( String[].class ) );
     doNothing().when( internalTrans ).startThreads();
     doNothing().when( internalTrans ).waitUntilFinished();
     doNothing().when( executor ).discardLogLines( any( TransExecutorData.class ) );
@@ -159,6 +161,9 @@ public class TransExecutorUnitTest {
     StepMeta stepMeta = mockStepAndMapItToRowSet( "stepMetaMock", rowSet );
     meta.setOutputRowsSourceStepMeta( stepMeta );
 
+    Trans parent = new Trans();
+    Mockito.when( executor.getTrans() ).thenReturn( parent );
+
     executor.init( meta, data );
     executor.setInputRowMeta( new RowMeta() );
     assertTrue( "Passing one line at first time", executor.processRow( meta, data ) );
@@ -218,6 +223,9 @@ public class TransExecutorUnitTest {
     StepMeta stepMeta = mockStepAndMapItToRowSet( "stepMetaMock", rowSet );
     meta.setExecutionResultTargetStepMeta( stepMeta );
 
+    Trans parent = new Trans();
+    Mockito.when( executor.getTrans() ).thenReturn( parent );
+
     executor.init( meta, data );
     executor.setInputRowMeta( new RowMeta() );
     assertTrue( "Passing one line at first time", executor.processRow( meta, data ) );
@@ -251,6 +259,10 @@ public class TransExecutorUnitTest {
     prepareMultipleRowsForExecutor();
 
     meta.setGroupField( "groupField" );
+
+    Trans parent = new Trans();
+    Mockito.when( executor.getTrans() ).thenReturn( parent );
+
     executor.init( meta, data );
 
     RowMetaInterface rowMeta = new RowMeta();
@@ -307,6 +319,9 @@ public class TransExecutorUnitTest {
     executor.processRow( meta, data ); // 4th row
     // first 4 rows should be added to the same group
     assertEquals( 4, data.groupBuffer.size() );
+
+    Trans parent = new Trans();
+    Mockito.when( executor.getTrans() ).thenReturn( parent );
 
     executor.processRow( meta, data ); // 5th row
     // once the 5th row is processed, the transformation executor should be triggered
@@ -415,7 +430,8 @@ public class TransExecutorUnitTest {
     String parentValue = "parentValue";
 
     meta.getParameters().setVariable( new String[]{ childParam, paramOverwrite } );
-    meta.getParameters().setInput( new String[]{ childValue, childValue } );
+    meta.getParameters().setInput( new String[]{ null, null } );
+    meta.getParameters().setField( new String[]{ null, null } );
     Trans parent = new Trans();
     Mockito.when( executor.getTrans() ).thenReturn( parent );
 
@@ -442,12 +458,151 @@ public class TransExecutorUnitTest {
   }
 
   @Test
+  //PDI-16066
+  public void testExecuteTransWithFieldsAndNoInput() throws KettleException {
+    String childParam = "childParam";
+    String childValue = "childValue";
+    String fieldValue1 = "fieldValue1";
+    String fieldValue2 = "fieldValue2";
+    String paramOverwrite = "paramOverwrite";
+    String parentValue = "parentValue";
+
+    meta.getParameters().setVariable( new String[]{ childParam, paramOverwrite } );
+    meta.getParameters().setInput( new String[]{ null, null } );
+    meta.getParameters().setField( new String[]{ childParam, paramOverwrite } );
+    Trans parent = new Trans();
+    Mockito.when( executor.getTrans() ).thenReturn( parent );
+
+    executor.init( meta, data );
+
+    executor.setVariable( paramOverwrite, parentValue );
+    executor.setVariable( childParam, childValue );
+
+    RowMetaInterface inputRowMeta = mock( RowMetaInterface.class );
+
+    Mockito.when( executor.getLogLevel() ).thenReturn( LogLevel.NOTHING );
+    parent.setLog( new LogChannel( this ) );
+    Mockito.doCallRealMethod().when( executor ).createInternalTrans( );
+    Mockito.when(  executor.getData().getExecutorTransMeta().listVariables() ).thenReturn( new String[0] );
+    Mockito.when(  executor.getData().getExecutorTransMeta().listParameters() ).thenReturn( new String[0] /*{parentParam}*/ );
+
+    executor.getData().setInputRowMeta( inputRowMeta );
+    Mockito.when(  executor.getData().getInputRowMeta().getFieldNames() ).thenReturn( new String[]{"childParam", "paramOverwrite"} );
+
+    Trans internalTrans = executor.createInternalTrans();
+    executor.getData().setExecutorTrans( internalTrans );
+    executor.passParametersToTrans( Arrays.asList( new String[]{ fieldValue1, fieldValue2 } ) );
+
+    //When the child parameter does exist in the parent parameters, overwrite the child parameter by the parent parameter.
+    Assert.assertEquals( fieldValue2, internalTrans.getVariable( paramOverwrite ) );
+
+    //All other parent parameters need to get copied into the child parameters  (when the 'Inherit all variables from the transformation?' option is checked)
+    Assert.assertEquals( fieldValue1, internalTrans.getVariable( childParam ) );
+  }
+
+  @Test
+  //PDI-19098
+  public void testExecuteTransWithFieldsCaseInsensitive() throws KettleException {
+    String childParam = "childParam";
+    String childValue = "childValue";
+    String fieldValue1 = "fieldValue1";
+    String fieldValue2 = "fieldValue2";
+    String paramOverwrite = "paramOverwrite";
+    String parentValue = "parentValue";
+
+    meta.getParameters().setVariable( new String[]{ childParam, paramOverwrite } );
+    meta.getParameters().setInput( new String[]{ null, null } );
+    meta.getParameters().setField( new String[]{ "CHILDPARAM", paramOverwrite } );
+    Trans parent = new Trans();
+    Mockito.when( executor.getTrans() ).thenReturn( parent );
+
+    executor.init( meta, data );
+
+    executor.setVariable( paramOverwrite, parentValue );
+    executor.setVariable( childParam, childValue );
+
+    RowMetaInterface inputRowMeta = mock( RowMetaInterface.class );
+
+    Mockito.when( executor.getLogLevel() ).thenReturn( LogLevel.NOTHING );
+    parent.setLog( new LogChannel( this ) );
+    Mockito.doCallRealMethod().when( executor ).createInternalTrans( );
+    Mockito.when(  executor.getData().getExecutorTransMeta().listVariables() ).thenReturn( new String[0] );
+    Mockito.when(  executor.getData().getExecutorTransMeta().listParameters() ).thenReturn( new String[0] );
+
+    executor.getData().setInputRowMeta( inputRowMeta );
+    Mockito.when(  executor.getData().getInputRowMeta().getFieldNames() ).thenReturn( new String[]{"childParam", "paramOverwrite"} );
+
+    Trans internalTrans = executor.createInternalTrans();
+    executor.getData().setExecutorTrans( internalTrans );
+    executor.passParametersToTrans( Arrays.asList( new String[]{ fieldValue1, fieldValue2 } ) );
+
+    //When the child parameter does exist in the parent parameters, overwrite the child parameter by the parent parameter.
+    Assert.assertEquals( fieldValue2, internalTrans.getVariable( paramOverwrite ) );
+
+    //All other parent parameters need to get copied into the child parameters  (when the 'Inherit all variables from the transformation?' option is checked)
+    Assert.assertEquals( fieldValue1, internalTrans.getVariable( childParam ) );
+  }
+
+
+  @Test
+  //PDI-16066
+  public void testExecuteTransWithInputsAndNoFields() throws KettleException {
+
+    String childParam = "childParam";
+    String childValue = "childValue";
+    String inputValue1 = "inputValue1";
+    String inputValue2 = "inputValue2";
+    String paramOverwrite = "paramOverwrite";
+    String parentValue = "parentValue";
+
+    meta.getParameters().setVariable( new String[]{ childParam, paramOverwrite } );
+    meta.getParameters().setInput( new String[]{ inputValue1, inputValue2 } );
+    meta.getParameters().setField( new String[]{ null, null } );
+    Trans parent = new Trans();
+    Mockito.when( executor.getTrans() ).thenReturn( parent );
+
+    executor.init( meta, data );
+
+    executor.setVariable( paramOverwrite, parentValue );
+    executor.setVariable( childParam, childValue );
+
+    Mockito.when( executor.getLogLevel() ).thenReturn( LogLevel.NOTHING );
+    parent.setLog( new LogChannel( this ) );
+    Mockito.doCallRealMethod().when( executor ).createInternalTrans( );
+    Mockito.when(  executor.getData().getExecutorTransMeta().listVariables() ).thenReturn( new String[0] );
+    Mockito.when(  executor.getData().getExecutorTransMeta().listParameters() ).thenReturn( new String[0] /*{parentParam}*/ );
+
+    Trans internalTrans = executor.createInternalTrans();
+    executor.getData().setExecutorTrans( internalTrans );
+    executor.passParametersToTrans( Arrays.asList( meta.getParameters().getField() ) );
+
+    //When the child parameter does exist in the parent parameters, overwrite the child parameter by the parent parameter.
+    Assert.assertEquals( inputValue2, internalTrans.getVariable( paramOverwrite ) );
+
+    //All other parent parameters need to get copied into the child parameters  (when the 'Inherit all variables from the transformation?' option is checked)
+    Assert.assertEquals( inputValue1, internalTrans.getVariable( childParam ) );
+  }
+
+
+  @Test
   public void testSafeStop() throws Exception {
+    TransExecutorData transExecutorDataMock = mock( TransExecutorData.class );
+    TransMeta transMetaMock = mock( TransMeta.class );
+    when( executor.getData() ).thenReturn( transExecutorDataMock );
+    when( transMetaMock.listVariables() ).thenReturn( new String[0] );
+    when( transMetaMock.listParameters() ).thenReturn( new String[0] );
+    when( transExecutorDataMock.getExecutorTransMeta() ).thenReturn( transMetaMock );
     prepareOneRowForExecutor();
     meta.setGroupSize( "1" );
     data.groupSize = 1;
 
     internalResult.setSafeStop( true );
+
+    Trans parent = Mockito.spy( new Trans() );
+
+    Mockito.when( executor.getTrans() ).thenReturn( parent );
+    doNothing().when( executor ).initializeVariablesFromParent( any() );
+    doNothing().when( executor ).passParametersToTrans( any() );
 
     executor.init( meta, data );
     executor.setInputRowMeta( new RowMeta() );
@@ -465,10 +620,116 @@ public class TransExecutorUnitTest {
     internalResult.setSafeStop( false );
     internalResult.setNrErrors( 1 );
 
+    Trans parent = Mockito.spy( new Trans() );
+    Mockito.when( executor.getTrans() ).thenReturn( parent );
+
     executor.init( meta, data );
     executor.setInputRowMeta( new RowMeta() );
     assertTrue( executor.processRow( meta, data ) );
     verify( executor.getTrans(), never() ).safeStop();
-    verify( executor.getTrans() ).stopAll();
+    verify( executor.getTrans(), never() ).stopAll();
   }
+
+  private void prepareNoRowForExecutor() throws Exception {
+    doReturn( null ).when( executor ).getRow();
+  }
+
+  @Test
+  public void testGetLastIncomingFieldValuesWithEmptyData() throws Exception {
+    prepareNoRowForExecutor();
+
+    executor.init( meta, data );
+    executor.processRow( meta, data );
+    verify( executor, times( 0 ) ).getLastIncomingFieldValues();
+  }
+
+  @Test
+  public void testGetLastIncomingFieldValuesWithData() throws KettleException {
+    prepareMultipleRowsForExecutor();
+
+    Trans parent = new Trans();
+    Mockito.when( executor.getTrans() ).thenReturn( parent );
+
+    meta.setGroupField( "groupField" );
+    executor.init( meta, data );
+
+    RowMetaInterface rowMeta = new RowMeta();
+    rowMeta.addValueMeta( new ValueMetaString( "groupField" ) );
+    executor.setInputRowMeta( rowMeta );
+
+    // start processing
+    executor.processRow( meta, data ); // 1st row - 'value1'
+    executor.processRow( meta, data );
+    executor.processRow( meta, data );
+    executor.processRow( meta, data ); // 4th row - still 'value1'
+
+    // same group, zero calls
+    verify( executor, times( 0 ) ).getLastIncomingFieldValues();
+
+    executor.processRow( meta, data ); // 5th row - value has been changed - 'value12'
+
+    // group changed - 1 calls = 1 for trans execution
+    verify( executor, times( 1 ) ).getLastIncomingFieldValues();
+
+    executor.processRow( meta, data ); // 6th row - 'value12'
+    executor.processRow( meta, data ); // 7th row - 'value12'
+    executor.processRow( meta, data ); // end of file
+
+    //  No more rows = + 1 call to get the previous value
+    verify( executor, times( 2 ) ).getLastIncomingFieldValues();
+
+  }
+
+  @Test
+  //PDI-18191
+  public void testInitializeVariablesFromTransInheritingAllVariables() throws KettleException {
+    String childValue = "childValue";
+    String parentValue = "parentValue";
+    String variableName = "v_name";
+
+    Trans parent = new Trans();
+    parent.setVariable( variableName, parentValue );
+    Mockito.when( executor.getTrans() ).thenReturn( parent );
+
+    meta.getParameters().setInheritingAllVariables( true );
+
+    executor.init( meta, data );
+
+    Trans internalTrans = executor.createInternalTrans();
+    internalTrans.setVariable( variableName, childValue );
+    executor.getData().setExecutorTrans( internalTrans );
+
+    executor.initializeVariablesFromParent( internalTrans );
+
+    // if InheritingAllVariables then transExecutor can initialize variables from parent trans
+    Assert.assertEquals( parentValue, internalTrans.getVariable( variableName ) );
+
+  }
+
+  @Test
+  //PDI-18191
+  public void testInitializeVariablesFromTransNotInheritingAllVariables() throws KettleException {
+    String childValue = "childValue";
+    String parentValue = "parentValue";
+    String variableName = "v_name";
+
+    Trans parent = new Trans();
+    parent.setVariable( "v_name", parentValue );
+    Mockito.when( executor.getTrans() ).thenReturn( parent );
+
+    meta.getParameters().setInheritingAllVariables( false );
+
+    executor.init( meta, data );
+
+    Trans internalTrans = executor.createInternalTrans();
+    internalTrans.setVariable( variableName, childValue );
+    executor.getData().setExecutorTrans( internalTrans );
+
+    executor.initializeVariablesFromParent( internalTrans );
+
+    // if not InheritingAllVariables then transExecutor can NOT initialize variables from parent trans
+    Assert.assertEquals( childValue, internalTrans.getVariable( variableName ) );
+
+  }
+
 }

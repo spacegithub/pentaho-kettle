@@ -1,9 +1,20 @@
 <?xml version="1.0"?>
+<!-- ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************* -->
 <?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
 <dialog id="step-configuration-dialog" 
     xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
     xmlns:pen="http://www.pentaho.org/2008/xul" 
-	title="${RulesAccumulator.StepConfigruationDialog.Title}"
+	title="${RulesAccumulator.StepConfigurationDialog.Title}"
 	resizable="true"
 	buttons="extra1,accept,cancel"
 	buttonlabelextra1="${Dialog.Help}"

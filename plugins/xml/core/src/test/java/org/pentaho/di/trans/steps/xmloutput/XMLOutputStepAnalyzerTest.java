@@ -1,22 +1,16 @@
-/*
- * ******************************************************************************
+/*! ******************************************************************************
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Pentaho
  *
- * ******************************************************************************
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.xmloutput;
 
@@ -25,7 +19,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.BaseStepMeta;
@@ -42,10 +37,18 @@ import org.pentaho.metaverse.api.model.IExternalResourceInfo;
 import java.util.Collection;
 import java.util.Set;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-@RunWith( MockitoJUnitRunner.class )
+@RunWith( MockitoJUnitRunner.StrictStubs.class )
 public class XMLOutputStepAnalyzerTest {
 
   private XMLOutputStepAnalyzer analyzer;
@@ -61,9 +64,7 @@ public class XMLOutputStepAnalyzerTest {
 
   @Mock
   IMetaverseNode node;
-  @Mock
-  IMetaverseBuilder mockBuilder;
-  @Mock
+  private IMetaverseBuilder mockBuilder;
   private INamespace mockNamespace;
   @Mock
   private StepMeta parentStepMeta;
@@ -76,6 +77,8 @@ public class XMLOutputStepAnalyzerTest {
 
   @Before
   public void setUp() throws Exception {
+    mockBuilder = mock( IMetaverseBuilder.class );
+    mockNamespace = mock( INamespace.class );
     analyzer = spy( new XMLOutputStepAnalyzer() );
     analyzer.setMetaverseBuilder( mockBuilder );
     analyzer.setBaseStepMeta( meta );
@@ -87,14 +90,15 @@ public class XMLOutputStepAnalyzerTest {
     analyzer.setDescriptor( descriptor );
     analyzer.setObjectFactory( metaverseObjectFactory );
 
-    when( mockXMLOutput.getStepDataInterface() ).thenReturn( data );
-    when( mockXMLOutput.getStepMeta() ).thenReturn( parentStepMeta );
+    lenient().when( mockXMLOutput.getStepDataInterface() ).thenReturn( data );
+    lenient().when( mockXMLOutput.getStepMeta() ).thenReturn( parentStepMeta );
 
-    when( meta.getParentStepMeta() ).thenReturn( parentStepMeta );
-    when( parentStepMeta.getStepMetaInterface() ).thenReturn( meta );
-    when( parentStepMeta.getParentTransMeta() ).thenReturn( mockTransMeta );
-    when( parentStepMeta.getName() ).thenReturn( "test" );
-    when( parentStepMeta.getStepID() ).thenReturn( "XmlOutputStep" );
+    lenient().when( meta.getParentStepMeta() ).thenReturn( parentStepMeta );
+    lenient().when( parentStepMeta.getStepMetaInterface() ).thenReturn( meta );
+    lenient().when( parentStepMeta.getParentTransMeta() ).thenReturn( mockTransMeta );
+    lenient().when( mockTransMeta.getBowl() ).thenReturn( DefaultBowl.getInstance() );
+    lenient().when( parentStepMeta.getName() ).thenReturn( "test" );
+    lenient().when( parentStepMeta.getStepID() ).thenReturn( "XmlOutputStep" );
   }
 
   @Test
@@ -147,16 +151,15 @@ public class XMLOutputStepAnalyzerTest {
 
     when( this.meta.getParentStepMeta() ).thenReturn( spyMeta );
     when( spyMeta.getParentTransMeta() ).thenReturn( mockTransMeta );
-    when( this.meta.getFileName() ).thenReturn( null );
     String[] filePaths = { "/path/to/file1", "/another/path/to/file2" };
     when( this.meta.getFiles( Mockito.any( VariableSpace.class ) ) ).thenReturn( filePaths );
 
     assertFalse( consumer.isDataDriven( this.meta ) );
-    Collection<IExternalResourceInfo> resources = consumer.getResourcesFromMeta( this.meta );
+    Collection<IExternalResourceInfo> resources = consumer.getResourcesFromMeta( DefaultBowl.getInstance(), this.meta );
     assertFalse( resources.isEmpty() );
     assertEquals( 2, resources.size() );
 
-    when( this.meta.getExtension() ).thenReturn( "txt" );
+    lenient().when( this.meta.getExtension() ).thenReturn( "txt" );
 
     assertEquals( XMLOutputMeta.class, consumer.getMetaClass() );
   }

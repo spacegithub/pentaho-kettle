@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.job.entries.trans;
 
@@ -69,6 +61,7 @@ import org.pentaho.di.ui.core.widget.TableView;
 import org.pentaho.di.ui.core.widget.TextVar;
 import org.pentaho.di.ui.job.entry.JobEntryDialog;
 import org.pentaho.di.ui.spoon.Spoon;
+import org.pentaho.di.ui.util.ParameterTableHelper;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -82,6 +75,8 @@ public abstract class JobEntryBaseDialog extends JobEntryDialog {
 
   public static Class<?> PKG = JobEntryTrans.class;
   public static final int IS_PENTAHO = 1;
+
+  protected ParameterTableHelper parameterTableHelper = new ParameterTableHelper();
 
   protected Label wlPath;
   protected TextVar wPath;
@@ -183,6 +178,12 @@ public abstract class JobEntryBaseDialog extends JobEntryDialog {
         getJobEntry().setChanged();
       }
     };
+
+    ModifyListener lsModParams = modifyEvent -> {
+      parameterTableHelper.checkTableOnMod( modifyEvent );
+      getJobEntry().setChanged();
+    };
+
 
     FormLayout formLayout = new FormLayout();
     formLayout.marginWidth = 15;
@@ -543,7 +544,7 @@ public abstract class JobEntryBaseDialog extends JobEntryDialog {
 
     wParameters =
       new TableView( jobMeta, wParameterComp, SWT.BORDER | SWT.FULL_SELECTION | SWT.MULTI, colinf, parameterRows, false,
-        lsMod, props, false );
+        lsModParams, props, false );
     props.setLook( wParameters );
     FormData fdParameters = new FormData();
     fdParameters.left = new FormAttachment( 0, 0 );
@@ -552,6 +553,13 @@ public abstract class JobEntryBaseDialog extends JobEntryDialog {
     fdParameters.bottom = new FormAttachment( wbGetParams, -10 );
     wParameters.setLayoutData( fdParameters );
     wParameters.getTable().addListener( SWT.Resize, new ColumnsResizer( 0, 33, 33, 33 ) );
+
+    parameterTableHelper.setParameterTableView( wParameters );
+    parameterTableHelper.setUpDisabledListeners();
+    // Add disabled listeners to columns
+    colinf[0].setDisabledListener( parameterTableHelper.getVarDisabledListener() );
+    colinf[1].setDisabledListener( parameterTableHelper.getFieldDisabledListener() );
+    colinf[2].setDisabledListener( parameterTableHelper.getInputDisabledListener() );
 
     FormData fdParametersComp = new FormData();
     fdParametersComp.left = new FormAttachment( 0, 0 );
@@ -631,7 +639,7 @@ public abstract class JobEntryBaseDialog extends JobEntryDialog {
       String filename = dialog.getFilterPath() + Const.FILE_SEPARATOR + dialog.getFileName();
       FileObject file = null;
       try {
-        file = KettleVFS.getFileObject( filename );
+        file = KettleVFS.getInstance( jobMeta.getBowl() ).getFileObject( filename );
         // Set file extension ..
         wLogext.setText( file.getName().getExtension() );
         // Set filename without extension ...
@@ -692,11 +700,13 @@ public abstract class JobEntryBaseDialog extends JobEntryDialog {
           // Ignore errors
         }
         display.asyncExec( () -> {
-          if ( (Boolean) items.get( IS_PENTAHO ) ) {
-            wWaitingToFinish.setSelection( false );
-            wWaitingToFinish.setEnabled( false );
-          } else {
-            wWaitingToFinish.setEnabled( true );
+          if ( wWaitingToFinish != null && !wWaitingToFinish.isDisposed() ) {
+            if ( (Boolean) items.get( IS_PENTAHO ) ) {
+              wWaitingToFinish.setSelection( false );
+              wWaitingToFinish.setEnabled( false );
+            } else {
+              wWaitingToFinish.setEnabled( true );
+            }
           }
         } );
       } );

@@ -1,33 +1,28 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.database;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.exception.KettleValueException;
 import org.pentaho.di.core.row.ValueMetaInterface;
 
 import java.sql.SQLException;
 import java.util.Map;
+
+import static org.pentaho.di.core.util.Utils.setStringValueFromMap;
 
 /**
  * Contains Generic Database Connection information through static final members
@@ -43,41 +38,38 @@ public class GenericDatabaseMeta extends BaseDatabaseMeta implements DatabaseInt
   private DatabaseInterface databaseDialect = null;
 
   @Override
+  public void addAttribute( String attributeId, String value ) {
+    super.addAttribute( attributeId, value );
+    if ( DATABASE_DIALECT_ID.equals( attributeId ) ) {
+      resolveDialect( value );
+    }
+  }
+
+  @Override
   public int[] getAccessTypeList() {
     return new int[] {
-      DatabaseMeta.TYPE_ACCESS_NATIVE, DatabaseMeta.TYPE_ACCESS_ODBC, DatabaseMeta.TYPE_ACCESS_JNDI };
+      DatabaseMeta.TYPE_ACCESS_NATIVE, DatabaseMeta.TYPE_ACCESS_JNDI };
   }
 
   /**
    * @see DatabaseInterface#getNotFoundTK(boolean)
    */
   @Override
-  public int getNotFoundTK( boolean use_autoinc ) {
-    if ( supportsAutoInc() && use_autoinc ) {
+  public int getNotFoundTK( boolean useAutoinc ) {
+    if ( supportsAutoInc() && useAutoinc ) {
       return 1;
     }
-    return super.getNotFoundTK( use_autoinc );
+    return super.getNotFoundTK( useAutoinc );
   }
 
   @Override
   public String getDriverClass() {
-    if ( getAccessType() == DatabaseMeta.TYPE_ACCESS_NATIVE ) {
-      String driverClass = getAttributes().getProperty( ATRRIBUTE_CUSTOM_DRIVER_CLASS, "" );
-      return driverClass;
-    } else {
-      return "sun.jdbc.odbc.JdbcOdbcDriver"; // always ODBC!
-    }
-
+    return getAttributes().getProperty( ATRRIBUTE_CUSTOM_DRIVER_CLASS, "" );
   }
 
   @Override
   public String getURL( String hostname, String port, String databaseName ) {
-    if ( getAccessType() == DatabaseMeta.TYPE_ACCESS_NATIVE ) {
-      String url = getAttributes().getProperty( ATRRIBUTE_CUSTOM_URL, "" );
-      return url;
-    } else {
-      return "jdbc:odbc:" + databaseName;
-    }
+    return getAttributes().getProperty( ATRRIBUTE_CUSTOM_URL, "" );
   }
 
   /**
@@ -121,7 +113,7 @@ public class GenericDatabaseMeta extends BaseDatabaseMeta implements DatabaseInt
    *          The column defined as a value
    * @param tk
    *          the name of the technical key field
-   * @param use_autoinc
+   * @param useAutoinc
    *          whether or not this field uses auto increment
    * @param pk
    *          the name of the primary key field
@@ -130,13 +122,13 @@ public class GenericDatabaseMeta extends BaseDatabaseMeta implements DatabaseInt
    * @return the SQL statement to add a column to the specified table
    */
   @Override
-  public String getAddColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  public String getAddColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
     String pk, boolean semicolon ) {
     if ( databaseDialect != null ) {
-      return databaseDialect.getAddColumnStatement( tablename, v, tk, use_autoinc, pk, semicolon );
+      return databaseDialect.getAddColumnStatement( tablename, v, tk, useAutoinc, pk, semicolon );
     }
 
-    return "ALTER TABLE " + tablename + " ADD " + getFieldDefinition( v, tk, pk, use_autoinc, true, false );
+    return "ALTER TABLE " + tablename + " ADD " + getFieldDefinition( v, tk, pk, useAutoinc, true, false );
   }
 
   /**
@@ -148,7 +140,7 @@ public class GenericDatabaseMeta extends BaseDatabaseMeta implements DatabaseInt
    *          The column defined as a value
    * @param tk
    *          the name of the technical key field
-   * @param use_autoinc
+   * @param useAutoinc
    *          whether or not this field uses auto increment
    * @param pk
    *          the name of the primary key field
@@ -157,20 +149,20 @@ public class GenericDatabaseMeta extends BaseDatabaseMeta implements DatabaseInt
    * @return the SQL statement to modify a column in the specified table
    */
   @Override
-  public String getModifyColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  public String getModifyColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
     String pk, boolean semicolon ) {
     if ( databaseDialect != null ) {
-      return databaseDialect.getModifyColumnStatement( tablename, v, tk, use_autoinc, pk, semicolon );
+      return databaseDialect.getModifyColumnStatement( tablename, v, tk, useAutoinc, pk, semicolon );
     }
-    return "ALTER TABLE " + tablename + " MODIFY " + getFieldDefinition( v, tk, pk, use_autoinc, true, false );
+    return "ALTER TABLE " + tablename + " MODIFY " + getFieldDefinition( v, tk, pk, useAutoinc, true, false );
   }
 
   @Override
-  public String getFieldDefinition( ValueMetaInterface v, String tk, String pk, boolean use_autoinc,
-    boolean add_fieldname, boolean add_cr ) {
+  public String getFieldDefinition( ValueMetaInterface v, String tk, String pk, boolean useAutoinc,
+                                    boolean addFieldName, boolean addCr ) {
 
     if ( databaseDialect != null ) {
-      return databaseDialect.getFieldDefinition( v, tk, pk, use_autoinc, add_fieldname, add_cr );
+      return databaseDialect.getFieldDefinition( v, tk, pk, useAutoinc, addFieldName, addCr );
     }
 
     String retval = "";
@@ -179,7 +171,7 @@ public class GenericDatabaseMeta extends BaseDatabaseMeta implements DatabaseInt
     int length = v.getLength();
     int precision = v.getPrecision();
 
-    if ( add_fieldname ) {
+    if ( addFieldName ) {
       retval += fieldname + " ";
     }
 
@@ -242,7 +234,7 @@ public class GenericDatabaseMeta extends BaseDatabaseMeta implements DatabaseInt
         break;
     }
 
-    if ( add_cr ) {
+    if ( addCr ) {
       retval += Const.CR;
     }
 
@@ -296,7 +288,16 @@ public class GenericDatabaseMeta extends BaseDatabaseMeta implements DatabaseInt
     return super.getAttribute( DATABASE_DIALECT_ID, getPluginName() );
   }
 
-  private void resolveDialect( String dialectName ) {
+  @VisibleForTesting
+  protected DatabaseInterface getDatabaseDialectInternal() {
+    return databaseDialect;
+  }
+
+  @VisibleForTesting
+  protected void resolveDialect( String dialectName ) {
+    if ( dialectName == null ) {
+      return;
+    }
     if ( dialectName.equals( getPluginName() ) ) {
       databaseDialect = null;
     } else {
@@ -464,11 +465,11 @@ public class GenericDatabaseMeta extends BaseDatabaseMeta implements DatabaseInt
   }
 
   @Override
-  public String getSafeFieldname( String fieldname ) {
+  public String getSafeFieldname( String fieldName ) {
     if ( databaseDialect != null ) {
-      return databaseDialect.getSafeFieldname( fieldname );
+      return databaseDialect.getSafeFieldname( fieldName );
     }
-    return super.getSafeFieldname( fieldname );
+    return super.getSafeFieldname( fieldName );
   }
 
   @Override
@@ -826,12 +827,12 @@ public class GenericDatabaseMeta extends BaseDatabaseMeta implements DatabaseInt
   }
 
   @Override
-  public String getDropColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  public String getDropColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
       String pk, boolean semicolon ) {
     if ( databaseDialect != null ) {
-      return databaseDialect.getDropColumnStatement( tablename, v, tk, use_autoinc, pk, semicolon );
+      return databaseDialect.getDropColumnStatement( tablename, v, tk, useAutoinc, pk, semicolon );
     }
-    return super.getDropColumnStatement( tablename, v, tk, use_autoinc, pk, semicolon );
+    return super.getDropColumnStatement( tablename, v, tk, useAutoinc, pk, semicolon );
   }
 
   @Override
@@ -851,11 +852,11 @@ public class GenericDatabaseMeta extends BaseDatabaseMeta implements DatabaseInt
   }
 
   @Override
-  public String getSchemaTableCombination( String schema_name, String table_part ) {
+  public String getSchemaTableCombination( String schemaName, String tablePart ) {
     if ( databaseDialect != null ) {
-      return databaseDialect.getSchemaTableCombination( schema_name, table_part );
+      return databaseDialect.getSchemaTableCombination( schemaName, tablePart );
     }
-    return super.getSchemaTableCombination( schema_name, table_part );
+    return super.getSchemaTableCombination( schemaName, tablePart );
   }
 
   @Override
@@ -920,5 +921,11 @@ public class GenericDatabaseMeta extends BaseDatabaseMeta implements DatabaseInt
       return databaseDialect.getExtraOptionsHelpText();
     }
     return super.getExtraOptionsHelpText();
+  }
+
+  @Override
+  public void setConnectionSpecificInfoFromAttributes( Map<String, String> attributes ) {
+    addAttribute( ATRRIBUTE_CUSTOM_URL, setStringValueFromMap( attributes, ATRRIBUTE_CUSTOM_URL ) );
+    addAttribute( ATRRIBUTE_CUSTOM_DRIVER_CLASS, setStringValueFromMap( attributes, ATRRIBUTE_CUSTOM_DRIVER_CLASS ) );
   }
 }

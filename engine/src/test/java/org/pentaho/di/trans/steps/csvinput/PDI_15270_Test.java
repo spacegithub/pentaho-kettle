@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.csvinput;
 
@@ -26,7 +18,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.QueueRowSet;
 import org.pentaho.di.core.RowSet;
@@ -34,8 +25,6 @@ import org.pentaho.di.junit.rules.RestorePDIEngineEnvironment;
 import org.pentaho.di.trans.step.StepDataInterface;
 import org.pentaho.di.trans.steps.StepMockUtil;
 import org.pentaho.di.trans.steps.mock.StepMockHelper;
-import org.pentaho.di.trans.steps.textfileinput.TextFileInputField;
-import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.io.File;
 
@@ -46,17 +35,13 @@ import static org.junit.Assert.assertNull;
 /**
  * Test class covers http://jira.pentaho.com/browse/PDI-15270 issue.
  * Csv data is taken from the attachment to the issue.
- *
+ * <p>
  * Created by Yury_Bakhmutski on 10/7/2016.
  */
-@RunWith( PowerMockRunner.class )
 public class PDI_15270_Test extends CsvInputUnitTestBase {
   private CsvInput csvInput;
   private String[] expected;
   private String content;
-  private String delimiter = ",";
-  private String enclosure = "\"";
-  private String encoding = "utf-8";
   private StepMockHelper<CsvInputMeta, StepDataInterface> stepMockHelper;
   @ClassRule public static RestorePDIEngineEnvironment env = new RestorePDIEngineEnvironment();
 
@@ -79,7 +64,7 @@ public class PDI_15270_Test extends CsvInputUnitTestBase {
     String field1 = "FIRST_NM";
     String field2 = "MIDDLE_NM";
     String field3 = "LAST_NM";
-    content = field1 + delimiter + field2 + delimiter + field3;
+    content = field1 + DELIMITER + field2 + DELIMITER + field3;
     expected = new String[] { field1, field2, field3 };
     doTest( content, expected );
   }
@@ -89,7 +74,7 @@ public class PDI_15270_Test extends CsvInputUnitTestBase {
     String field1 = "Ima";
     String field2 = "";
     String field3 = "Rose";
-    content = field1 + delimiter + field2 + delimiter + field3;
+    content = field1 + DELIMITER + field2 + DELIMITER + field3;
     expected = new String[] { field1, field2, field3 };
     doTest( content, expected );
   }
@@ -100,8 +85,8 @@ public class PDI_15270_Test extends CsvInputUnitTestBase {
     String field2 = "the";
     String field3 = "Piper's Son";
     content =
-        enclosure + field1 + enclosure + delimiter + enclosure + field2 + enclosure + delimiter + enclosure + field3
-            + enclosure;
+        ENCLOSURE + field1 + ENCLOSURE + DELIMITER + ENCLOSURE + field2 + ENCLOSURE + DELIMITER + ENCLOSURE + field3
+            + ENCLOSURE;
     expected = new String[] { field1, field2, field3 };
     doTest( content, expected );
   }
@@ -111,7 +96,7 @@ public class PDI_15270_Test extends CsvInputUnitTestBase {
     String field1 = "Martin";
     String field2 = "Luther";
     String field3 = "King, Jr.";
-    content = field1 + delimiter + field2 + delimiter + enclosure + field3 + enclosure;
+    content = field1 + DELIMITER + field2 + DELIMITER + ENCLOSURE + field3 + ENCLOSURE;
     expected = new String[] { field1, field2, field3 };
     doTest( content, expected );
   }
@@ -121,7 +106,7 @@ public class PDI_15270_Test extends CsvInputUnitTestBase {
     String field1 = "John \"Duke\"";
     String field2 = "";
     String field3 = "Wayne";
-    content = field1 + delimiter + field2 + delimiter + field3;
+    content = field1 + DELIMITER + field2 + DELIMITER + field3;
     expected = new String[] { field1, field2, field3 };
     doTest( content, expected );
   }
@@ -129,7 +114,7 @@ public class PDI_15270_Test extends CsvInputUnitTestBase {
   public void doTest( String content, String[] expected ) throws Exception {
     RowSet output = new QueueRowSet();
 
-    File tmp = createTestFile( encoding, content );
+    File tmp = createTestFile( ENCODING, content );
     try {
       CsvInputMeta meta = createMeta( tmp, createInputFileFields( "f1", "f2", "f3" ) );
       CsvInputData data = new CsvInputData();
@@ -154,17 +139,5 @@ public class PDI_15270_Test extends CsvInputUnitTestBase {
     assertEquals( expected[2], row[2] );
 
     assertNull( output.getRowImmediate() );
-  }
-
-  private CsvInputMeta createMeta( File file, TextFileInputField[] fields ) {
-    CsvInputMeta meta = new CsvInputMeta();
-    meta.setFilename( file.getAbsolutePath() );
-    meta.setDelimiter( delimiter );
-    meta.setEncoding( encoding );
-    meta.setEnclosure( enclosure );
-    meta.setBufferSize( "1024" );
-    meta.setInputFields( fields );
-    meta.setHeaderPresent( false );
-    return meta;
   }
 }

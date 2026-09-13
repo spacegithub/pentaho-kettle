@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.cluster.dialog;
 
@@ -96,6 +88,7 @@ public class ClusterSchemaDialog extends Dialog {
   private int middle;
   private int margin;
 
+  // also use this for variable replacement
   private ClusterSchema originalSchema;
   private boolean ok;
 
@@ -194,7 +187,7 @@ public class ClusterSchemaDialog extends Dialog {
     fdlPort.right = new FormAttachment( middle, 0 );
     wlPort.setLayoutData( fdlPort );
 
-    wPort = new TextVar( clusterSchema, shell, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
+    wPort = new TextVar( originalSchema, shell, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
     props.setLook( wPort );
     wPort.addModifyListener( lsMod );
     FormData fdPort = new FormData();
@@ -213,7 +206,7 @@ public class ClusterSchemaDialog extends Dialog {
     fdlBufferSize.right = new FormAttachment( middle, 0 );
     wlBufferSize.setLayoutData( fdlBufferSize );
 
-    wBufferSize = new TextVar( clusterSchema, shell, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
+    wBufferSize = new TextVar( originalSchema, shell, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
     props.setLook( wBufferSize );
     wBufferSize.addModifyListener( lsMod );
     FormData fdBufferSize = new FormData();
@@ -232,7 +225,7 @@ public class ClusterSchemaDialog extends Dialog {
     fdlFlushInterval.right = new FormAttachment( middle, 0 );
     wlFlushInterval.setLayoutData( fdlFlushInterval );
 
-    wFlushInterval = new TextVar( clusterSchema, shell, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
+    wFlushInterval = new TextVar( originalSchema, shell, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
     props.setLook( wFlushInterval );
     wFlushInterval.addModifyListener( lsMod );
     FormData fdFlushInterval = new FormData();
@@ -451,7 +444,9 @@ public class ClusterSchemaDialog extends Dialog {
   public void ok() {
     getInfo();
 
+    clusterSchema.setName( clusterSchema.getName().trim() );
     if ( !clusterSchema.getName().equals( originalSchema.getName() ) ) {
+      DialogUtils.removeMatchingObject( originalSchema.getName(), existingSchemas );
       if ( DialogUtils.objectWithTheSameNameExists( clusterSchema, existingSchemas ) ) {
         String title = BaseMessages.getString( PKG, "ClusterSchemaDialog.ClusterSchemaNameExists.Title" );
         String message =

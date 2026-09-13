@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.database;
 
@@ -36,7 +28,7 @@ import org.pentaho.di.core.row.ValueMetaInterface;
 public class HypersonicDatabaseMeta extends BaseDatabaseMeta implements DatabaseInterface {
   @Override
   public int[] getAccessTypeList() {
-    return new int[] { DatabaseMeta.TYPE_ACCESS_NATIVE, DatabaseMeta.TYPE_ACCESS_ODBC, DatabaseMeta.TYPE_ACCESS_JNDI };
+    return new int[] { DatabaseMeta.TYPE_ACCESS_NATIVE, DatabaseMeta.TYPE_ACCESS_JNDI };
   }
 
   @Override
@@ -49,26 +41,40 @@ public class HypersonicDatabaseMeta extends BaseDatabaseMeta implements Database
 
   @Override
   public String getDriverClass() {
-    if ( getAccessType() == DatabaseMeta.TYPE_ACCESS_ODBC ) {
-      return "sun.jdbc.odbc.JdbcOdbcDriver";
-    } else {
-      return "org.hsqldb.jdbcDriver";
-    }
+    return "org.hsqldb.jdbcDriver";
   }
 
   @Override
   public String getURL( String hostname, String port, String databaseName ) {
-    if ( getAccessType() == DatabaseMeta.TYPE_ACCESS_ODBC ) {
-      return "jdbc:odbc:" + databaseName;
+    if ( ( Utils.isEmpty( port ) || "-1".equals( port ) ) && Utils.isEmpty( hostname ) ) {
+      // When no port is specified, or port is 0 support local/memory
+      // HSQLDB databases.
+      return "jdbc:hsqldb:" + databaseName;
     } else {
-      if ( ( Utils.isEmpty( port ) || "-1".equals( port ) ) && Utils.isEmpty( hostname ) ) {
-        // When no port is specified, or port is 0 support local/memory
-        // HSQLDB databases.
-        return "jdbc:hsqldb:" + databaseName;
-      } else {
-        return "jdbc:hsqldb:hsql://" + hostname + ":" + port + "/" + databaseName;
-      }
+      return "jdbc:hsqldb:hsql://" + hostname + ":" + port + "/" + databaseName;
     }
+  }
+
+  /**
+   * @return the SQL to retrieve the list of schemas.
+   *
+   *    Since HSQLDB 2.7.x, INFORMATION_SCHEMA.SCHEMATA (and therefore the plain JDBC
+   *    DatabaseMetaData#getSchemas() call) only returns schemas that the connecting user has direct
+   *    authorization over (schema ownership or DBA role membership). A user that was only granted SELECT
+   *    on individual tables within a schema - but was never granted any privilege on the schema itself -
+   *    will no longer see that schema, even though the tables inside it are fully visible. This is a
+   *    behavioral change compared to older HSQLDB versions (e.g. 2.3.2), where such a user could still
+   *    see the schema.
+   *
+   *    To keep schema visibility consistent regardless of the privileges the connecting user was
+   *    granted, we union the schemas visible through INFORMATION_SCHEMA.SCHEMATA (e.g. for DBA users)
+   *    with the schemas that can be derived from INFORMATION_SCHEMA.TABLES (visible to any user that has
+   *    at least one table-level grant in that schema).
+   */
+  @Override
+  public String getSQLListOfSchemas() {
+    return "SELECT SCHEMA_NAME AS name FROM INFORMATION_SCHEMA.SCHEMATA "
+      + "UNION SELECT DISTINCT TABLE_SCHEMA AS name FROM INFORMATION_SCHEMA.TABLES";
   }
 
   /**
@@ -88,7 +94,7 @@ public class HypersonicDatabaseMeta extends BaseDatabaseMeta implements Database
    *          The column defined as a value
    * @param tk
    *          the name of the technical key field
-   * @param use_autoinc
+   * @param useAutoinc
    *          whether or not this field uses auto increment
    * @param pk
    *          the name of the primary key field
@@ -98,9 +104,9 @@ public class HypersonicDatabaseMeta extends BaseDatabaseMeta implements Database
    *
    */
   @Override
-  public String getAddColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  public String getAddColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
       String pk, boolean semicolon ) {
-    return "ALTER TABLE " + tablename + " ADD " + getFieldDefinition( v, tk, pk, use_autoinc, true, false );
+    return "ALTER TABLE " + tablename + " ADD " + getFieldDefinition( v, tk, pk, useAutoinc, true, false );
   }
 
   /**
@@ -112,7 +118,7 @@ public class HypersonicDatabaseMeta extends BaseDatabaseMeta implements Database
    *          The column defined as a value
    * @param tk
    *          the name of the technical key field
-   * @param use_autoinc
+   * @param useAutoinc
    *          whether or not this field uses auto increment
    * @param pk
    *          the name of the primary key field
@@ -121,21 +127,21 @@ public class HypersonicDatabaseMeta extends BaseDatabaseMeta implements Database
    * @return the SQL statement to modify a column in the specified table
    */
   @Override
-  public String getModifyColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  public String getModifyColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
       String pk, boolean semicolon ) {
-    return "ALTER TABLE " + tablename + " ALTER COLUMN " + getFieldDefinition( v, tk, pk, use_autoinc, true, false );
+    return "ALTER TABLE " + tablename + " ALTER COLUMN " + getFieldDefinition( v, tk, pk, useAutoinc, true, false );
   }
 
   @Override
-  public String getFieldDefinition( ValueMetaInterface v, String tk, String pk, boolean use_autoinc,
-      boolean add_fieldname, boolean add_cr ) {
+  public String getFieldDefinition( ValueMetaInterface v, String tk, String pk, boolean useAutoinc,
+                                    boolean addFieldName, boolean addCr ) {
     StringBuilder retval = new StringBuilder( 128 );
 
     String fieldname = v.getName();
     int length = v.getLength();
     int precision = v.getPrecision();
 
-    if ( add_fieldname ) {
+    if ( addFieldName ) {
       retval.append( fieldname ).append( ' ' );
     }
 
@@ -198,7 +204,7 @@ public class HypersonicDatabaseMeta extends BaseDatabaseMeta implements Database
         break;
     }
 
-    if ( add_cr ) {
+    if ( addCr ) {
       retval.append( Const.CR );
     }
 

@@ -1,39 +1,32 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.www.jaxrs;
 
 import java.util.Map;
 import java.util.UUID;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.PUT;
-import javax.ws.rs.Path;
-import javax.ws.rs.PathParam;
-import javax.ws.rs.Produces;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PUT;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 
 import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.logging.KettleLogStore;
 import org.pentaho.di.core.logging.LogChannelInterface;
 import org.pentaho.di.core.logging.LoggingObjectType;
@@ -214,6 +207,7 @@ public class TransformationResource {
     try {
       transConfiguration = TransConfiguration.fromXML( xml.toString() );
       TransMeta transMeta = transConfiguration.getTransMeta();
+      clearBowlCache( transMeta.getBowl() );
       TransExecutionConfiguration transExecutionConfiguration =
         transConfiguration.getTransExecutionConfiguration();
       transMeta.setLogLevel( transExecutionConfiguration.getLogLevel() );
@@ -226,9 +220,8 @@ public class TransformationResource {
       // Also copy the parameters over...
       //
       Map<String, String> params = transExecutionConfiguration.getParams();
-      for ( String param : params.keySet() ) {
-        String value = params.get( param );
-        transMeta.setParameterValue( param, value );
+      for ( Map.Entry<String, String> entry : params.entrySet() ) {
+        transMeta.setParameterValue( entry.getKey(), entry.getValue() );
       }
 
       // If there was a repository, we know about it at this point in time.
@@ -269,6 +262,12 @@ public class TransformationResource {
       e.printStackTrace();
     }
     return null;
+  }
+
+  private void clearBowlCache( Bowl bowl ) {
+    if ( bowl != null ) {
+      bowl.clearCache();
+    }
   }
 
 }

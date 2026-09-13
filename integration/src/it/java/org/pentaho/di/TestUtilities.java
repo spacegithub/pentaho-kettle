@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di;
 
@@ -165,7 +157,7 @@ public class TestUtilities {
    * @param registry
    * @return StepMeta
    */
-  public static synchronized StepMeta createInjectorStep( String name, PluginRegistry pluginRegistry ) {
+  public static StepMeta createInjectorStep( String name, PluginRegistry pluginRegistry ) {
     // create an injector step...
     InjectorMeta injectorMeta = new InjectorMeta();
 
@@ -183,7 +175,7 @@ public class TestUtilities {
    * @return
    * @throws IOException
    */
-  public static synchronized String createEmptyTempFile( String fileName ) throws IOException {
+  public static String createEmptyTempFile( String fileName ) throws IOException {
     return createEmptyTempFile( fileName, null );
   }
 
@@ -195,7 +187,7 @@ public class TestUtilities {
    * @return
    * @throws IOException
    */
-  public static synchronized String createEmptyTempFile( String fileName, String suffix ) throws IOException {
+  public static String createEmptyTempFile( String fileName, String suffix ) throws IOException {
     File tempFile = File.createTempFile( fileName, ( Utils.isEmpty( suffix ) ? "" : suffix ) );
     tempFile.deleteOnExit();
     return tempFile.getAbsolutePath();

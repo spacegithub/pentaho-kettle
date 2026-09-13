@@ -1,32 +1,25 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.concatfields;
 
 import java.io.UnsupportedEncodingException;
-
+import org.pentaho.di.core.Const;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.core.row.RowDataUtil;
+import org.pentaho.di.core.row.value.ValueMetaBase;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.Trans;
@@ -35,6 +28,7 @@ import org.pentaho.di.trans.step.StepDataInterface;
 import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepMetaInterface;
+import org.pentaho.di.trans.steps.textfileoutput.TextFileField;
 import org.pentaho.di.trans.steps.textfileoutput.TextFileOutput;
 
 /*
@@ -68,14 +62,17 @@ public class ConcatFields extends TextFileOutput implements StepInterface {
     if ( r != null && first ) {
       first = false;
 
-      data.outputRowMeta = getInputRowMeta().clone();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      data.inputRowMeta = getInputRowMeta();
+      data.outputRowMeta = data.inputRowMeta.clone();
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
       // the field precisions and lengths are altered! see TextFileOutputMeta.getFields().
       // otherwise trim(), padding etc. will not work
       data.inputRowMetaModified = getInputRowMeta().clone();
       meta
-        .getFieldsModifyInput( data.inputRowMetaModified, getStepname(), null, null, this, repository, metaStore );
+        .getFieldsModifyInput( getTransMeta().getBowl(), data.inputRowMetaModified, getStepname(), null, null,
+           this, repository, metaStore );
 
       data.posTargetField = data.outputRowMeta.indexOfValue( meta.getTargetFieldName() );
       if ( data.posTargetField < 0 ) {
@@ -91,6 +88,8 @@ public class ConcatFields extends TextFileOutput implements StepInterface {
             PKG, "ConcatFields.Error.FieldNotFoundInputStream", "" + meta.getOutputFields()[ i ].getName() ) );
         }
       }
+
+      meta.calcMetaWithFieldOptions( data );
 
       // prepare for fast data dump (StringBuilder size)
       data.targetFieldLengthFastDataDump = meta.getTargetFieldLength();
@@ -108,10 +107,13 @@ public class ConcatFields extends TextFileOutput implements StepInterface {
 
     if ( ( r == null && data.outputRowMeta != null && meta.isFooterEnabled() )
       || ( r != null && getLinesWritten() > 0 && meta.getSplitEvery() > 0
-      && ( ( getLinesWritten() + 1 ) % meta.getSplitEvery() ) == 0 ) ) {
+      && ( ( getLinesWritten() + 1 - data.headerOffsetForSplitRows ) % meta.getSplitEvery() ) == 0 ) ) {
       if ( data.outputRowMeta != null ) {
         if ( meta.isFooterEnabled() ) {
           writeHeader();
+          if ( isHeaderOffsetForSplitRowsAllowed() ) {
+            data.headerOffsetForSplitRows++;
+          }
           // add an empty line for the header
           Object[] row = new Object[ data.outputRowMeta.size() ];
           putRowFromStream( row );
@@ -302,6 +304,10 @@ public class ConcatFields extends TextFileOutput implements StepInterface {
 
     initStringDataFields();
 
+    if ( isHeaderOffsetForSplitRowsAllowed() ) {
+      data.headerOffsetForSplitRows = 1;
+    }
+
     boolean rv = super.init( smi, sdi ); // calls also initBinaryDataFields();
     data.binaryNewline = new byte[] {}; // tweak the CR/LF handling
     return rv;
@@ -354,6 +360,16 @@ public class ConcatFields extends TextFileOutput implements StepInterface {
     return retval;
   }
 
+  private boolean isHeaderOffsetForSplitRowsAllowed() {
+    //Check if retro compatibility is set or not, to guaranty compatibility with older versions
+    //If this variable is not set, then data.headerOffsetForSplitRows will always be 0
+    //If this variable is set to Y, then data.headerOffsetForSplitRows will increment on every Split Rows, and
+    //this value is used to correct the offset in populating the header data at right position
+    String val = getVariable( Const.KETTLE_COMPATIBILITY_CONCAT_FIELDS_SPLIT_ROWS_HEADER_OFFSET, "N" );
+
+    return Boolean.TRUE.equals( ValueMetaBase.convertStringToBoolean( Const.NVL( val, "N" ) ) );
+  }
+
   @Override
   public void dispose( StepMetaInterface smi, StepDataInterface sdi ) {
     if ( data.oneFileOpened ) {
@@ -376,5 +392,6 @@ public class ConcatFields extends TextFileOutput implements StepInterface {
     // sdi.setStatus(StepExecutionStatus.STATUS_DISPOSED);
     // but we try to avoid
   }
+
 
 }

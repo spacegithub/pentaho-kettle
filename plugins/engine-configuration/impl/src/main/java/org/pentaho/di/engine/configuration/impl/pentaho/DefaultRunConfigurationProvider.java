@@ -1,26 +1,16 @@
-/*
- * *****************************************************************************
+/*! ******************************************************************************
  *
- *  Pentaho Data Integration
+ * Pentaho
  *
- *  Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *  *******************************************************************************
- *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use
- *  this file except in compliance with the License. You may obtain a copy of the
- *  License at
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- * *****************************************************************************
- *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 
 package org.pentaho.di.engine.configuration.impl.pentaho;
 
@@ -28,12 +18,12 @@ import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.engine.configuration.api.RunConfiguration;
 import org.pentaho.di.engine.configuration.api.RunConfigurationExecutor;
 import org.pentaho.di.engine.configuration.api.RunConfigurationProvider;
-import org.pentaho.di.engine.configuration.impl.MetaStoreRunConfigurationFactory;
+import org.pentaho.di.engine.configuration.api.CheckedMetaStoreSupplier;
+import org.pentaho.di.engine.configuration.api.MetaStoreRunConfigurationFactory;
 import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.metastore.api.exceptions.MetaStoreException;
 import org.pentaho.metastore.persist.MetaStoreFactory;
-import org.pentaho.osgi.metastore.locator.api.MetastoreLocator;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,8 +36,7 @@ import java.util.List;
 public class DefaultRunConfigurationProvider extends MetaStoreRunConfigurationFactory
   implements RunConfigurationProvider {
 
-  public static final String DEFAULT_CONFIG_NAME = "Pentaho local";
-  private static String TYPE = "Pentaho";
+  private static final String TYPE = "Pentaho";
   private List<String> supported = Arrays.asList( TransMeta.XML_TAG, JobMeta.XML_TAG );
 
   private static DefaultRunConfiguration defaultRunConfiguration = new DefaultRunConfiguration();
@@ -55,15 +44,14 @@ public class DefaultRunConfigurationProvider extends MetaStoreRunConfigurationFa
   private DefaultRunConfigurationExecutor defaultRunConfigurationExecutor;
 
   static {
-    defaultRunConfiguration.setName( DEFAULT_CONFIG_NAME );
+    defaultRunConfiguration.setName( RunConfigurationProvider.DEFAULT_CONFIG_NAME );
     defaultRunConfiguration.setReadOnly( true );
     defaultRunConfiguration.setLocal( true );
   }
 
-  public DefaultRunConfigurationProvider( MetastoreLocator metastoreLocator,
-                                          DefaultRunConfigurationExecutor defaultRunConfigurationExecutor ) {
-    super( metastoreLocator );
-    this.defaultRunConfigurationExecutor = defaultRunConfigurationExecutor;
+  public DefaultRunConfigurationProvider( CheckedMetaStoreSupplier metastoreSupplier ) {
+    super( metastoreSupplier );
+    this.defaultRunConfigurationExecutor = DefaultRunConfigurationExecutor.getInstance();
   }
 
   @Override public RunConfiguration getConfiguration() {
@@ -87,7 +75,7 @@ public class DefaultRunConfigurationProvider extends MetaStoreRunConfigurationFa
   }
 
   @Override public RunConfiguration load( String name ) {
-    if ( Utils.isEmpty( name ) || name.equals( DEFAULT_CONFIG_NAME ) ) {
+    if ( Utils.isEmpty( name ) || name.equals( RunConfigurationProvider.DEFAULT_CONFIG_NAME ) ) {
       return defaultRunConfiguration;
     }
     return super.load( name );

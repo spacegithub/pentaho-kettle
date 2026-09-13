@@ -1,44 +1,37 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
 
-package org.pentaho.di.trans.steps.salesforceinput;
 
-import java.util.List;
+package org.pentaho.di.trans.steps.salesforceinput;
 
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.annotations.Step;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.core.exception.KettleXMLException;
+import org.pentaho.di.core.injection.Injection;
+import org.pentaho.di.core.injection.InjectionDeep;
+import org.pentaho.di.core.injection.InjectionSupported;
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaDate;
 import org.pentaho.di.core.row.value.ValueMetaFactory;
 import org.pentaho.di.core.row.value.ValueMetaInteger;
 import org.pentaho.di.core.row.value.ValueMetaString;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.i18n.BaseMessages;
@@ -47,12 +40,15 @@ import org.pentaho.di.repository.Repository;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.StepDataInterface;
+import org.pentaho.di.trans.step.StepHelperInterface;
 import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.steps.salesforce.SalesforceConnectionUtils;
 import org.pentaho.di.trans.steps.salesforce.SalesforceStepMeta;
 import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
+
+import java.util.List;
 
 @Step(
     id = "SalesforceInput",
@@ -61,72 +57,93 @@ import org.w3c.dom.Node;
     description = "SalesforceInput.TypeTooltipDesc.SalesforceInput",
     categoryDescription = "i18n:org.pentaho.di.trans.step:BaseStep.Category.Input",
     image = "SFI.svg",
-    documentationUrl = "Products/Data_Integration/Transformation_Step_Reference/Salesforce_Input" )
+    documentationUrl = "pdi-transformation-steps-reference-overview/salesforce-input" )
+@InjectionSupported( localizationPrefix = "SalesforceInputMeta.Injection.", groups = { "FIELDS" } )
 public class SalesforceInputMeta extends SalesforceStepMeta {
   public static String DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
 
   private static Class<?> PKG = SalesforceInputMeta.class; // for i18n purposes, needed by Translator2!!
 
   /** Flag indicating that we should include the generated SQL in the output */
+  @Injection( name = "INCLUDE_SQL_IN_OUTPUT" )
   private boolean includeSQL;
 
   /** The name of the field in the output containing the generated SQL */
+  @Injection( name = "SQL_FIELDNAME" )
   private String sqlField;
 
   /** Flag indicating that we should include the server Timestamp in the output */
+  @Injection( name = "INCLUDE_TIMESTAMP_IN_OUTPUT" )
   private boolean includeTimestamp;
 
   /** The name of the field in the output containing the server Timestamp */
+  @Injection( name = "TIMESTAMP_FIELDNAME" )
   private String timestampField;
 
   /** Flag indicating that we should include the filename in the output */
+  @Injection( name = "INCLUDE_URL_IN_OUTPUT" )
   private boolean includeTargetURL;
 
   /** The name of the field in the output containing the filename */
+  @Injection( name = "URL_FIELDNAME" )
   private String targetURLField;
 
   /** Flag indicating that we should include the module in the output */
+  @Injection( name = "INCLUDE_MODULE_IN_OUTPUT" )
   private boolean includeModule;
 
   /** The name of the field in the output containing the module */
+  @Injection( name = "MODULE_FIELDNAME" )
   private String moduleField;
 
   /** Flag indicating that a deletion date field should be included in the output */
+  @Injection( name = "INCLUDE_DELETION_DATE_IN_OUTPUT" )
   private boolean includeDeletionDate;
 
   /** The name of the field in the output containing the deletion Date */
+  @Injection( name = "DELETION_DATE_FIELDNAME" )
   private String deletionDateField;
 
   /** Flag indicating that a row number field should be included in the output */
+  @Injection( name = "INCLUDE_ROWNUM_IN_OUTPUT" )
   private boolean includeRowNumber;
 
   /** The name of the field in the output containing the row number */
+  @Injection( name = "ROWNUM_FIELDNAME" )
   private String rowNumberField;
 
   /** The condition */
+  @Injection( name = "QUERY_CONDITION" )
   private String condition;
 
   /** The maximum number or lines to read */
+  @Injection( name = "LIMIT" )
   private String rowLimit;
 
   /** The fields to return... */
+  @InjectionDeep
   private SalesforceInputField[] inputFields;
 
   /** option: specify query **/
+  @Injection( name = "USE_SPECIFIED_QUERY" )
   private boolean specifyQuery;
 
   // ** query entered by user **/
+  @Injection( name = "SPECIFY_QUERY" )
   private String query;
 
   private int nrFields;
 
+  @Injection( name = "END_DATE" )
   private String readTo;
+  @Injection( name = "START_DATE" )
   private String readFrom;
 
   /** records filter */
   private int recordsFilter;
 
   /** Query all records including deleted ones **/
+  @Injection( name = "QUERY_ALL" )
   private boolean queryAll;
 
   public SalesforceInputMeta() {
@@ -189,8 +206,8 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
    * @param queryAll
    *          The queryAll to set.
    */
-  public void setQueryAll( boolean value ) {
-    this.queryAll = value;
+  public void setQueryAll( boolean queryAll ) {
+    this.queryAll = queryAll;
   }
 
   /**
@@ -209,11 +226,11 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
   }
 
   /**
-   * @param TargetURLField
-   *          The TargetURLField to set.
+   * @param targetURLField
+   *          The targetURLField to set.
    */
-  public void setTargetURLField( String TargetURLField ) {
-    this.targetURLField = TargetURLField;
+  public void setTargetURLField( String targetURLField ) {
+    this.targetURLField = targetURLField;
   }
 
   /**
@@ -233,11 +250,11 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
   }
 
   /**
-   * @param ModuleField
-   *          The ModuleField to set.
+   * @param moduleField
+   *          The moduleField to set.
    */
-  public void setModuleField( String module_field ) {
-    this.moduleField = module_field;
+  public void setModuleField( String moduleField ) {
+    this.moduleField = moduleField;
   }
 
   public int getRecordsFilter() {
@@ -246,6 +263,11 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
 
   public void setRecordsFilter( int recordsFilter ) {
     this.recordsFilter = recordsFilter;
+  }
+
+  @Injection( name = "RETRIEVE" )
+  public void setRecordsFilterDesc( String recordsFilterDesc ) {
+    this.recordsFilter = SalesforceConnectionUtils.getRecordsFilterByDesc( recordsFilterDesc );
   }
 
   /**
@@ -289,7 +311,7 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
    * @return Returns the includeModule.
    */
   public boolean includeModule() {
-    return includeTargetURL;
+    return includeModule;
   }
 
   /**
@@ -304,8 +326,8 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
    * @param includeModule
    *          The includeModule to set.
    */
-  public void setIncludeModule( boolean includemodule ) {
-    this.includeModule = includemodule;
+  public void setIncludeModule( boolean includeModule ) {
+    this.includeModule = includeModule;
   }
 
   /**
@@ -441,11 +463,13 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
     this.rowNumberField = rowNumberField;
   }
 
+  @Override
   public void loadXML( Node stepnode, List<DatabaseMeta> databases, IMetaStore metaStore ) throws KettleXMLException {
     super.loadXML( stepnode, databases, metaStore );
     readData( stepnode );
   }
 
+  @Override
   public Object clone() {
     SalesforceInputMeta retval = (SalesforceInputMeta) super.clone();
 
@@ -462,6 +486,7 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
     return retval;
   }
 
+  @Override
   public String getXML() {
     StringBuilder retval = new StringBuilder( super.getXML() );
     retval.append( "    " ).append( XMLHandler.addTagValue( "condition", getCondition() ) );
@@ -547,6 +572,7 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
     return nrFields;
   }
 
+  @Override
   public void setDefault() {
     super.setDefault();
     setIncludeDeletionDate( false );
@@ -573,7 +599,8 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
     setRowLimit( "0" );
   }
 
-  public void getFields( RowMetaInterface r, String name, RowMetaInterface[] info, StepMeta nextStep,
+  @Override
+  public void getFields( Bowl bowl, RowMetaInterface r, String name, RowMetaInterface[] info, StepMeta nextStep,
     VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
     int i;
     for ( i = 0; i < inputFields.length; i++ ) {
@@ -641,41 +668,41 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
 
   }
 
-  public void readRep( Repository rep, IMetaStore metaStore, ObjectId id_step, List<DatabaseMeta> databases ) throws KettleException {
-    super.readRep( rep, metaStore, id_step, databases );
+  public void readRep( Repository rep, IMetaStore metaStore, ObjectId idStep, List<DatabaseMeta> databases ) throws KettleException {
+    super.readRep( rep, metaStore, idStep, databases );
     try {
       // H.kawaguchi Add 19-01-2009
-      setCondition( rep.getStepAttributeString( id_step, "condition" ) );
+      setCondition( rep.getStepAttributeString( idStep, "condition" ) );
       // H.kawaguchi Add 19-01-2009
-      setQuery( rep.getStepAttributeString( id_step, "query" ) );
-      setSpecifyQuery( rep.getStepAttributeBoolean( id_step, "specifyQuery" ) );
-      setIncludeTargetURL( rep.getStepAttributeBoolean( id_step, "include_targeturl" ) );
-      setTargetURLField( rep.getStepAttributeString( id_step, "targeturl_field" ) );
-      setIncludeModule( rep.getStepAttributeBoolean( id_step, "include_module" ) );
-      setModuleField( rep.getStepAttributeString( id_step, "module_field" ) );
-      setIncludeRowNumber( rep.getStepAttributeBoolean( id_step, "include_rownum" ) );
-      setIncludeDeletionDate( rep.getStepAttributeBoolean( id_step, "include_deletion_date" ) );
-      setRowNumberField( rep.getStepAttributeString( id_step, "rownum_field" ) );
-      setDeletionDateField( rep.getStepAttributeString( id_step, "deletion_date_field" ) );
-      setIncludeSQL( rep.getStepAttributeBoolean( id_step, "include_sql" ) );
-      setSQLField( rep.getStepAttributeString( id_step, "sql_field" ) );
-      setIncludeTimestamp( rep.getStepAttributeBoolean( id_step, "include_Timestamp" ) );
-      setTimestampField( rep.getStepAttributeString( id_step, "timestamp_field" ) );
-      setRowLimit( rep.getStepAttributeString( id_step, "limit" ) );
-      setReadFrom( rep.getStepAttributeString( id_step, "read_from" ) );
-      setReadTo( rep.getStepAttributeString( id_step, "read_to" ) );
+      setQuery( rep.getStepAttributeString( idStep, "query" ) );
+      setSpecifyQuery( rep.getStepAttributeBoolean( idStep, "specifyQuery" ) );
+      setIncludeTargetURL( rep.getStepAttributeBoolean( idStep, "include_targeturl" ) );
+      setTargetURLField( rep.getStepAttributeString( idStep, "targeturl_field" ) );
+      setIncludeModule( rep.getStepAttributeBoolean( idStep, "include_module" ) );
+      setModuleField( rep.getStepAttributeString( idStep, "module_field" ) );
+      setIncludeRowNumber( rep.getStepAttributeBoolean( idStep, "include_rownum" ) );
+      setIncludeDeletionDate( rep.getStepAttributeBoolean( idStep, "include_deletion_date" ) );
+      setRowNumberField( rep.getStepAttributeString( idStep, "rownum_field" ) );
+      setDeletionDateField( rep.getStepAttributeString( idStep, "deletion_date_field" ) );
+      setIncludeSQL( rep.getStepAttributeBoolean( idStep, "include_sql" ) );
+      setSQLField( rep.getStepAttributeString( idStep, "sql_field" ) );
+      setIncludeTimestamp( rep.getStepAttributeBoolean( idStep, "include_Timestamp" ) );
+      setTimestampField( rep.getStepAttributeString( idStep, "timestamp_field" ) );
+      setRowLimit( rep.getStepAttributeString( idStep, "limit" ) );
+      setReadFrom( rep.getStepAttributeString( idStep, "read_from" ) );
+      setReadTo( rep.getStepAttributeString( idStep, "read_to" ) );
       setRecordsFilter(
         SalesforceConnectionUtils.getRecordsFilterByCode( Const.NVL( rep.getStepAttributeString(
-          id_step, "records_filter" ), "" ) ) );
-      setQueryAll( rep.getStepAttributeBoolean( id_step, "queryAll" ) );
+          idStep, "records_filter" ), "" ) ) );
+      setQueryAll( rep.getStepAttributeBoolean( idStep, "queryAll" ) );
 
-      int nrFields = rep.countNrStepAttributes( id_step, "field_name" );
+      int nrFields = rep.countNrStepAttributes( idStep, "field_name" );
 
       allocate( nrFields );
 
       for ( int i = 0; i < nrFields; i++ ) {
         SalesforceInputField field = new SalesforceInputField();
-        field.readRep( rep, metaStore, id_step, i );
+        field.readRep( rep, metaStore, idStep, i );
         inputFields[i] = field;
       }
     } catch ( Exception e ) {
@@ -684,43 +711,43 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
     }
   }
 
-  public void saveRep( Repository rep, IMetaStore metaStore, ObjectId id_transformation, ObjectId id_step ) throws KettleException {
-    super.saveRep( rep, metaStore, id_transformation, id_step );
+  public void saveRep( Repository rep, IMetaStore metaStore, ObjectId idTransformation, ObjectId idStep ) throws KettleException {
+    super.saveRep( rep, metaStore, idTransformation, idStep );
     try {
       // H.kawaguchi Add 19-01-2009
-      rep.saveStepAttribute( id_transformation, id_step, "condition", getCondition() );
+      rep.saveStepAttribute( idTransformation, idStep, "condition", getCondition() );
       // H.kawaguchi Add 19-01-2009
-      rep.saveStepAttribute( id_transformation, id_step, "query", getQuery() );
-      rep.saveStepAttribute( id_transformation, id_step, "specifyQuery", isSpecifyQuery() );
+      rep.saveStepAttribute( idTransformation, idStep, "query", getQuery() );
+      rep.saveStepAttribute( idTransformation, idStep, "specifyQuery", isSpecifyQuery() );
 
-      rep.saveStepAttribute( id_transformation, id_step, "include_targeturl", includeTargetURL() );
-      rep.saveStepAttribute( id_transformation, id_step, "targeturl_field", getTargetURLField() );
-      rep.saveStepAttribute( id_transformation, id_step, "include_module", includeModule() );
-      rep.saveStepAttribute( id_transformation, id_step, "module_field", getModuleField() );
-      rep.saveStepAttribute( id_transformation, id_step, "include_rownum", includeRowNumber() );
-      rep.saveStepAttribute( id_transformation, id_step, "include_deletion_date", includeDeletionDate() );
+      rep.saveStepAttribute( idTransformation, idStep, "include_targeturl", includeTargetURL() );
+      rep.saveStepAttribute( idTransformation, idStep, "targeturl_field", getTargetURLField() );
+      rep.saveStepAttribute( idTransformation, idStep, "include_module", includeModule() );
+      rep.saveStepAttribute( idTransformation, idStep, "module_field", getModuleField() );
+      rep.saveStepAttribute( idTransformation, idStep, "include_rownum", includeRowNumber() );
+      rep.saveStepAttribute( idTransformation, idStep, "include_deletion_date", includeDeletionDate() );
 
-      rep.saveStepAttribute( id_transformation, id_step, "include_sql", includeSQL() );
-      rep.saveStepAttribute( id_transformation, id_step, "sql_field", getSQLField() );
-      rep.saveStepAttribute( id_transformation, id_step, "include_Timestamp", includeTimestamp() );
-      rep.saveStepAttribute( id_transformation, id_step, "timestamp_field", getTimestampField() );
-      rep.saveStepAttribute( id_transformation, id_step, "rownum_field", getRowNumberField() );
-      rep.saveStepAttribute( id_transformation, id_step, "deletion_date_field", getDeletionDateField() );
+      rep.saveStepAttribute( idTransformation, idStep, "include_sql", includeSQL() );
+      rep.saveStepAttribute( idTransformation, idStep, "sql_field", getSQLField() );
+      rep.saveStepAttribute( idTransformation, idStep, "include_Timestamp", includeTimestamp() );
+      rep.saveStepAttribute( idTransformation, idStep, "timestamp_field", getTimestampField() );
+      rep.saveStepAttribute( idTransformation, idStep, "rownum_field", getRowNumberField() );
+      rep.saveStepAttribute( idTransformation, idStep, "deletion_date_field", getDeletionDateField() );
 
-      rep.saveStepAttribute( id_transformation, id_step, "limit", getRowLimit() );
-      rep.saveStepAttribute( id_transformation, id_step, "read_from", getReadFrom() );
-      rep.saveStepAttribute( id_transformation, id_step, "read_to", getReadTo() );
-      rep.saveStepAttribute( id_transformation, id_step, "records_filter", SalesforceConnectionUtils
+      rep.saveStepAttribute( idTransformation, idStep, "limit", getRowLimit() );
+      rep.saveStepAttribute( idTransformation, idStep, "read_from", getReadFrom() );
+      rep.saveStepAttribute( idTransformation, idStep, "read_to", getReadTo() );
+      rep.saveStepAttribute( idTransformation, idStep, "records_filter", SalesforceConnectionUtils
         .getRecordsFilterCode( getRecordsFilter() ) );
-      rep.saveStepAttribute( id_transformation, id_step, "queryAll", isQueryAll() );
+      rep.saveStepAttribute( idTransformation, idStep, "queryAll", isQueryAll() );
 
       for ( int i = 0; i < inputFields.length; i++ ) {
         SalesforceInputField field = inputFields[i];
-        field.saveRep( rep, metaStore, id_transformation, id_step, i );
+        field.saveRep( rep, metaStore, idTransformation, idStep, i );
       }
     } catch ( Exception e ) {
       throw new KettleException( BaseMessages.getString(
-        PKG, "SalesforceInputMeta.Exception.ErrorSavingToRepository", "" + id_step ), e );
+        PKG, "SalesforceInputMeta.Exception.ErrorSavingToRepository", "" + idStep ), e );
     }
   }
 
@@ -800,5 +827,10 @@ public class SalesforceInputMeta extends SalesforceStepMeta {
 
   public StepDataInterface getStepData() {
     return new SalesforceInputData();
+  }
+
+  @Override
+  public StepHelperInterface getStepHelperInterface() {
+    return new SalesforceInputHelper( this );
   }
 }

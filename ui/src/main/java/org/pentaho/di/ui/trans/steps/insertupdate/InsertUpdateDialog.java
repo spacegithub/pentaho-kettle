@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.insertupdate;
 
@@ -300,27 +292,27 @@ public class InsertUpdateDialog extends BaseStepDialog implements StepDialogInte
     wlKey.setLayoutData( fdlKey );
 
     int nrKeyCols = 4;
-    int nrKeyRows = ( input.getKeyStream() != null ? input.getKeyStream().length : 1 );
+    int nrKeyRows = ( input.getKeyFields() != null ? input.getKeyFields().length : 1 );
 
-    ciKey = new ColumnInfo[nrKeyCols];
-    ciKey[0] =
+    ciKey = new ColumnInfo[ nrKeyCols ];
+    ciKey[ 0 ] =
       new ColumnInfo(
         BaseMessages.getString( PKG, "InsertUpdateDialog.ColumnInfo.TableField" ),
         ColumnInfo.COLUMN_TYPE_CCOMBO, new String[] { "" }, false );
-    ciKey[1] =
+    ciKey[ 1 ] =
       new ColumnInfo(
         BaseMessages.getString( PKG, "InsertUpdateDialog.ColumnInfo.Comparator" ),
         ColumnInfo.COLUMN_TYPE_CCOMBO, new String[] { "=", "= ~NULL", "<>", "<", "<=",
           ">", ">=", "LIKE", "BETWEEN", "IS NULL", "IS NOT NULL" } );
-    ciKey[2] =
+    ciKey[ 2 ] =
       new ColumnInfo(
         BaseMessages.getString( PKG, "InsertUpdateDialog.ColumnInfo.StreamField1" ),
         ColumnInfo.COLUMN_TYPE_CCOMBO, new String[] { "" }, false );
-    ciKey[3] =
+    ciKey[ 3 ] =
       new ColumnInfo(
         BaseMessages.getString( PKG, "InsertUpdateDialog.ColumnInfo.StreamField2" ),
         ColumnInfo.COLUMN_TYPE_CCOMBO, new String[] { "" }, false );
-    tableFieldColumns.add( ciKey[0] );
+    tableFieldColumns.add( ciKey[ 0 ] );
     wKey =
       new TableView(
         transMeta, shell, SWT.BORDER | SWT.FULL_SELECTION | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL, ciKey,
@@ -360,22 +352,22 @@ public class InsertUpdateDialog extends BaseStepDialog implements StepDialogInte
     wlReturn.setLayoutData( fdlReturn );
 
     int UpInsCols = 3;
-    int UpInsRows = ( input.getUpdateLookup() != null ? input.getUpdateLookup().length : 1 );
+    int UpInsRows = ( input.getUpdateFields() != null ? input.getUpdateFields().length : 1 );
 
-    ciReturn = new ColumnInfo[UpInsCols];
-    ciReturn[0] =
+    ciReturn = new ColumnInfo[ UpInsCols ];
+    ciReturn[ 0 ] =
       new ColumnInfo(
         BaseMessages.getString( PKG, "InsertUpdateDialog.ColumnInfo.TableField" ),
         ColumnInfo.COLUMN_TYPE_CCOMBO, new String[] { "" }, false );
-    ciReturn[1] =
+    ciReturn[ 1 ] =
       new ColumnInfo(
         BaseMessages.getString( PKG, "InsertUpdateDialog.ColumnInfo.StreamField" ),
         ColumnInfo.COLUMN_TYPE_CCOMBO, new String[] { "" }, false );
-    ciReturn[2] =
+    ciReturn[ 2 ] =
       new ColumnInfo(
         BaseMessages.getString( PKG, "InsertUpdateDialog.ColumnInfo.Update" ), ColumnInfo.COLUMN_TYPE_CCOMBO,
         new String[] { "Y", "N" } );
-    tableFieldColumns.add( ciReturn[0] );
+    tableFieldColumns.add( ciReturn[ 0 ] );
     wReturn =
       new TableView(
         transMeta, shell, SWT.BORDER | SWT.FULL_SELECTION | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL, ciReturn,
@@ -522,13 +514,13 @@ public class InsertUpdateDialog extends BaseStepDialog implements StepDialogInte
     Set<String> keySet = fields.keySet();
     List<String> entries = new ArrayList<String>( keySet );
 
-    String[] fieldNames = entries.toArray( new String[entries.size()] );
+    String[] fieldNames = entries.toArray( new String[ entries.size() ] );
     Const.sortStrings( fieldNames );
     // Key fields
-    ciKey[2].setComboValues( fieldNames );
-    ciKey[3].setComboValues( fieldNames );
+    ciKey[ 2 ].setComboValues( fieldNames );
+    ciKey[ 3 ].setComboValues( fieldNames );
     // return fields
-    ciReturn[1].setComboValues( fieldNames );
+    ciReturn[ 1 ].setComboValues( fieldNames );
   }
 
   /**
@@ -563,10 +555,10 @@ public class InsertUpdateDialog extends BaseStepDialog implements StepDialogInte
       return;
     }
 
-    String[] inputNames = new String[sourceFields.size()];
+    String[] inputNames = new String[ sourceFields.size() ];
     for ( int i = 0; i < sourceFields.size(); i++ ) {
       ValueMetaInterface value = sourceFields.getValueMeta( i );
-      inputNames[i] = value.getName() + EnterMappingDialog.STRING_ORIGIN_SEPARATOR + value.getOrigin() + ")";
+      inputNames[ i ] = value.getName() + EnterMappingDialog.STRING_ORIGIN_SEPARATOR + value.getOrigin() + ")";
     }
 
     // Create the existing mapping list...
@@ -666,34 +658,34 @@ public class InsertUpdateDialog extends BaseStepDialog implements StepDialogInte
     wCommit.setText( input.getCommitSizeVar() );
     wUpdateBypassed.setSelection( input.isUpdateBypassed() );
 
-    if ( input.getKeyStream() != null ) {
-      for ( int i = 0; i < input.getKeyStream().length; i++ ) {
+    if ( input.getKeyFields() != null ) {
+      for ( int i = 0; i < input.getKeyFields().length; i++ ) {
         TableItem item = wKey.table.getItem( i );
-        if ( input.getKeyLookup()[i] != null ) {
-          item.setText( 1, input.getKeyLookup()[i] );
+        if ( input.getKeyFields()[ i ].getKeyLookup() != null ) {
+          item.setText( 1, input.getKeyFields()[ i ].getKeyLookup() );
         }
-        if ( input.getKeyCondition()[i] != null ) {
-          item.setText( 2, input.getKeyCondition()[i] );
+        if ( input.getKeyFields()[ i ].getKeyCondition() != null ) {
+          item.setText( 2, input.getKeyFields()[ i ].getKeyCondition() );
         }
-        if ( input.getKeyStream()[i] != null ) {
-          item.setText( 3, input.getKeyStream()[i] );
+        if ( input.getKeyFields()[ i ].getKeyStream() != null ) {
+          item.setText( 3, input.getKeyFields()[ i ].getKeyStream() );
         }
-        if ( input.getKeyStream2()[i] != null ) {
-          item.setText( 4, input.getKeyStream2()[i] );
+        if ( input.getKeyFields()[ i ].getKeyStream2() != null ) {
+          item.setText( 4, input.getKeyFields()[ i ].getKeyStream2() );
         }
       }
     }
 
-    if ( input.getUpdateLookup() != null ) {
-      for ( int i = 0; i < input.getUpdateLookup().length; i++ ) {
+    if ( input.getUpdateFields() != null ) {
+      for ( int i = 0; i < input.getUpdateFields().length; i++ ) {
         TableItem item = wReturn.table.getItem( i );
-        if ( input.getUpdateLookup()[i] != null ) {
-          item.setText( 1, input.getUpdateLookup()[i] );
+        if ( input.getUpdateFields()[ i ].getUpdateLookup() != null ) {
+          item.setText( 1, input.getUpdateFields()[ i ].getUpdateLookup() );
         }
-        if ( input.getUpdateStream()[i] != null ) {
-          item.setText( 2, input.getUpdateStream()[i] );
+        if ( input.getUpdateFields()[ i ].getUpdateStream() != null ) {
+          item.setText( 2, input.getUpdateFields()[ i ].getUpdateStream() );
         }
-        if ( input.getUpdate()[i] == null || input.getUpdate()[i] ) {
+        if ( input.getUpdateFields()[ i ].getUpdate() == null || input.getUpdateFields()[ i ].getUpdate() ) {
           item.setText( 3, "Y" );
         } else {
           item.setText( 3, "N" );
@@ -744,10 +736,10 @@ public class InsertUpdateDialog extends BaseStepDialog implements StepDialogInte
     //CHECKSTYLE:Indentation:OFF
     for ( int i = 0; i < nrkeys; i++ ) {
       TableItem item = wKey.getNonEmpty( i );
-      inf.getKeyLookup()[i] = item.getText( 1 );
-      inf.getKeyCondition()[i] = item.getText( 2 );
-      inf.getKeyStream()[i] = item.getText( 3 );
-      inf.getKeyStream2()[i] = item.getText( 4 );
+      inf.getKeyFields()[ i ].setKeyLookup( item.getText( 1 ) );
+      inf.getKeyFields()[ i ].setKeyCondition( item.getText( 2 ) );
+      inf.getKeyFields()[ i ].setKeyStream( item.getText( 3 ) );
+      inf.getKeyFields()[ i ].setKeyStream2( item.getText( 4 ) );
     }
 
     // Table ftable = wReturn.table;
@@ -757,9 +749,9 @@ public class InsertUpdateDialog extends BaseStepDialog implements StepDialogInte
     }
     for ( int i = 0; i < nrfields; i++ ) {
       TableItem item = wReturn.getNonEmpty( i );
-      inf.getUpdateLookup()[i] = item.getText( 1 );
-      inf.getUpdateStream()[i] = item.getText( 2 );
-      inf.getUpdate()[i] = "Y".equals( item.getText( 3 ) );
+      inf.getUpdateFields()[ i ].setUpdateLookup( item.getText( 1 ) );
+      inf.getUpdateFields()[ i ].setUpdateStream( item.getText( 2 ) );
+      inf.getUpdateFields()[ i ].setUpdate( "Y".equals( item.getText( 3 ) ) );
     }
 
     inf.setSchemaName( wSchema.getText() );
@@ -808,7 +800,7 @@ public class InsertUpdateDialog extends BaseStepDialog implements StepDialogInte
               } finally {
                 try {
                   if ( db != null ) {
-                    db.disconnect();
+                    db.close();
                   }
                 } catch ( Exception ignored ) {
                   // ignore any errors here.
@@ -871,7 +863,7 @@ public class InsertUpdateDialog extends BaseStepDialog implements StepDialogInte
         new ErrorDialog( shell, BaseMessages.getString( PKG, "System.Dialog.Error.Title" ), BaseMessages
           .getString( PKG, "InsertUpDateDialog.ErrorGettingSchemas" ), e );
       } finally {
-        database.disconnect();
+        database.close();
       }
     }
   }
@@ -919,7 +911,7 @@ public class InsertUpdateDialog extends BaseStepDialog implements StepDialogInte
     } catch ( KettleException ke ) {
       new ErrorDialog(
         shell, BaseMessages.getString( PKG, "InsertUpdateDialog.FailedToGetFields.DialogTitle" ), BaseMessages
-          .getString( PKG, "InsertUpdateDialog.FailedToGetFields.DialogMessage" ), ke );
+        .getString( PKG, "InsertUpdateDialog.FailedToGetFields.DialogMessage" ), ke );
     }
   }
 
@@ -938,7 +930,7 @@ public class InsertUpdateDialog extends BaseStepDialog implements StepDialogInte
     } catch ( KettleException ke ) {
       new ErrorDialog(
         shell, BaseMessages.getString( PKG, "InsertUpdateDialog.FailedToGetFields.DialogTitle" ), BaseMessages
-          .getString( PKG, "InsertUpdateDialog.FailedToGetFields.DialogMessage" ), ke );
+        .getString( PKG, "InsertUpdateDialog.FailedToGetFields.DialogMessage" ), ke );
     }
   }
 
@@ -976,7 +968,7 @@ public class InsertUpdateDialog extends BaseStepDialog implements StepDialogInte
     } catch ( KettleException ke ) {
       new ErrorDialog(
         shell, BaseMessages.getString( PKG, "InsertUpdateDialog.CouldNotBuildSQL.DialogTitle" ), BaseMessages
-          .getString( PKG, "InsertUpdateDialog.CouldNotBuildSQL.DialogMessage" ), ke );
+        .getString( PKG, "InsertUpdateDialog.CouldNotBuildSQL.DialogMessage" ), ke );
     }
   }
 }

@@ -1,26 +1,25 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
 
+
+
 package org.pentaho.di.trans.steps.propertyinput;
+
+import org.apache.commons.configuration2.INIConfiguration;
+import org.apache.commons.configuration2.SubnodeConfiguration;
+import org.apache.commons.vfs2.FileObject;
+import org.pentaho.di.core.fileinput.FileInputList;
+import org.pentaho.di.core.row.RowMetaInterface;
+import org.pentaho.di.trans.step.BaseStepData;
 
 import java.io.BufferedInputStream;
 import java.io.FileInputStream;
@@ -34,19 +33,12 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.commons.vfs2.FileObject;
-import org.ini4j.Profile.Section;
-import org.ini4j.Wini;
-import org.pentaho.di.core.fileinput.FileInputList;
-import org.pentaho.di.core.row.RowMetaInterface;
-import org.pentaho.di.trans.step.BaseStepData;
-import org.pentaho.di.trans.step.StepDataInterface;
-
 /**
  * @author Samatar Hassan
  * @since 24-Mars-2008
  */
-public class PropertyInputData extends BaseStepData implements StepDataInterface {
+@SuppressWarnings( { "java:S1104", "java:S116" } ) // Public fields and naming convention are intentional for data classes in this framework
+public class PropertyInputData extends BaseStepData {
   public String thisline;
   public RowMetaInterface outputRowMeta;
   public RowMetaInterface convertRowMeta;
@@ -73,19 +65,22 @@ public class PropertyInputData extends BaseStepData implements StepDataInterface
   public int indexOfFilenameField;
   public Object[] readrow;
 
+  // Are we handling Property files (true) or INI files (false)?
+  public boolean propfiles;
+
   // Properties files
   public Properties pro;
-  public Iterator<Object> it;
+  public Iterator<Object> propIt;
 
   // INI files
-  public Section iniSection;
-  public Wini wini;
-  public Iterator<String> itSection;
+  public INIConfiguration iniConf;
+  public SubnodeConfiguration iniSection;
+  public Iterator<String> iniIt;
+  public Iterator<String> iniSectionIt;
+
   public String realEncoding;
   public String realSection;
-  public Iterator<String> iniIt;
-
-  public boolean propfiles;
+  public String currentSection;
 
   public String filename;
   public String shortFilename;
@@ -108,7 +103,6 @@ public class PropertyInputData extends BaseStepData implements StepDataInterface
     dafs = new DateFormatSymbols();
 
     nr_repeats = 0;
-    previousRow = null;
     filenr = 0;
 
     fr = null;
@@ -119,10 +113,11 @@ public class PropertyInputData extends BaseStepData implements StepDataInterface
     readrow = null;
 
     pro = null;
-    it = null;
+    propIt = null;
     iniSection = null;
-    wini = null;
-    itSection = null;
+    currentSection = null;
+    iniConf = null;
+    iniSectionIt = null;
     realEncoding = null;
     realSection = null;
     propfiles = true;

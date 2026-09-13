@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.stringoperations;
 
@@ -290,7 +282,7 @@ public class StringOperationsDialog extends BaseStepDialog implements StepDialog
             }
 
             // Dislay in red missing field names
-            Display.getDefault().asyncExec( new Runnable() {
+            Runnable asyncExecRunnable = new Runnable() {
               public void run() {
                 if ( !wFields.isDisposed() ) {
                   for ( int i = 0; i < wFields.table.getItemCount(); i++ ) {
@@ -303,7 +295,12 @@ public class StringOperationsDialog extends BaseStepDialog implements StepDialog
                   }
                 }
               }
-            } );
+            };
+            if ( Const.isRunningOnWebspoonMode() ) {
+              display.asyncExec( asyncExecRunnable );
+            } else {
+              Display.getDefault().asyncExec( asyncExecRunnable );
+            }
 
           } catch ( KettleException e ) {
             logError( "Error getting fields from incoming stream!", e );
@@ -346,20 +343,19 @@ public class StringOperationsDialog extends BaseStepDialog implements StepDialog
         if ( input.getFieldOutStream()[i] != null ) {
           item.setText( 2, input.getFieldOutStream()[i] );
         }
-        item.setText( 3, StringOperationsMeta.getTrimTypeDesc( input.getTrimType()[i] ) );
-        item.setText( 4, StringOperationsMeta.getLowerUpperDesc( input.getLowerUpper()[i] ) );
-        item.setText( 5, StringOperationsMeta.getPaddingDesc( input.getPaddingType()[i] ) );
+        item.setText( 3, input.getTrimType()[i] );
+        item.setText( 4, input.getLowerUpper()[i] );
+        item.setText( 5, input.getPaddingType()[i] );
         if ( input.getPadChar()[i] != null ) {
           item.setText( 6, input.getPadChar()[i] );
         }
         if ( input.getPadLen()[i] != null ) {
           item.setText( 7, input.getPadLen()[i] );
         }
-        item.setText( 8, StringOperationsMeta.getInitCapDesc( input.getInitCap()[i] ) );
-        item.setText( 9, StringOperationsMeta.getMaskXMLDesc( input.getMaskXML()[i] ) );
-        item.setText( 10, StringOperationsMeta.getDigitsDesc( input.getDigits()[i] ) );
-        item.setText( 11, StringOperationsMeta
-          .getRemoveSpecialCharactersDesc( input.getRemoveSpecialCharacters()[i] ) );
+        item.setText( 8, input.getInitCap()[i] );
+        item.setText( 9, input.getMaskXML()[i] );
+        item.setText( 10, input.getDigits()[i] );
+        item.setText( 11, input.getRemoveSpecialCharacters()[i] );
       }
     }
 
@@ -388,15 +384,15 @@ public class StringOperationsDialog extends BaseStepDialog implements StepDialog
       TableItem item = wFields.getNonEmpty( i );
       inf.getFieldInStream()[i] = item.getText( 1 );
       inf.getFieldOutStream()[i] = item.getText( 2 );
-      inf.getTrimType()[i] = StringOperationsMeta.getTrimTypeByDesc( item.getText( 3 ) );
-      inf.getLowerUpper()[i] = StringOperationsMeta.getLowerUpperByDesc( item.getText( 4 ) );
-      inf.getPaddingType()[i] = StringOperationsMeta.getPaddingByDesc( item.getText( 5 ) );
+      inf.getTrimType()[i] = item.getText( 3 );
+      inf.getLowerUpper()[i] = item.getText( 4 );
+      inf.getPaddingType()[i] = item.getText( 5 );
       inf.getPadChar()[i] = item.getText( 6 );
       inf.getPadLen()[i] = item.getText( 7 );
-      inf.getInitCap()[i] = StringOperationsMeta.getInitCapByDesc( item.getText( 8 ) );
-      inf.getMaskXML()[i] = StringOperationsMeta.getMaskXMLByDesc( item.getText( 9 ) );
-      inf.getDigits()[i] = StringOperationsMeta.getDigitsByDesc( item.getText( 10 ) );
-      inf.getRemoveSpecialCharacters()[i] = StringOperationsMeta.getRemoveSpecialCharactersByDesc( item.getText( 11 ) );
+      inf.getInitCap()[i] = item.getText( 8 );
+      inf.getMaskXML()[i] = item.getText( 9 );
+      inf.getDigits()[i] = item.getText( 10 );
+      inf.getRemoveSpecialCharacters()[i] = item.getText( 11 );
     }
 
     stepname = wStepname.getText(); // return value

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.folderisempty;
 
@@ -210,7 +202,7 @@ public class JobEntryFolderIsEmpty extends JobEntryBase implements Cloneable, Jo
       String realFoldername = getRealFoldername();
       FileObject folderObject = null;
       try {
-        folderObject = KettleVFS.getFileObject( realFoldername, this );
+        folderObject = KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( realFoldername, this );
         if ( folderObject.exists() ) {
           // Check if it's a folder
           if ( folderObject.getType() == FileType.FOLDER ) {
@@ -283,7 +275,22 @@ public class JobEntryFolderIsEmpty extends JobEntryBase implements Cloneable, Jo
         if ( !info.getFile().toString().equals( root_folder ) ) {
           // Pass over the Base folder itself
           if ( ( info.getFile().getType() == FileType.FILE ) ) {
-            if ( info.getFile().getParent().equals( info.getBaseFolder() ) ) {
+            boolean isInBaseFolder;
+            try {
+              String parentPath = info.getFile().getParent().getName().getURI();
+              String basePath = info.getBaseFolder().getName().getURI();
+              isInBaseFolder = parentPath.equals( basePath );
+              if ( log.isDetailed() ) {
+                log.logDetailed( "File: " + info.getFile().getName().getBaseName()
+                  + ", Parent: " + parentPath
+                  + ", Base: " + basePath
+                  + ", InBase: " + isInBaseFolder );
+              }
+            } catch ( Exception ex ) {
+              isInBaseFolder = info.getFile().getParent().equals( info.getBaseFolder() );
+              log.logDetailed( "Error comparing parent and base folder " + ex.getMessage() );
+            }
+            if ( isInBaseFolder ) {
               // We are in the Base folder
               if ( ( isSpecifyWildcard() && GetFileWildcard( info.getFile().getName().getBaseName() ) )
                 || !isSpecifyWildcard() ) {
@@ -363,8 +370,8 @@ public class JobEntryFolderIsEmpty extends JobEntryBase implements Cloneable, Jo
 
   @Override
   public void check( List<CheckResultInterface> remarks, JobMeta jobMeta, VariableSpace space,
-    Repository repository, IMetaStore metaStore ) {
-    JobEntryValidatorUtils.andValidator().validate( this, "filename", remarks,
-        AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
+     Repository repository, IMetaStore metaStore ) {
+    JobEntryValidatorUtils.andValidator().validate( parentJobMeta.getBowl(), this, "filename", remarks,
+    AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
   }
 }

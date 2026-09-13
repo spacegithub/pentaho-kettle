@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.getxmldata;
 
@@ -26,8 +18,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import junit.framework.TestCase;
-
+import org.junit.Test;
+import org.pentaho.di.core.Const;
 import org.pentaho.di.core.KettleEnvironment;
 import org.pentaho.di.core.RowMetaAndData;
 import org.pentaho.di.core.exception.KettleValueException;
@@ -47,12 +39,15 @@ import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.steps.dummytrans.DummyTransMeta;
 import org.pentaho.di.trans.steps.injector.InjectorMeta;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
 /**
  * Test class for the "Get XML Data" step.
  * 
  * @author Sven Boden
  */
-public class GetXMLDataTest extends TestCase {
+public class GetXMLDataTest {
   public RowMetaInterface createRowMetaInterface() {
     RowMetaInterface rm = new RowMeta();
 
@@ -90,6 +85,42 @@ public class GetXMLDataTest extends TestCase {
     return xml2;
   }
 
+  /**
+   * PDI-18440 - The "Get XML data" step should yield different results when an XML element is missing v.s. being empty.
+   *
+   * The "Props" element misses three elements which should result in null values when the KETTLE_XML_MISSING_TAG_YIELDS_NULL_VALUE property is set to "Y".
+   * Otherwise, it will produce three columns with empty values (i.e. "").
+   */
+  private static String getXML3() {
+    return "<Level1>"
+         + " <Level2>"
+         + "   <Props>"
+         + "    <ObjectID>DDDDD</ObjectID>"
+         + "    <SAPIDENT>31-8300</SAPIDENT>"
+         + "   </Props>   "
+         + " </Level2>"
+         + "</Level1>";
+  }
+
+  /**
+   * PDI-18440 - The "Get XML data" step should yield different results when an XML element is missing v.s. being empty.
+   *
+   * The "Props" element contains an empty element which should always result in an empty value (i.e. "") regardless of the setting of any Kettle property.
+   */
+  private static String getXML4() {
+    return "<Level1>"
+         + " <Level2>"
+         + "   <Props>"
+         + "    <ObjectID>EEEEE</ObjectID>"
+         + "    <SAPIDENT>31-8400</SAPIDENT>"
+         + "    <Quantity>6</Quantity>"
+         + "    <Merkmalname></Merkmalname>"
+         + "    <Merkmalswert> 980</Merkmalswert>"
+         + "   </Props>"
+         + " </Level2>"
+         + "</Level1>";
+  }
+
   public List<RowMetaAndData> createData() {
     List<RowMetaAndData> list = new ArrayList<RowMetaAndData>();
 
@@ -97,9 +128,13 @@ public class GetXMLDataTest extends TestCase {
 
     Object[] r1 = new Object[] { getXML1() };
     Object[] r2 = new Object[] { getXML2() };
+    Object[] r3 = new Object[] { getXML3() };
+    Object[] r4 = new Object[] { getXML4() };
 
     list.add( new RowMetaAndData( rm, r1 ) );
     list.add( new RowMetaAndData( rm, r2 ) );
+    list.add( new RowMetaAndData( rm, r3 ) );
+    list.add( new RowMetaAndData( rm, r4 ) );
 
     return list;
   }
@@ -120,22 +155,27 @@ public class GetXMLDataTest extends TestCase {
   }
 
   /**
-   * Create result data for test case 1.
-   * 
+   * Create result data for all test cases.
+   *
    * @return list of metadata/data couples of how the result should look like.
    */
-  public List<RowMetaAndData> createResultData1() {
-    List<RowMetaAndData> list = new ArrayList<RowMetaAndData>();
+  public List<RowMetaAndData> createResultData( String missingElementValue ) {
+    List<RowMetaAndData> list = new ArrayList<>();
 
     RowMetaInterface rm = createResultRowMetaInterface();
 
+    // getXML1 contains two rows, thus the total of the four getXML* methods will yield five rows
     Object[] r1 = new Object[] { getXML1(), "AAAAA", "31-8200", "1", "TX_B", " 600" };
     Object[] r2 = new Object[] { getXML1(), "BBBBB", "31-8201", "3", "TX_C", " 900" };
     Object[] r3 = new Object[] { getXML2(), "CCCCC", "11-8201", "5", "TX_C", " 700" };
+    Object[] r4 = new Object[] { getXML3(), "DDDDD", "31-8300", missingElementValue, missingElementValue, missingElementValue };
+    Object[] r5 = new Object[] { getXML4(), "EEEEE", "31-8400", "6", "", " 980" };
 
     list.add( new RowMetaAndData( rm, r1 ) );
     list.add( new RowMetaAndData( rm, r2 ) );
     list.add( new RowMetaAndData( rm, r3 ) );
+    list.add( new RowMetaAndData( rm, r4 ) );
+    list.add( new RowMetaAndData( rm, r5 ) );
 
     return list;
   }
@@ -182,15 +222,29 @@ public class GetXMLDataTest extends TestCase {
     }
   }
 
+  @Test
+  public void testGetXMLData_MissingNodesYieldEmptyValues() throws Exception {
+    KettleEnvironment.init();
+    System.setProperty( Const.KETTLE_XML_MISSING_TAG_YIELDS_NULL_VALUE, "N" );
+
+    testGetXMLData( Const.EMPTY_STRING );
+  }
+
+  @Test
+  public void testGetXMLData_MissingNodesYieldNullValues() throws Exception {
+    KettleEnvironment.init();
+    System.setProperty( Const.KETTLE_XML_MISSING_TAG_YIELDS_NULL_VALUE, "Y" );
+
+    testGetXMLData( null );
+  }
+
   /**
    * Test case for Get XML Data step, very simple example.
    * 
    * @throws Exception
    *           Upon any exception
    */
-  public void testGetXMLDataSimple1() throws Exception {
-    KettleEnvironment.init();
-
+  private void testGetXMLData( String missingElementValue ) throws Exception {
     //
     // Create a new transformation...
     //
@@ -334,11 +388,12 @@ public class GetXMLDataTest extends TestCase {
 
     // Compare the results
     List<RowMetaAndData> resultRows = dummyRc1.getRowsWritten();
-    List<RowMetaAndData> goldenImageRows = createResultData1();
+    List<RowMetaAndData> goldenImageRows = createResultData( missingElementValue );
 
     checkRows( goldenImageRows, resultRows );
   }
 
+  @Test
   public void testInit() throws Exception {
 
     KettleEnvironment.init();
@@ -435,10 +490,6 @@ public class GetXMLDataTest extends TestCase {
     rp.finished();
 
     trans.waitUntilFinished();
-
-    // Compare the results
-    List<RowMetaAndData> resultRows = dummyRc1.getRowsWritten();
-    List<RowMetaAndData> goldenImageRows = createResultData1();
 
     GetXMLDataData getXMLDataData = new GetXMLDataData();
     GetXMLData getXmlData = new GetXMLData( dummyStep1, getXMLDataData, 0, transMeta, trans );

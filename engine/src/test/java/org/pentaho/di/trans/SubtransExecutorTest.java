@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.trans;
 
 import org.junit.Before;
@@ -28,7 +20,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.KettleClientEnvironment;
 import org.pentaho.di.core.Props;
@@ -38,6 +31,7 @@ import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.logging.KettleLogStore;
 import org.pentaho.di.core.logging.LogChannel;
 import org.pentaho.di.core.logging.LogChannelInterfaceFactory;
+import org.pentaho.di.core.logging.LogLevel;
 import org.pentaho.di.core.logging.LoggingObject;
 import org.pentaho.di.core.logging.LoggingObjectInterface;
 import org.pentaho.di.core.plugins.PluginRegistry;
@@ -54,13 +48,23 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+//import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
+import static junit.framework.TestCase.fail;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
@@ -74,6 +78,7 @@ public class SubtransExecutorTest {
   @Before
   public void setUp() throws Exception {
     KettleLogStore.setLogChannelInterfaceFactory( this.logChannelFactory );
+    doReturn( LogLevel.BASIC ).when( logChannel ).getLogLevel();
     Mockito.when( this.logChannelFactory.create( any(), any() ) ).thenReturn( this.logChannel );
   }
 
@@ -89,7 +94,7 @@ public class SubtransExecutorTest {
 
   @Test
   public void testRunningZeroRowsIsEmptyOptional() throws Exception {
-    SubtransExecutor subtransExecutor = new SubtransExecutor( "subtransname", null, null, false, null, "" );
+    SubtransExecutor subtransExecutor = new SubtransExecutor( "subtransname", null, null, false, null, "", 0 );
     Optional<Result> execute = subtransExecutor.execute( Collections.emptyList() );
     assertFalse( execute.isPresent() );
   }
@@ -97,13 +102,16 @@ public class SubtransExecutorTest {
   @Test
   public void testRunsATrans() throws Exception {
     TransMeta parentMeta =
-      new TransMeta( this.getClass().getResource( "subtrans-executor-parent.ktr" ).getPath(), new Variables() );
+      new TransMeta( DefaultBowl.getInstance(), this.getClass().getResource( "subtrans-executor-parent.ktr" ).getPath(),
+        new Variables() );
     TransMeta subMeta =
-      new TransMeta( this.getClass().getResource( "subtrans-executor-sub.ktr" ).getPath(), new Variables() );
+      new TransMeta( DefaultBowl.getInstance(), this.getClass().getResource( "subtrans-executor-sub.ktr" ).getPath(),
+        new Variables() );
     LoggingObjectInterface loggingObject = new LoggingObject( "anything" );
     Trans parentTrans = spy( new Trans( parentMeta, loggingObject ) );
     SubtransExecutor subtransExecutor =
-      new SubtransExecutor( "subtransname", parentTrans, subMeta, true, new TransExecutorParameters(), "Group By" );
+      new SubtransExecutor( "subtransname", parentTrans, subMeta, true, new TransExecutorParameters(), "Group By",
+        1001 );
     RowMetaInterface rowMeta = parentMeta.getStepFields( "Data Grid" );
     List<RowMetaAndData> rows = Arrays.asList(
       new RowMetaAndData( rowMeta, "Pentaho", 1L ),
@@ -147,13 +155,15 @@ public class SubtransExecutorTest {
   @Test
   public void stopsAll() throws KettleException {
     TransMeta parentMeta =
-      new TransMeta( this.getClass().getResource( "subtrans-executor-parent.ktr" ).getPath(), new Variables() );
+      new TransMeta( DefaultBowl.getInstance(), this.getClass().getResource( "subtrans-executor-parent.ktr" ).getPath(),
+        new Variables() );
     TransMeta subMeta =
-      new TransMeta( this.getClass().getResource( "subtrans-executor-sub.ktr" ).getPath(), new Variables() );
+      new TransMeta( DefaultBowl.getInstance(), this.getClass().getResource( "subtrans-executor-sub.ktr" ).getPath(),
+        new Variables() );
     LoggingObjectInterface loggingObject = new LoggingObject( "anything" );
     Trans parentTrans = new Trans( parentMeta, loggingObject );
     SubtransExecutor subtransExecutor =
-      new SubtransExecutor( "subtransname", parentTrans, subMeta, true, new TransExecutorParameters(), "" );
+      new SubtransExecutor( "subtransname", parentTrans, subMeta, true, new TransExecutorParameters(), "", 1001 );
     subtransExecutor.running = Mockito.spy( subtransExecutor.running );
     RowMetaInterface rowMeta = parentMeta.getStepFields( "Data Grid" );
     List<RowMetaAndData> rows = Arrays.asList(
@@ -171,13 +181,15 @@ public class SubtransExecutorTest {
   public void doesNotExecuteWhenStopped() throws KettleException {
 
     TransMeta parentMeta =
-      new TransMeta( this.getClass().getResource( "subtrans-executor-parent.ktr" ).getPath(), new Variables() );
+      new TransMeta( DefaultBowl.getInstance(), this.getClass().getResource( "subtrans-executor-parent.ktr" ).getPath(),
+        new Variables() );
     TransMeta subMeta =
-      new TransMeta( this.getClass().getResource( "subtrans-executor-sub.ktr" ).getPath(), new Variables() );
+      new TransMeta( DefaultBowl.getInstance(), this.getClass().getResource( "subtrans-executor-sub.ktr" ).getPath(),
+        new Variables() );
     LoggingObjectInterface loggingObject = new LoggingObject( "anything" );
     Trans parentTrans = new Trans( parentMeta, loggingObject );
     SubtransExecutor subtransExecutor =
-      new SubtransExecutor( "subtransname", parentTrans, subMeta, true, new TransExecutorParameters(), "" );
+      new SubtransExecutor( "subtransname", parentTrans, subMeta, true, new TransExecutorParameters(), "", 1001 );
     RowMetaInterface rowMeta = parentMeta.getStepFields( "Data Grid" );
     List<RowMetaAndData> rows = Arrays.asList(
       new RowMetaAndData( rowMeta, "Pentaho", 1L ),
@@ -196,5 +208,90 @@ public class SubtransExecutorTest {
           + "\n"
           + "===================="
       );
+  }
+
+  /**
+   * When we acquire the last permit, the thread should block until we timeout the test
+   */
+  @Test
+  public void blockOnAcquiringLastPermit() throws InterruptedException, ExecutionException, TimeoutException {
+    final ExecutorService executorService = Executors.newFixedThreadPool( 1 );
+
+    SubtransExecutor subtransExecutor = new SubtransExecutor( "subtransname", null, null, false, null, "", 0 );
+
+    CompletableFuture<Boolean> acquireThreadRunning = new CompletableFuture();
+
+    //Prefetch count is set to 0, so blocking occurs when that single permit is acquired
+    Future future = executorService.submit( () -> safeAcquirePermits( subtransExecutor, 1, acquireThreadRunning ) );
+
+    assertTrue( acquireThreadRunning.get( 5, TimeUnit.SECONDS ) );
+
+    final boolean timedOut = !safeWaitForCompletion( future, 2 );
+    assertTrue( timedOut );
+  }
+
+  @Test
+  public void blockAndUnblockTwice() throws KettleException, InterruptedException, ExecutionException,
+    TimeoutException {
+    final ExecutorService executorService = Executors.newFixedThreadPool( 1 );
+
+    TransMeta parentMeta =
+      new TransMeta( DefaultBowl.getInstance(), this.getClass().getResource( "subtrans-executor-parent.ktr" ).getPath(),
+        new Variables() );
+    TransMeta subMeta =
+      new TransMeta( DefaultBowl.getInstance(), this.getClass().getResource( "subtrans-executor-sub.ktr" ).getPath(),
+        new Variables() );
+    LoggingObjectInterface loggingObject = new LoggingObject( "anything" );
+    Trans parentTrans = new Trans( parentMeta, loggingObject );
+    SubtransExecutor subtransExecutor =
+      new SubtransExecutor( "subtransname", parentTrans, subMeta, true, new TransExecutorParameters(), "", 1 );
+
+    RowMetaInterface rowMeta = parentMeta.getStepFields( "Data Grid" );
+    List<RowMetaAndData> rows = Arrays.asList(
+      new RowMetaAndData( rowMeta, "Pentaho", 1L ),
+      new RowMetaAndData( rowMeta, "Pentaho", 2L ),
+      new RowMetaAndData( rowMeta, "Pentaho", 3L ),
+      new RowMetaAndData( rowMeta, "Pentaho", 4L ) );
+
+    CompletableFuture<Boolean> acquireThreadRunning = new CompletableFuture();
+
+    Future future = executorService.submit( () -> safeAcquirePermits( subtransExecutor, 8, acquireThreadRunning ) );
+
+    //Acquire the permits before releasing them by waiting for the acquire thread to spin up.
+    assertTrue( acquireThreadRunning.get( 5, TimeUnit.SECONDS ) );
+
+    //Release 2*4=8 permits by calling execute twice with 4 rows
+    subtransExecutor.execute( rows );
+    subtransExecutor.execute( rows );
+
+    final boolean timedOut = !safeWaitForCompletion( future, 5 );
+    assertFalse( timedOut );
+  }
+
+  private void safeAcquirePermits( SubtransExecutor subtransExecutor, int permitCount,
+                                   CompletableFuture<Boolean> threadRunning ) {
+    try {
+      for ( int i = 0; i < permitCount; i++ ) {
+        threadRunning.complete( true );
+        subtransExecutor.acquireBufferPermit();
+      }
+    } catch ( InterruptedException e ) {
+      fail();
+    }
+  }
+
+  /**
+   * @param future
+   * @return false if timed out, otherwise true
+   */
+  private boolean safeWaitForCompletion( Future future, long timeoutSeconds ) {
+    try {
+      future.get( timeoutSeconds, TimeUnit.SECONDS );
+    } catch ( TimeoutException te ) {
+      return false;
+    } catch ( InterruptedException | ExecutionException e ) {
+      fail();
+    }
+    return true;
   }
 }

@@ -1,52 +1,24 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.jsoninput;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.when;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
+import com.jayway.jsonpath.InvalidPathException;
 import junit.framework.ComparisonFailure;
-
+import net.minidev.json.JSONArray;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
@@ -55,8 +27,11 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.pentaho.di.core.Const;
 import org.pentaho.di.core.KettleClientEnvironment;
 import org.pentaho.di.core.RowSet;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleFileException;
 import org.pentaho.di.core.exception.KettleStepException;
@@ -76,7 +51,32 @@ import org.pentaho.di.i18n.LanguageChoice;
 import org.pentaho.di.trans.step.RowAdapter;
 import org.pentaho.di.trans.step.StepErrorMeta;
 import org.pentaho.di.trans.step.StepInterface;
+import org.pentaho.di.trans.steps.jsoninput.reader.FastJsonReader;
 import org.pentaho.di.trans.steps.mock.StepMockHelper;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.pentaho.di.core.util.Assert.assertNull;
 
 public class JsonInputTest {
 
@@ -151,6 +151,48 @@ public class JsonInputTest {
         + "}";
   }
 
+  protected static final String getSampleJson() {
+
+    return "["
+      + "{"
+      + "\"name\":\"United States of America\","
+      + "\"topLevelDomain\":["
+      + "   \".us\""
+      + "],"
+      + "\"alpha2Code\":\"US\","
+      + "\"alpha3Code\":\"USA\","
+      + "\"callingCodes\":["
+      + "   \"1\""
+      + "],"
+      + "\"currencies\":["
+      + "{"
+      + "   \"code\":\"USD\","
+      + "   \"name\":\"United States dollar\","
+      + "   \"symbol\":\"$\","
+      + "   \"topLevelDomain\":\"test123\""
+      + "}"
+      + "],"
+      + "\"languages\":["
+      + "{"
+      + "   \"iso639_1\":\"en\","
+      + "   \"iso639_2\":\"eng\","
+      + "   \"name\":\"English\","
+      + "   \"nativeName\":\"English\""
+      + "}"
+      + "],"
+      + "\"regionalBlocs\":["
+      + "{"
+      + "   \"acronym\":\"NAFTA\","
+      + "   \"name\":\"North American Free Trade Agreement\","
+      + "   \"otherAcronyms\":["
+      + "     ]"
+      + "}"
+      + "],"
+      + "\"cioc\":\"USA\""
+      + "}"
+      + "]";
+  }
+
   @BeforeClass
   public static void init() throws KettleException {
     KettleClientEnvironment.init();
@@ -168,6 +210,7 @@ public class JsonInputTest {
   @After
   public void tearDown() {
     helper.cleanUp();
+    System.clearProperty( Const.KETTLE_COMPATIBILITY_JSON_INPUT_LEGACY_MODE );
   }
 
   @Test
@@ -362,6 +405,52 @@ public class JsonInputTest {
     RowComparatorListener rowComparator = new RowComparatorListener(
       new Object[] { "0-553-21311-3" },
       new Object[] { "0-395-19395-8" } );
+    jsonInput.addRowListener( rowComparator );
+    processRows( jsonInput, 4 );
+    Assert.assertEquals( "errors", 0, jsonInput.getErrors() );
+    Assert.assertEquals( "lines written", 2, jsonInput.getLinesWritten() );
+  }
+
+  @Test
+  public void testIncludeNulls_Y() throws Exception {
+    final String inCol = "json";
+    JsonInputField jpath = new JsonInputField( "isbn" );
+    jpath.setPath( "$..book[*].isbn" );
+    jpath.setType( ValueMetaInterface.TYPE_STRING );
+
+    JsonInputMeta meta = createSimpleMeta( inCol, jpath );
+    meta.setRemoveSourceField( true );
+    meta.setIgnoreMissingPath( true );
+    meta.setIncludeNulls( true );
+    JsonInput jsonInput = createJsonInput( "json", meta, new Object[] { getBasicTestJson() } );
+    RowComparatorListener rowComparator = new RowComparatorListener(
+      new Object[] { null },
+      new Object[] { null },
+      new Object[] { "0-553-21311-3" },
+      new Object[] { "0-395-19395-8" } );
+    jsonInput.addRowListener( rowComparator );
+    processRows( jsonInput, 4 );
+    Assert.assertEquals( "errors", 0, jsonInput.getErrors() );
+    Assert.assertEquals( "lines written", 4, jsonInput.getLinesWritten() );
+  }
+
+  @Test
+  public void testIncludeNulls_N() throws Exception {
+    final String inCol = "json";
+    JsonInputField jpath = new JsonInputField( "isbn" );
+    jpath.setPath( "$..book[*].isbn" );
+    jpath.setType( ValueMetaInterface.TYPE_STRING );
+
+    JsonInputMeta meta = createSimpleMeta( inCol, jpath );
+    meta.setRemoveSourceField( true );
+    meta.setIgnoreMissingPath( true );
+    meta.setIncludeNulls( false );
+    JsonInput jsonInput = createJsonInput( "json", meta, new Object[] { getBasicTestJson() } );
+    RowComparatorListener rowComparator = new RowComparatorListener(
+      new Object[] { "0-553-21311-3" },
+      new Object[] { "0-395-19395-8" },
+      new Object[] { null },
+      new Object[] { null } );
     jsonInput.addRowListener( rowComparator );
     processRows( jsonInput, 4 );
     Assert.assertEquals( "errors", 0, jsonInput.getErrors() );
@@ -809,8 +898,10 @@ public class JsonInputTest {
 
     final String input1 = getBasicTestJson();
     final String input2 = "{ \"store\": { \"book\": [ { \"price\": 9.99 } ] } }";
-    try ( FileObject fileObj1 = KettleVFS.getFileObject( BASE_RAM_DIR + "test1.json" );
-          FileObject fileObj2 = KettleVFS.getFileObject( BASE_RAM_DIR + "test2.json" ) ) {
+    try ( FileObject fileObj1 = KettleVFS.getInstance( DefaultBowl.getInstance() )
+            .getFileObject( BASE_RAM_DIR + "test1.json" );
+          FileObject fileObj2 = KettleVFS.getInstance( DefaultBowl.getInstance() )
+            .getFileObject( BASE_RAM_DIR + "test2.json" ) ) {
       try ( OutputStream out = fileObj1.getContent().getOutputStream() ) {
         out.write( input1.getBytes() );
       }
@@ -875,7 +966,8 @@ public class JsonInputTest {
     helper.redirectLog( err, LogLevel.ERROR );
 
     final String input = getBasicTestJson();
-    try ( FileObject fileObj = KettleVFS.getFileObject( BASE_RAM_DIR + "test.zip" ) ) {
+    try ( FileObject fileObj = KettleVFS.getInstance( DefaultBowl.getInstance() )
+            .getFileObject( BASE_RAM_DIR + "test.zip" ) ) {
       fileObj.createFile();
       try ( OutputStream out = fileObj.getContent().getOutputStream() ) {
         try ( ZipOutputStream zipOut = new ZipOutputStream( out ) ) {
@@ -919,8 +1011,10 @@ public class JsonInputTest {
     final String input2 = "{ \"store\": { \"bicycle\": { \"color\": \"blue\" } } }";
     final String path1 = BASE_RAM_DIR + "test1.json";
     final String path2 = BASE_RAM_DIR + "test2.js";
-    try ( FileObject fileObj1 = KettleVFS.getFileObject( path1 );
-          FileObject fileObj2 = KettleVFS.getFileObject( path2 ) ) {
+    try ( FileObject fileObj1 = KettleVFS.getInstance( DefaultBowl.getInstance() )
+            .getFileObject( path1 );
+          FileObject fileObj2 = KettleVFS.getInstance( DefaultBowl.getInstance() )
+            .getFileObject( path2 ) ) {
       try ( OutputStream out = fileObj1.getContent().getOutputStream() ) {
         out.write( input1.getBytes() );
       }
@@ -981,7 +1075,8 @@ public class JsonInputTest {
   public void testZeroSizeFile() throws Exception {
     ByteArrayOutputStream log = new ByteArrayOutputStream();
     helper.redirectLog( log, LogLevel.BASIC );
-    try ( FileObject fileObj = KettleVFS.getFileObject( BASE_RAM_DIR + "test.json" );
+    try ( FileObject fileObj = KettleVFS.getInstance( DefaultBowl.getInstance() )
+            .getFileObject( BASE_RAM_DIR + "test.json" );
           LocaleChange enUs = new LocaleChange( Locale.US ); ) {
       fileObj.createFile();
       JsonInputField price = new JsonInputField();
@@ -1084,6 +1179,60 @@ public class JsonInputTest {
     Assert.assertEquals( 1, jsonInput.getErrors() );
   }
 
+  @Test
+  public void testJsonInputPathResolutionSuccess() {
+    JsonInputField inputField = new JsonInputField( "value" );
+    final String PATH = "${PARAM_PATH}.price";
+    inputField.setPath( PATH );
+    inputField.setType( ValueMetaInterface.TYPE_STRING );
+    final JsonInputMeta inputMeta = createSimpleMeta( "json", inputField );
+    VariableSpace variables = new Variables();
+    JsonInput jsonInput = null;
+    try {
+      jsonInput =
+        createJsonInput( "json", inputMeta, variables, new Object[] { getBasicTestJson() } );
+      fail( "Without the parameter, this call should fail with an InvalidPathException. If it does not, test fails." );
+    } catch ( InvalidPathException pathException ) {
+      assertNull( jsonInput );
+    }
+
+    variables.setVariable( "PARAM_PATH", "$..book.[*]" );
+
+    try {
+      jsonInput = createJsonInput( "json", inputMeta, variables, new Object[] { getBasicTestJson() } );
+      assertNotNull( jsonInput );
+    } catch ( Exception ex ) {
+      fail( "Json Input should be able to resolve the paths with the parameter introduced in the variable space." );
+    }
+  }
+
+  @Test
+  public void testJsonInputPathResolution() throws KettleException {
+    JsonInputField inputField = new JsonInputField( "value" );
+    final String PATH = "$[*].name";
+    inputField.setPath( PATH );
+    inputField.setType( ValueMetaInterface.TYPE_STRING );
+    JsonInputMeta inputMeta = createSimpleMeta( "json", inputField );
+    VariableSpace variables = new Variables();
+    JsonInput jsonInput = null;
+    try {
+      jsonInput =
+        createJsonInput( "json", inputMeta, variables, new Object[] { getSampleJson() } );
+
+      JsonInputData data = (JsonInputData) ReflectionTestUtils.getField( jsonInput, "data" );
+      FastJsonReader reader = (FastJsonReader) ReflectionTestUtils.getField( data, "reader" );
+      RowSet rowset = reader.parse( new ByteArrayInputStream( getSampleJson().getBytes() ) );
+      List results = (List) ReflectionTestUtils.getField( rowset, "results" );
+      JSONArray jsonResult = (JSONArray) results.get( 0 );
+
+      assertEquals( 1, jsonResult.size() );
+      assertEquals( "United States of America", jsonResult.get( 0 ) );
+
+    } catch ( InvalidPathException pathException ) {
+      assertNull( jsonInput );
+    }
+  }
+
   protected JsonInputMeta createSimpleMeta( String inputColumn, JsonInputField... jsonPathFields ) {
     JsonInputMeta jsonInputMeta = new JsonInputMeta();
     jsonInputMeta.setDefault();
@@ -1095,7 +1244,7 @@ public class JsonInputTest {
   }
 
   private void deleteFiles() throws FileSystemException, KettleFileException {
-    try ( FileObject baseDir = KettleVFS.getFileObject( BASE_RAM_DIR ) ) {
+    try ( FileObject baseDir = KettleVFS.getInstance( DefaultBowl.getInstance() ).getFileObject( BASE_RAM_DIR ) ) {
       baseDir.deleteAll();
     }
   }
@@ -1115,7 +1264,7 @@ public class JsonInputTest {
   protected JsonInputMeta createFileListMeta( final List<FileObject> files ) {
     JsonInputMeta meta = new JsonInputMeta() {
       @Override
-      public FileInputList getFileInputList( VariableSpace space ) {
+      public FileInputList getFileInputList( Bowl bowl, VariableSpace space ) {
         return new FileInputList() {
           @Override
           public List<FileObject> getFiles() {
@@ -1186,6 +1335,9 @@ public class JsonInputTest {
     return jsonInput;
   }
 
+  /**
+   * This throws an exception if the comparison fails
+   */
   protected static class RowComparatorListener extends RowAdapter {
 
     Object[][] data;
@@ -1212,7 +1364,7 @@ public class JsonInputTest {
     @Override
     public void rowWrittenEvent( RowMetaInterface rowMeta, Object[] row ) throws KettleStepException {
       if ( rowNbr >= data.length ) {
-        throw new ComparisonFailure( "too many output rows", "" + data.length, "" + (rowNbr + 1) );
+        throw new ComparisonFailure( "too many output rows", "" + data.length, "" + ( rowNbr + 1 ) );
       } else {
         for ( int i = 0; i < data[ rowNbr ].length; i++ ) {
           try {
@@ -1293,6 +1445,77 @@ public class JsonInputTest {
     JsonInput jsonInput = createJsonInput( "json", inputMeta, variables, new Object[] { getBasicTestJson() } );
     processRows( jsonInput, 2 );
     assertEquals( "Meta input fields paths should be the same after processRows", PATH, inputMeta.getInputFields()[0].getPath() );
+  }
+
+  /*
+   * see PDI-19132. When parsing, if the first field returned null, the second field would also return null, when in
+   * reality the path existed. This test makes sure that regardless of the order of the fields being searched the result
+   * is the same (the field with a path that exists returns the correct value).
+   */
+  @Test
+  public void testParsingWithNullFinding() throws Exception {
+    JsonInputField a = new JsonInputField( "A" );
+    a.setPath( "$..A.F1" );
+    a.setType( ValueMetaInterface.TYPE_STRING );
+    JsonInputField b = new JsonInputField( "B" );
+    b.setPath( "$..B.F2" );
+    b.setType( ValueMetaInterface.TYPE_STRING );
+    //Create two meta inputs with two different orders a,b and b,a
+    List results = new ArrayList<>();
+    List<JsonInputMeta> metas = Arrays.asList( createSimpleMeta( "json", a, b ), createSimpleMeta( "json", b, a ) );
+    for ( JsonInputMeta meta : metas ) {
+      JsonInputMeta metaAB = createSimpleMeta( "json", a, b );
+      JsonInput jsonInput = createJsonInput( "json", meta, new Object[] { "{'B':{'F2': one}, 'C':{'B': {'F2': three}}}" } );
+      jsonInput.addRowListener( new RowAdapter() {
+        @Override public void rowWrittenEvent( RowMetaInterface rowMeta, Object[] row ) {
+          results.addAll( Arrays.asList( row ) );
+        }
+      } );
+      processRows( jsonInput, 3 );
+      Assert.assertEquals( "error", 0, jsonInput.getErrors() );
+      //Regardless of the order the result should contain the findings "one" and "three".
+      Assert.assertTrue( results.contains( "one" ) );
+      Assert.assertTrue( results.contains( "three" ) );
+    }
+  }
+
+
+  /**
+   * PDI-19445
+   * In the Json parser step syntax used to point to the key : $[*].value worked with the version 8.3 vanilla version
+   * however after the upgrade to 8.3.0.10 the syntax throws null value.
+   *
+   */
+  @Test
+  public void testExpressionWithLegacyModeEnable() throws Exception {
+    System.setProperty( Const.KETTLE_COMPATIBILITY_JSON_INPUT_LEGACY_MODE, "Y" );
+    String json = "{\"value\":\"value_data\",\"id\":\"id_data\"}";
+    JsonInputField inputField = new JsonInputField( "value" );
+    inputField.setPath( "$[*].value" );
+    inputField.setType( ValueMetaInterface.TYPE_STRING );
+
+    JsonInputMeta inputMeta = createSimpleMeta( "json", inputField );
+    JsonInput jsonInput = createJsonInput( "json", inputMeta, new Object[] { json } );
+
+    jsonInput.addRowListener( new RowComparatorListener( new Object[][] { new Object[] { json, "value_data" } } ) );
+    processRows( jsonInput, 2 );
+    Assert.assertEquals( "error", 0, jsonInput.getErrors() );
+  }
+
+  @Test
+  public void testExpressionWithLegacyModeDisable() throws Exception {
+    System.setProperty( Const.KETTLE_COMPATIBILITY_JSON_INPUT_LEGACY_MODE, "N" );
+    String json = "{\"value\":\"value_data\",\"id\":\"id_data\"}";
+    JsonInputField inputField = new JsonInputField( "value" );
+    inputField.setPath( "$[*].value" );
+    inputField.setType( ValueMetaInterface.TYPE_STRING );
+
+    JsonInputMeta inputMeta = createSimpleMeta( "json", inputField );
+    JsonInput jsonInput = createJsonInput( "json", inputMeta, new Object[] { json } );
+
+    jsonInput.addRowListener( new RowComparatorListener( new Object[][] { new Object[] { json, null } } ) );
+    processRows( jsonInput, 2 );
+    Assert.assertEquals( "error", 0, jsonInput.getErrors() );
   }
 
 }

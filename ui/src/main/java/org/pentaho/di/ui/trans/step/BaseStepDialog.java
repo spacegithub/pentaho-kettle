@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.step;
 
@@ -69,7 +61,7 @@ import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.laf.BasePropertyHandler;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.repository.RepositoryElementMetaInterface;
-import org.pentaho.di.shared.SharedObjects;
+import org.pentaho.di.shared.DatabaseManagementInterface;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.BaseStepMeta;
 import org.pentaho.di.trans.step.StepInterface;
@@ -85,12 +77,15 @@ import org.pentaho.di.ui.core.gui.GUIResource;
 import org.pentaho.di.ui.core.gui.WindowProperty;
 import org.pentaho.di.ui.core.widget.ComboVar;
 import org.pentaho.di.ui.core.widget.TableView;
+import org.pentaho.di.ui.spoon.Spoon;
+import org.pentaho.di.ui.spoon.tree.provider.DBConnectionFolderProvider;
 import org.pentaho.di.ui.util.DialogUtils;
 import org.pentaho.di.ui.util.HelpUtils;
 import org.pentaho.metastore.api.IMetaStore;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * This class provides functionality common to Step Dialogs.
@@ -211,7 +206,7 @@ public class BaseStepDialog extends Dialog {
   /**
    * A constant indicating a left button alignment.
    */
-  protected static final int BUTTON_ALIGNMENT_LEFT = 1;
+  public static final int BUTTON_ALIGNMENT_LEFT = 1;
 
   /**
    * A constant indicating a right button alignment.
@@ -227,6 +222,8 @@ public class BaseStepDialog extends Dialog {
    * A reference to a database dialog.
    */
   protected DatabaseDialog databaseDialog;
+
+  private Supplier<Spoon> spoonSupplier = Spoon::getInstance;
 
   static {
     // Get the button alignment
@@ -323,6 +320,7 @@ public class BaseStepDialog extends Dialog {
       }
     } );
   }
+
   /**
    * Dispose this dialog.
    */
@@ -374,8 +372,13 @@ public class BaseStepDialog extends Dialog {
     positionBottomButtons( composite, buttons, margin, BUTTON_ALIGNMENT_RIGHT, lastControl );
   }
 
+  public static final void positionBottomLeftButtons( Composite composite, Button[] buttons, int margin,
+                                                      Control lastControl ) {
+    BaseStepDialog.positionBottomButtons( composite, buttons, margin, BUTTON_ALIGNMENT_LEFT, lastControl );
+  }
+
   public static final void positionBottomButtons( Composite composite, Button[] buttons, int margin, int alignment,
-                                                   Control lastControl ) {
+                                                  Control lastControl ) {
     // Determine the largest button in the array
     Rectangle largest = null;
     for ( int i = 0; i < buttons.length; i++ ) {
@@ -737,8 +740,17 @@ public class BaseStepDialog extends Dialog {
         CreateDatabaseWizard cdw = new CreateDatabaseWizard();
         DatabaseMeta newDBInfo = cdw.createAndRunDatabaseWizard( shell, props, transMeta.getDatabases() );
         if ( newDBInfo != null ) {
-          transMeta.addDatabase( newDBInfo );
+          try {
+            DatabaseManagementInterface dbMgr =
+              spoonSupplier.get().getManagementBowl().getManager( DatabaseManagementInterface.class );
+            dbMgr.add( newDBInfo );
+          } catch ( KettleException ex ) {
+            new ErrorDialog( wbwConnection.getShell(),
+              BaseMessages.getString( PKG, "BaseStepDialog.UnexpectedErrorEditingConnection.DialogTitle" ),
+              BaseMessages.getString( PKG, "BaseStepDialog.UnexpectedErrorEditingConnection.DialogMessage" ), ex );
+          }
           reinitConnectionDropDown( wConnection, newDBInfo.getName() );
+          spoonSupplier.get().refreshTree( DBConnectionFolderProvider.STRING_CONNECTIONS );
         }
       }
     } );
@@ -796,24 +808,42 @@ public class BaseStepDialog extends Dialog {
   }
 
   @VisibleForTesting
-  String showDbDialogUnlessCancelledOrValid( DatabaseMeta changing, DatabaseMeta origin ) {
+  public String showDbDialogUnlessCancelledOrValid( DatabaseMeta changing, DatabaseMeta origin,
+                                                    DatabaseManagementInterface dbMgr ) {
     changing.shareVariablesWith( transMeta );
     DatabaseDialog cid = getDatabaseDialog( shell );
     cid.setDatabaseMeta( changing );
     cid.setModalDialog( true );
+    String origname = origin == null ? null : origin.getName();
+
+    if ( cid.getDatabaseMeta() == null ) {
+      return changing.getName();
+    }
 
     String name = null;
     boolean repeat = true;
     while ( repeat ) {
       name = cid.open();
       if ( name == null ) {
-        // Cancel was pressed
+        // Cancel was pressed or the user didn't enter a name
         repeat = false;
       } else {
         name = name.trim();
-        DatabaseMeta same = transMeta.findDatabase( name );
-        if ( same == null || same == origin ) {
-          // OK was pressed and input is valid
+        boolean collisionFound = false;
+        // don't look for collisions unless they changed the name
+        if ( !name.equalsIgnoreCase( origname ) ) {
+          try {
+            String finalName = name;
+            collisionFound =
+              dbMgr.getAll().stream().anyMatch( db -> db.getName().trim().equalsIgnoreCase( finalName ) );
+          } catch ( KettleException e ) {
+            new ErrorDialog( shell,
+              BaseMessages.getString( PKG, "BaseStepDialog.UnexpectedErrorEditingConnection.DialogTitle" ),
+              BaseMessages.getString( PKG, "BaseStepDialog.UnexpectedErrorEditingConnection.DialogMessage" ), e );
+          }
+        }
+        if ( !collisionFound ) {
+          // OK was pressed and input is valid. Name for new or edited connection is unique.
           repeat = false;
         } else {
           showDbExistsDialog( changing );
@@ -824,11 +854,11 @@ public class BaseStepDialog extends Dialog {
   }
 
   @VisibleForTesting
-  void showDbExistsDialog( DatabaseMeta changing ) {
+  public void showDbExistsDialog( DatabaseMeta changing ) {
     DatabaseDialog.showDatabaseExistsDialog( shell, changing );
   }
 
-  private void reinitConnectionDropDown( CCombo dropDown, String selected ) {
+  public void reinitConnectionDropDown( CCombo dropDown, String selected ) {
     dropDown.removeAll();
     addDatabases( dropDown );
     selectDatabase( dropDown, selected );
@@ -1101,17 +1131,17 @@ public class BaseStepDialog extends Dialog {
   /**
    * Gets unused fields from previous steps and inserts them as rows into a table view.
    *
-   * @param row             the input fields
-   * @param tableView       the table view to modify
-   * @param keyColumn       the column in the table view to match with the names of the fields, checks for existance if
-   *                        >0
-   * @param nameColumn      the column numbers in which the name should end up in
-   * @param dataTypeColumn  the target column numbers in which the data type should end up in
-   * @param lengthColumn    the length column where the length should end up in (if >0)
-   * @param precisionColumn the length column where the precision should end up in (if >0)
+   * @param row                           the input fields
+   * @param tableView                     the table view to modify
+   * @param keyColumn                     the column in the table view to match with the names of the fields, checks
+   *                                      for existance if >0
+   * @param nameColumn                    the column numbers in which the name should end up in
+   * @param dataTypeColumn                the target column numbers in which the data type should end up in
+   * @param lengthColumn                  the length column where the length should end up in (if >0)
+   * @param precisionColumn               the length column where the precision should end up in (if >0)
    * @param optimizeWidth
-   * @param listener        A listener that you can use to do custom modifications to the inserted table item, based on
-   *                        a value from the provided row
+   * @param listener                      A listener that you can use to do custom modifications to the inserted
+   *                                      table item, based a value from the provided row
    * @param getFieldsChoiceDialogProvider the GetFieldsChoice dialog provider
    */
   public static final void getFieldsFromPrevious( RowMetaInterface row, TableView tableView, int keyColumn,
@@ -1473,7 +1503,7 @@ public class BaseStepDialog extends Dialog {
 
 
   @VisibleForTesting
-  class AddConnectionListener extends SelectionAdapter {
+  public class AddConnectionListener extends SelectionAdapter {
 
     private final CCombo wConnection;
 
@@ -1484,10 +1514,19 @@ public class BaseStepDialog extends Dialog {
     @Override
     public void widgetSelected( SelectionEvent e ) {
       DatabaseMeta databaseMeta = new DatabaseMeta();
-      String connectionName = showDbDialogUnlessCancelledOrValid( databaseMeta, null );
-      if ( connectionName != null ) {
-        transMeta.addDatabase( databaseMeta );
-        reinitConnectionDropDown( wConnection, databaseMeta.getName() );
+      try {
+        DatabaseManagementInterface dbMgr =
+          spoonSupplier.get().getManagementBowl().getManager( DatabaseManagementInterface.class );
+        String connectionName = showDbDialogUnlessCancelledOrValid( databaseMeta, null, dbMgr );
+        if ( connectionName != null ) {
+          dbMgr.add( databaseMeta );
+          reinitConnectionDropDown( wConnection, databaseMeta.getName() );
+          spoonSupplier.get().refreshTree( DBConnectionFolderProvider.STRING_CONNECTIONS );
+        }
+      } catch ( KettleException ex ) {
+        new ErrorDialog( wConnection.getShell(),
+          BaseMessages.getString( PKG, "BaseStepDialog.UnexpectedErrorEditingConnection.DialogTitle" ),
+          BaseMessages.getString( PKG, "BaseStepDialog.UnexpectedErrorEditingConnection.DialogMessage" ), ex );
       }
     }
   }
@@ -1497,7 +1536,7 @@ public class BaseStepDialog extends Dialog {
   }
 
   @VisibleForTesting
-  class EditConnectionListener extends SelectionAdapter {
+  public class EditConnectionListener extends SelectionAdapter {
 
     private final CCombo wConnection;
 
@@ -1507,43 +1546,52 @@ public class BaseStepDialog extends Dialog {
 
     public void widgetSelected( SelectionEvent e ) {
       DatabaseMeta databaseMeta = transMeta.findDatabase( wConnection.getText() );
+      String originalName = databaseMeta.getName();
+      DatabaseManagementInterface applicableDbMgr = null;
       if ( databaseMeta != null ) {
-        // cloning to avoid spoiling data on cancel or incorrect input
-        DatabaseMeta clone = (DatabaseMeta) databaseMeta.clone();
-        // setting old Id, so a repository (if it used) could find and replace the existing connection
-        clone.setObjectId( databaseMeta.getObjectId() );
-        String connectionName = showDbDialogUnlessCancelledOrValid( clone, databaseMeta );
-        if ( connectionName != null ) {
-          // need to replace the old connection with a new one
-          if ( databaseMeta.isShared() ) {
-            if ( !replaceSharedConnection( databaseMeta, clone ) ) {
-              return;
-            }
-          }
-          transMeta.removeDatabase( transMeta.indexOfDatabase( databaseMeta ) );
-          transMeta.addDatabase( clone );
-          reinitConnectionDropDown( wConnection, connectionName );
-        }
-      }
-    }
+        try {
+          // Check each database manager in precedence order (bowl, global, local) to find which one holds the
+          // connection being edited.
+          DatabaseManagementInterface dbMgr =
+            spoonSupplier.get().getManagementBowl().getManager( DatabaseManagementInterface.class );
+          DatabaseManagementInterface globalDbMgr =
+            spoonSupplier.get().getGlobalManagementBowl().getManager( DatabaseManagementInterface.class );
+          DatabaseManagementInterface transDbMgr = transMeta.getDatabaseManagementInterface();
 
-    boolean replaceSharedConnection( DatabaseMeta dbConnection, DatabaseMeta newDbConnection ) {
-      try {
-        SharedObjects sharedObjects = transMeta.getSharedObjects();
-        sharedObjects.removeObject( dbConnection );
-        sharedObjects.storeObject( newDbConnection );
-        sharedObjects.saveToFile();
-        return true;
-      } catch ( Exception e ) {
-        showErrorDialog( e );
-        return false;
+          if ( applicableDbMgr == null && dbMgr.get( originalName ) != null ) {
+            applicableDbMgr = dbMgr;
+          } else if ( applicableDbMgr == null && globalDbMgr.get( originalName ) != null ) {
+            applicableDbMgr = globalDbMgr;
+          } else if ( applicableDbMgr == null && transDbMgr.get( originalName ) != null ) {
+            applicableDbMgr = transDbMgr;
+          }
+
+          // cloning to avoid spoiling data on cancel or incorrect input
+          DatabaseMeta clone = (DatabaseMeta) databaseMeta.clone();
+          // setting old Id, so a repository (if it used) could find and replace the existing connection
+          clone.setObjectId( databaseMeta.getObjectId() );
+          String editedConnectionName = showDbDialogUnlessCancelledOrValid( clone, databaseMeta, applicableDbMgr );
+          // name collision check has already happened. from here on, the new name is assumed to be ok.
+          if ( editedConnectionName != null ) {
+            // To prevent the connection from moving between levels, the connection being edited is removed from and
+            // then added back to its original database manager.
+            applicableDbMgr.remove( databaseMeta );
+            applicableDbMgr.add( clone );
+            reinitConnectionDropDown( wConnection, editedConnectionName );
+            spoonSupplier.get().refreshTree( DBConnectionFolderProvider.STRING_CONNECTIONS );
+          }
+        } catch ( KettleException ex ) {
+          new ErrorDialog( wConnection.getShell(),
+            BaseMessages.getString( PKG, "BaseStepDialog.UnexpectedErrorEditingConnection.DialogTitle" ),
+            BaseMessages.getString( PKG, "BaseStepDialog.UnexpectedErrorEditingConnection.DialogMessage" ), ex );
+        }
       }
     }
 
     void showErrorDialog( Exception e ) {
       new ErrorDialog( wConnection.getShell(), BaseMessages.getString( PKG,
-          "BaseStep.Exception.UnexpectedErrorEditingConnection.DialogTitle" ), BaseMessages.getString( PKG,
-              "BaseStep.Exception.UnexpectedErrorEditingConnection.DialogMessage" ), e );
+        "BaseStep.Exception.UnexpectedErrorEditingConnection.DialogTitle" ), BaseMessages.getString( PKG,
+        "BaseStep.Exception.UnexpectedErrorEditingConnection.DialogMessage" ), e );
     }
   }
 }

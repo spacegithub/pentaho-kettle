@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Big Data
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.core.row.value;
 
 import org.pentaho.di.core.plugins.IValueMetaConverter;
@@ -37,13 +29,15 @@ import java.util.Date;
 /**
  * This class is intended to facilitate any needed conversions of a ValueMetaInterface field from one type to another.
  * It was initially implemented for Orc storage in the pentaho-hadoop-shims project.  This class is added here because
- * the converstions are not dependendant on orc in any way.
+ * the conversions are not dependant on orc in any way.
  *
+ * <p><b>Important note:</b><br/>This class is not intended to mimic the conversions that exist on PDI! It handles
+ * conversions from and to Avro/Parquet/Orc format, as so it must only take in consideration those Specs!</p>
+ * <p>
  * Created by tkafalas on 12/8/2017.
  */
 public class ValueMetaConverter implements Serializable, IValueMetaConverter {
-  private final String DEFAULT_DATE_FORMAT = ValueMetaBase.DEFAULT_DATE_FORMAT_MASK;
-  private SimpleDateFormat datePattern = new SimpleDateFormat( DEFAULT_DATE_FORMAT );
+  private SimpleDateFormat datePattern = new SimpleDateFormat( ValueMetaBase.DEFAULT_DATE_FORMAT_MASK );
   private int precision = 0;
 
   public SimpleDateFormat getDatePattern() {
@@ -85,7 +79,6 @@ public class ValueMetaConverter implements Serializable, IValueMetaConverter {
       case ValueMetaInterface.TYPE_TIMESTAMP:
         return convertFromTimestampMetaInterface( targetValueMetaType, value );
       case ValueMetaInterface.TYPE_DATE:
-
         return convertFromDateMetaInterface( targetValueMetaType, value );
       case ValueMetaInterface.TYPE_BOOLEAN:
         return convertFromBooleanMetaInterface( targetValueMetaType, value );
@@ -357,7 +350,7 @@ public class ValueMetaConverter implements Serializable, IValueMetaConverter {
         case ValueMetaInterface.TYPE_DATE:
           return new Date( ( (Timestamp) value ).getTime() );
         default:
-          throwBadConversionCombination( ValueMetaInterface.TYPE_NUMBER, targetValueMetaType, value );
+          throwBadConversionCombination( ValueMetaInterface.TYPE_TIMESTAMP, targetValueMetaType, value );
       }
     } catch ( Exception e ) {
       throwErroredConversion( ValueMetaInterface.TYPE_TIMESTAMP, targetValueMetaType, value, e );
@@ -483,7 +476,7 @@ public class ValueMetaConverter implements Serializable, IValueMetaConverter {
   }
 
   private String stripDecimal( String s ) {
-    int decimalPosition = s.indexOf( "." );
+    int decimalPosition = s.indexOf( '.' );
     return decimalPosition != -1 ? s.substring( 0, decimalPosition ) : s;
   }
 }

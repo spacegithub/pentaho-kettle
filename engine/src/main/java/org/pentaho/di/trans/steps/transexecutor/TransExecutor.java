@@ -1,45 +1,37 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.transexecutor;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.ArrayList;
 import java.util.Map;
-import java.util.Arrays;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.core.ResultFile;
 import org.pentaho.di.core.RowMetaAndData;
 import org.pentaho.di.core.RowSet;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.logging.KettleLogStore;
-import org.pentaho.di.core.logging.LoggingRegistry;
 import org.pentaho.di.core.row.RowDataUtil;
 import org.pentaho.di.core.row.RowMeta;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.job.DelegationListener;
 import org.pentaho.di.trans.StepWithMappingMeta;
@@ -119,7 +111,7 @@ public class TransExecutor extends BaseStep implements StepInterface {
           Object groupFieldData = row[ transExecutorData.groupFieldIndex ];
           if ( transExecutorData.prevGroupFieldData != null ) {
             if ( transExecutorData.groupFieldMeta.compare( transExecutorData.prevGroupFieldData, groupFieldData ) != 0 ) {
-              executeTransformation( incomingFieldValues );
+              executeTransformation( getLastIncomingFieldValues() );
             }
           }
           transExecutorData.prevGroupFieldData = groupFieldData;
@@ -208,9 +200,16 @@ public class TransExecutor extends BaseStep implements StepInterface {
 
     Trans executorTrans = createInternalTrans();
     transExecutorData.setExecutorTrans( executorTrans );
+    if ( incomingFieldValues != null ) {
+      // Pass parameter values
+      passParametersToTrans( incomingFieldValues );
+    } else {
+      List<String> lastIncomingFieldValues = getLastIncomingFieldValues();
+      // incomingFieldValues == null-  There are no more rows - Last Case - pass previous values if exists
+      // If not still pass the null parameter values
+      passParametersToTrans( lastIncomingFieldValues != null && !lastIncomingFieldValues.isEmpty() ? lastIncomingFieldValues : incomingFieldValues );
+    }
 
-    // Pass parameter values
-    passParametersToTrans( incomingFieldValues );
 
     // keep track for drill down in Spoon...
     getTrans().addActiveSubTransformation( getStepname(), executorTrans );
@@ -244,8 +243,6 @@ public class TransExecutor extends BaseStep implements StepInterface {
 
     if ( result.isSafeStop() ) {
       getTrans().safeStop();
-    } else if ( result.getNrErrors() > 0 ) {
-      getTrans().stopAll();
     }
 
     collectTransResults( result );
@@ -262,7 +259,6 @@ public class TransExecutor extends BaseStep implements StepInterface {
     Trans executorTrans = transExecutorData.getExecutorTrans();
     if ( executorTrans != null ) {
       KettleLogStore.discardLines( executorTrans.getLogChannelId(), false );
-      LoggingRegistry.getInstance().removeIncludingChildren( executorTrans.getLogChannelId() );
     }
   }
 
@@ -316,21 +312,43 @@ public class TransExecutor extends BaseStep implements StepInterface {
     List<String> staticInputs = Arrays.asList( parameters.getInput() );
 
     /////////////////////////////////////////////
-    //If "Fields to use" ARE provided.
-    for ( int i = 0; i < fieldsToUse.size(); i++ ) {
+    // For all parameters declared in transExecutor
+    for ( int i = 0; i < parameters.getVariable().length; i++ ) {
+      String currentVariableToUpdate = (String) resolvingValuesMap.keySet().toArray()[i];
+      boolean hasIncomingFieldValues = incomingFieldValues != null && !incomingFieldValues.isEmpty();
       try {
-        String value = null;
-        if ( incomingFields.contains( fieldsToUse.get( i ) )
-            && ( value = incomingFieldValues.get( incomingFields.indexOf( fieldsToUse.get( i ) ) ) ) != null ) {
-          //Set the value to the first parameter in the resolvingValuesMap.
-          resolvingValuesMap.put( (String) resolvingValuesMap.keySet().toArray()[i], value );
+        if ( i < fieldsToUse.size() && listContainsIgnoreCase( incomingFields,  fieldsToUse.get( i ) ) && hasIncomingFieldValues
+          && ( !Utils.isEmpty( Const.trim( incomingFieldValues.get( getIndexIgnoreCase( incomingFields, fieldsToUse.get( i ) ) ) ) ) ) ) {
+          // if field to use is defined on previous steps ( incomingFields ) and is not empty - put that value
+          resolvingValuesMap.put( currentVariableToUpdate, incomingFieldValues.get( getIndexIgnoreCase( incomingFields, fieldsToUse.get( i ) ) ) );
         } else {
-          //Set the value to the first parameter in the resolvingValuesMap.
-          resolvingValuesMap.put( (String) resolvingValuesMap.keySet().toArray()[i], staticInputs.get( i ) );
+          if ( i < staticInputs.size() && !Utils.isEmpty( Const.trim( staticInputs.get( i ) ) ) ) {
+            // if we do not have a field to use then check for static input values - if not empty - put that value
+            resolvingValuesMap.put( currentVariableToUpdate, staticInputs.get( i ) );
+          } else {
+            if ( !Utils.isEmpty( Const.trim( fieldsToUse.get( i ) ) ) ) {
+              // if both -field to use- and -static values- are empty, then check if it is in fact an empty field cell
+              // if not an empty cell then it is a declared variable that was resolved as null by previous steps
+              // put "" value ( not null) and also set transExecutor variable - to force create this variable
+              resolvingValuesMap.put( currentVariableToUpdate, "" );
+              this.setVariable( parameters.getVariable()[i], resolvingValuesMap.get( parameters.getVariable()[i] ) );
+            } else {
+              if ( !Utils.isEmpty( Const.trim( this.getVariable( parameters.getVariable()[i] ) ) ) && meta.getParameters().isInheritingAllVariables() ) {
+                // if everything is empty, then check for last option - parent variables if isInheriting is checked - if exists - put that value
+                resolvingValuesMap.put( currentVariableToUpdate, this.getVariable( parameters.getVariable()[i] ) );
+              } else {
+                // last case - if no variables defined - put "" value ( not null)
+                // and also set transExecutor variable - to force create this variable
+                resolvingValuesMap.put( currentVariableToUpdate, "" );
+                this.setVariable( parameters.getVariable()[i], resolvingValuesMap.get( parameters.getVariable()[i] ) );
+              }
+            }
+          }
         }
       } catch ( Exception e ) {
         //Set the value to the first parameter in the resolvingValuesMap.
-        resolvingValuesMap.put( (String) resolvingValuesMap.keySet().toArray()[i], null );
+        resolvingValuesMap.put( (String) resolvingValuesMap.keySet().toArray()[i], "" );
+        this.setVariable( parameters.getVariable()[i], resolvingValuesMap.get( parameters.getVariable()[i] ) );
       }
     }
     /////////////////////////////////////////////
@@ -342,8 +360,38 @@ public class TransExecutor extends BaseStep implements StepInterface {
     }
 
     Trans trans = getExecutorTrans();
+    initializeVariablesFromParent( trans );
+
     StepWithMappingMeta
-        .activateParams( trans, trans, this, trans.listParameters(), parameters.getVariable(), inputFieldValues );
+        .activateParams( trans, trans, this, trans.listParameters(), parameters.getVariable(), inputFieldValues, meta.getParameters().isInheritingAllVariables() );
+  }
+
+  /**
+   * Search through the provided list for a specified value while ignoring case
+   * @param list list of Strings to be searched
+   * @param value String to search for
+   * @return true if the value is found, false otherwise
+   */
+  private boolean listContainsIgnoreCase( final List<String> list, final String value ) {
+    return list.stream().anyMatch( s -> s.equalsIgnoreCase( value ) );
+  }
+
+  /**
+   * Get the index of the specified value in the list, ignoring case.  Should only be called
+   * after verifying that the value exists first using listContainsIgnoreCase!
+   * @param list list of Strings to be searched
+   * @param value String to search for
+   * @return the index of the value in the list if found, -1 if not found
+   */
+  private int getIndexIgnoreCase( final List<String> list, final String value ) {
+    for ( int i = 0; i < list.size(); i++ ) {
+      if ( list.get( i ).equalsIgnoreCase( value ) ) {
+        return i;
+      }
+    }
+    // THIS SHOULD NEVER HAPPEN BECAUSE WE SHOULD NEVER CALL THIS METHOD WITHOUT FIRST CHECKING FOR THE EXISTENCE OF
+    // THE VALUE WITH listContainsIgnoreCase FIRST!!!!
+    return -1;
   }
 
   @VisibleForTesting
@@ -479,7 +527,8 @@ public class TransExecutor extends BaseStep implements StepInterface {
 
   @VisibleForTesting
   TransMeta loadExecutorTransMeta() throws KettleException {
-    return TransExecutorMeta.loadMappingMeta( meta, meta.getRepository(), meta.getMetaStore(), this, meta.getParameters().isInheritingAllVariables() );
+    return TransExecutorMeta.loadMappingMeta( getTransMeta().getBowl(), meta, meta.getRepository(),
+      meta.getMetaStore(), this, meta.getParameters().isInheritingAllVariables() );
   }
 
   public void dispose( StepMetaInterface smi, StepDataInterface sdi ) {
@@ -517,4 +566,28 @@ public class TransExecutor extends BaseStep implements StepInterface {
   private void setData( TransExecutorData data ) {
     this.data = data;
   }
+
+  protected List<String> getLastIncomingFieldValues( ) {
+    TransExecutorData transExecutorData = getData();
+    List<String> lastIncomingFieldValues = new ArrayList<>();
+    if ( transExecutorData == null || transExecutorData.groupBuffer.isEmpty() ) {
+      return null;
+    }
+
+    int lastIncomingFieldIndex = transExecutorData.groupBuffer.size() - 1;
+    ArrayList lastGroupBufferData = new ArrayList( Arrays.asList( transExecutorData.groupBuffer.get( lastIncomingFieldIndex ).getData() ) );
+    lastGroupBufferData.removeAll( Collections.singleton( null ) );
+
+    for ( int i = 0; i < lastGroupBufferData.size(); i++ ) {
+      lastIncomingFieldValues.add( lastGroupBufferData.get( i ).toString() );
+    }
+    return lastIncomingFieldValues;
+  }
+
+  void initializeVariablesFromParent( Trans trans ) {
+    if ( meta.getParameters().isInheritingAllVariables() ) {
+      trans.initializeVariablesFrom( getTrans() );
+    }
+  }
+
 }

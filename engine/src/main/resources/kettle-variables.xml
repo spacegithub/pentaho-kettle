@@ -1,3 +1,14 @@
+<!-- ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************* -->
 <kettle-variables>
 
   <kettle-variable>
@@ -61,12 +72,12 @@
   </kettle-variable>
 
   <kettle-variable>
-    <description>The transformation performance log schema default for all transformations</description>
+    <description>The transformation performance log database connection default for all transformations</description>
     <variable>KETTLE_TRANS_PERFORMANCE_LOG_DB</variable>
   </kettle-variable>
 
   <kettle-variable>
-    <description>The transformation performance log database connection default for all transformations</description>
+    <description>The transformation performance log schema default for all transformations</description>
     <variable>KETTLE_TRANS_PERFORMANCE_LOG_SCHEMA</variable>
   </kettle-variable>
 
@@ -149,6 +160,30 @@
   </kettle-variable>
 
   <kettle-variable>
+    <description>Prevents Kettle from converting null strings to empty strings when KETTLE_EMPTY_STRING_DIFFERS_FROM_NULL is set to "Y".</description>
+    <variable>KETTLE_DO_NOT_NORMALIZE_NULL_STRING_TO_EMPTY</variable>
+    <default-value>N</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Prevents Kettle from converting spaces only strings to empty string.</description>
+    <variable>KETTLE_DO_NOT_NORMALIZE_SPACES_ONLY_STRING_TO_EMPTY</variable>
+    <default-value>N</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Prevent Kettle from yielding null as the value of an empty value.</description>
+    <variable>KETTLE_XML_EMPTY_TAG_YIELDS_EMPTY_VALUE</variable>
+    <default-value>N</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Cause the "Get XML data" step to yield null values on missing elements and empty values on empty elements when set to "Y".</description>
+    <variable>KETTLE_XML_MISSING_TAG_YIELDS_NULL_VALUE</variable>
+    <default-value>N</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
     <description>The maximum number of log lines that are kept internally by Kettle. Set to 0 to keep all rows
       (default)
     </description>
@@ -162,6 +197,12 @@
     </description>
     <variable>KETTLE_MAX_LOG_TIMEOUT_IN_MINUTES</variable>
     <default-value>1440</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Specifies the maximum size (in MB) of the Result log buffer to prevent OutOfMemoryError (default: -1). Any value less than 0 or non-numeric will not add any log restriction. Setting the value to 0 means no log generation.</description>
+    <variable>KETTLE_MAX_LOG_BUFFER_SIZE_MB</variable>
+    <default-value>-1</default-value>
   </kettle-variable>
 
   <kettle-variable>
@@ -180,6 +221,12 @@
     <description>The maximum number of logging registry entries kept in memory for logging purposes.</description>
     <variable>KETTLE_MAX_LOGGING_REGISTRY_SIZE</variable>
     <default-value>10000</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>The timeout interval for the logging registry purge timer which cleanups of registry entries (in msecs).</description>
+    <variable>KETTLE_LOGGING_REGISTRY_PURGE_TIMEOUT</variable>
+    <default-value>60000</default-value>
   </kettle-variable>
 
   <kettle-variable>
@@ -440,6 +487,12 @@
   </kettle-variable>
 
   <kettle-variable>
+    <description>Set this variable to a storage file size to configure the s3 multi part upload part size.</description>
+    <variable>s3.vfs.partSize</variable>
+    <default-value>5MB</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
     <description>Set this variable to restore the directory loading behavior of the repository as it was before 6.1. Changing this to false will make repository loading more expensive</description>
     <variable>KETTLE_LAZY_REPOSITORY</variable>
     <default-value>true</default-value>
@@ -505,5 +558,171 @@
     <variable>KETTLE_MAX_TAB_LENGTH</variable>
     <default-value>17</default-value>
   </kettle-variable>
-</kettle-variables>
 
+  <kettle-variable>
+    <description>This environment variable allows to enable s3 legacy URI. Please check: PDI-19732.</description>
+    <variable>KETTLE_COMPATIBILITY_ALLOW_S3_LEGACY_URI</variable>
+    <default-value>N</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>This environment variable is used by streaming consumer steps to limit the total of concurrent batches across transformations. Leave 0 for unlimited.</description>
+    <variable>SHARED_STREAMING_BATCH_POOL_SIZE</variable>
+    <default-value>0</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>This environment variable is used to specify a location used to deploy a shim driver into PDI.</description>
+    <variable>SHIM_DRIVER_DEPLOYMENT_LOCATION</variable>
+    <default-value>DEFAULT</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>This environment variable is used to specify how many attempts before failing to read an XML from within a Zip file while multy-thread execution and using XMLHandler.</description>
+    <variable>KETTLE_RETRY_OPEN_XML_STREAM</variable>
+    <default-value>2</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>This environment variable is used to define how Timestamp should be converted to a number and vice-versa.
+      Possible values: "LEGACY" (default), "MILLISECONDS", "NANOSECONDS".</description>
+    <variable>KETTLE_TIMESTAMP_NUMBER_CONVERSION_MODE</variable>
+    <default-value>LEGACY</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>This environment variable is used to enable the checking of zip bomb. This is set to false by default.</description>
+    <variable>KETTLE_XLSX_ZIP_BOMB_CHECK</variable>
+    <default-value>false</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>A variable to configure a comma separated list of environment variables to ignore when initializing shell step. org.osgi.framework.system.packages.extra is set by default.</description>
+    <variable>SHELL_STEP_ENVIRONMENT_VARIABLES_TO_IGNORE</variable>
+    <default-value>org.osgi.framework.system.packages.extra</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>System wide flag to control behavior of the ExecuteTransformationStep and ExecuteJobStep when a file is specified.
+      This only is used when PDI is connected to repository.
+      Y - It is possible specify a file with the extension or not that is saved in repository
+      N - Should not be specified the extension, in other words, should be specified the name of file saved in repository.
+    </description>
+    <variable>KETTLE_COMPATIBILITY_INVOKE_FILES_WITH_OR_WITHOUT_FILE_EXTENSION</variable>
+    <default-value>Y</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>System-wide flag to keep legacy behavior on json input step. See PDI-19445 and PDI-18521 for details.
+      Y - Uses the old behaviour before 8.3.0.10
+      N - Uses the correct behavior implemented on PDI-18521 after 8.3.0.10
+    </description>
+    <variable>KETTLE_COMPATIBILITY_JSON_INPUT_LEGACY_MODE</variable>
+    <default-value>N</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>This environment variable is used to define which calculation method is to be used by the 'Add a Checksum' step:
+      "BYTES" (default) - based on Byte representation of fields; as in versions since 8.1
+      "PENTAHO_STRINGS" - based on Pentaho String representation of fields (applying format masks); as in versions until 7.1
+      "NATIVE_STRINGS" - based on Native String representation of fields; as in version 8.0</description>
+    <variable>KETTLE_DEFAULT_CHECKSUM_EVALUATION_METHOD</variable>
+    <default-value>BYTES</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>This environment variable is used to define how DateDiff ('Modified JavaScript value' step) performs regarding DST (Daylight Savings Time):
+      "N" (default) - uses local time, meaning it assumes a continuum between the two given dates ignoring any time-hop that may had occurred between them
+      "Y" - uses UTC, meaning it will take into acount any time-hop that may had occurred between the two given dates</description>
+    <variable>KETTLE_DATEDIFF_DST_AWARE</variable>
+    <default-value>N</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>This environment variable is used to log info of logobjecttype GENERAL </description>
+    <variable>KETTLE_LOG_GENERAL_OBJECTS_TO_DI_LOGGER</variable>
+    <default-value>N</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>This environment variable is used to allow the Filter step to treat nulls as not being 0</description>
+    <variable>KETTLE_FILTER_TREAT_NULLS_AS_NOT_ZERO</variable>
+    <default-value>N</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Set this variable to have the Python Executor step consider null/empty lines. Consider the following behaviour: Leaving it empty, will have the step ignore null lines. Setting it will have the step replace these lines with the vallue added. (ex. NaN)
+    </description>
+    <variable>KETTLE_PYTHON_STEP_REPLACE_NULLS</variable>
+    <default-value></default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Set this variable to Y to revert the behaviour of the flag "Execute every Input Row" behavior back to executing even with 0 rows as job input mode.
+      See Jira issue PPP-20033 for details.
+    </description>
+    <variable>KETTLE_COMPATIBILITY_JOB_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT</variable>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Set this variable to Y to revert the behaviour of the flag "Execute every Input Row" behavior back to executing even with 0 rows as trans input mode.
+      See Jira issue PPP-20033 for details.
+    </description>
+    <variable>KETTLE_COMPATIBILITY_TRANS_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT</variable>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Set this variable to Y/N to show/not show the Warning messages regarding the configured behaviour of the flag "Execute every Input Row".
+      See Jira issue PPP-20033 for details.
+    </description>
+    <variable>KETTLE_COMPATIBILITY_SHOW_WARNINGS_EXECUTE_EVERY_INPUT_ROW</variable>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Set this variable to Y to execute temporary generated file and N to use original script in Shell step.
+      See Jira issue BISERVER-15147 for details.
+    </description>
+    <variable>KETTLE_EXECUTE_TEMPORARY_GENERATED_FILE</variable>
+    <default-value>Y</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>This variable controls where the temporary file is created when KETTLE_EXECUTE_TEMPORARY_GENERATED_FILE is set to Y.
+      When set to Y, files are created in the Java temporary directory (which can be configured using -Djava.io.tmpdir).
+      When set to N, files are created in the same location as the original script, which is useful when scripts reference other scripts.
+      Internal Pentaho Reference: Jira issue PDI-20642.
+    </description>
+    <variable>KETTLE_EXECUTE_TEMPORARY_GENERATED_FILE_IN_TEMP_DIR</variable>
+    <default-value>N</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Sets the maximum size for in-memory byte arrays in Apache POI.</description>
+    <variable>POI_BYTE_ARRAY_MAX_SIZE</variable>
+    <default-value>157286400</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Set this variable to Y/N to override gather performance metrics checkbox value in scheduler dialog.
+    </description>
+    <variable>KETTLE_PUC_SCHEDULE_GATHER_METRICS_OVERRIDE_VALUE</variable>
+    <default-value>N</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Set this variable to Y/N to configure whether to ignore Out of Range exceptions.
+      If set to Y, it will ignore Out of Range exceptions and round values to the nearest possible value.
+      If set to N, it will throw an exception when a value is Out of Range (Range from -9223372036854775808 to 9223372036854775807).
+    </description>
+    <variable>KETTLE_IGNORE_OUT_OF_RANGE_EXCEPTION</variable>
+    <default-value>N</default-value>
+  </kettle-variable>
+
+  <kettle-variable>
+    <description>Set this variable to Y to disable/gray out internal variables and remove them from the new/edit schedule dialog.
+      Set it to N to show internal variables in the new/edit schedule dialog.</description>
+    <variable>PENTAHO_SCHEDULER_HIDE_INTERNAL_VARIABLES</variable>
+    <default-value>Y</default-value>
+  </kettle-variable>
+
+</kettle-variables>

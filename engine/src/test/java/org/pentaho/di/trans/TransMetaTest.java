@@ -1,37 +1,29 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.trans;
 
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.mockito.Mockito;
-import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.KettleEnvironment;
 import org.pentaho.di.core.ProgressMonitorListener;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
@@ -46,9 +38,11 @@ import org.pentaho.di.core.row.value.ValueMetaFactory;
 import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.variables.Variables;
+import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.metastore.DatabaseMetaStoreUtil;
 import org.pentaho.di.repository.ObjectRevision;
 import org.pentaho.di.repository.Repository;
+import org.pentaho.di.repository.RepositoryBowl;
 import org.pentaho.di.repository.RepositoryDirectory;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
 import org.pentaho.di.trans.step.StepIOMeta;
@@ -64,10 +58,12 @@ import org.pentaho.di.trans.steps.userdefinedjavaclass.UserDefinedJavaClassDef;
 import org.pentaho.di.trans.steps.userdefinedjavaclass.UserDefinedJavaClassMeta;
 import org.pentaho.metastore.api.IMetaStore;
 import org.pentaho.metastore.stores.memory.MemoryMetaStore;
-import org.powermock.modules.junit4.PowerMockRunner;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -82,10 +78,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doAnswer;
@@ -99,7 +96,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-@RunWith ( PowerMockRunner.class )
 public class TransMetaTest {
   public static final String STEP_NAME = "Any step name";
 
@@ -140,21 +136,20 @@ public class TransMetaTest {
 
   @Test
   public void getThisStepFieldsPassesCloneRowMeta() throws Exception {
-    final String overriddenValue = "overridden";
+    final String overriddenValue = "value";
 
     StepMeta nextStep = mockStepMeta( "nextStep" );
 
     StepMetaInterface smi = mock( StepMetaInterface.class );
     StepIOMeta ioMeta = mock( StepIOMeta.class );
     when( smi.getStepIOMeta() ).thenReturn( ioMeta );
-    doAnswer( new Answer<Object>() {
-      @Override public Object answer( InvocationOnMock invocation ) throws Throwable {
-        RowMetaInterface rmi = (RowMetaInterface) invocation.getArguments()[ 0 ];
-        rmi.clear();
-        rmi.addValueMeta( new ValueMetaString( overriddenValue ) );
-        return null;
-      }
+    doAnswer( (Answer<Object>) invocation -> {
+      RowMetaInterface rmi = (RowMetaInterface) invocation.getArguments()[ 0 ];
+      rmi.clear();
+      rmi.addValueMeta( new ValueMetaString( overriddenValue ) );
+      return null;
     } ).when( smi ).getFields(
+      any( Bowl.class ),
       any( RowMetaInterface.class ), anyString(), any( RowMetaInterface[].class ), eq( nextStep ),
       any( VariableSpace.class ), any( Repository.class ), any( IMetaStore.class ) );
 
@@ -188,7 +183,8 @@ public class TransMetaTest {
     transMeta.getThisStepFields( thisStep, nextStep, row );
 
     // then
-    verify( smi, never() ).getFields( any(), any(), eq( new RowMetaInterface[] { row } ), any(), any(), any(), any() );
+    verify( smi, never() ).getFields( any(), any(), any(), eq( new RowMetaInterface[] { row } ), any(), any(), any(),
+                                      any() );
   }
 
   @Test
@@ -205,7 +201,7 @@ public class TransMetaTest {
     DatabaseMetaStoreUtil.createDatabaseElement( mstore, dbMetaStore );
 
     TransMeta trans = new TransMeta();
-    trans.addOrReplaceDatabase( dbMetaShared );
+    trans.getDatabaseManagementInterface().add( dbMetaShared );
     trans.setMetaStore( mstore );
     trans.importFromMetaStore();
     DatabaseMeta dbMeta = trans.findDatabase( name );
@@ -213,7 +209,7 @@ public class TransMetaTest {
   }
 
   @Test
-  public void testContentChangeListener() throws Exception {
+  public void testContentChangeListener() {
     ContentChangedListener listener = mock( ContentChangedListener.class );
     transMeta.addContentChangedListener( listener );
 
@@ -235,7 +231,7 @@ public class TransMetaTest {
   }
 
   @Test
-  public void testCompare() throws Exception {
+  public void testCompare() {
     TransMeta transMeta = new TransMeta( "aFile", "aName" );
     TransMeta transMeta2 = new TransMeta( "aFile", "aName" );
     assertEquals( 0, transMeta.compare( transMeta, transMeta2 ) );
@@ -285,14 +281,14 @@ public class TransMetaTest {
   }
 
   @Test
-  public void testEquals() throws Exception {
+  public void testEquals() {
     TransMeta transMeta = new TransMeta( "1", "2" );
-    assertFalse( transMeta.equals( "somethingelse" ) );
-    assertTrue( transMeta.equals( new TransMeta( "1", "2" ) ) );
+    assertNotEquals( "somethingelse", transMeta );
+    assertEquals( transMeta, new TransMeta( "1", "2" ) );
   }
 
   @Test
-  public void testTransHops() throws Exception {
+  public void testTransHops() {
     TransMeta transMeta = new TransMeta( "transFile", "myTrans" );
     StepMeta step1 = new StepMeta( "name1", null );
     StepMeta step2 = new StepMeta( "name2", null );
@@ -313,7 +309,7 @@ public class TransMetaTest {
     assertEquals( hopMeta3, transMeta.findTransHopFrom( step3 ) );
     assertEquals( hopMeta2, transMeta.findTransHop( hopMeta2 ) );
     assertEquals( hopMeta1, transMeta.findTransHop( step1, step2 ) );
-    assertEquals( null, transMeta.findTransHop( step3, step4, false ) );
+    assertNull( transMeta.findTransHop( step3, step4, false ) );
     assertEquals( hopMeta3, transMeta.findTransHop( step3, step4, true ) );
     assertEquals( hopMeta2, transMeta.findTransHopTo( step3 ) );
     transMeta.removeTransHop( 0 );
@@ -328,7 +324,7 @@ public class TransMetaTest {
   }
 
   @Test
-  public void testGetAllTransHops() throws Exception {
+  public void testGetAllTransHops() {
     TransMeta transMeta = new TransMeta( "transFile", "myTrans" );
     StepMeta step1 = new StepMeta( "name1", null );
     StepMeta step2 = new StepMeta( "name2", null );
@@ -364,7 +360,7 @@ public class TransMetaTest {
     dgm2.setFieldType( new String[] {
       ValueMetaFactory.getValueMetaName( ValueMetaInterface.TYPE_STRING ) } );
     List<List<String>> dgm2Data = new ArrayList<>();
-    dgm2Data.add( asList( "Some Informational Data" ) );
+    dgm2Data.add( List.of( "Some Informational Data" ) );
     dgm2.setDataLines( dgm2Data );
 
     StepMeta dg1 = new StepMeta( "input1", dgm1 );
@@ -388,7 +384,7 @@ public class TransMetaTest {
     transMeta.addTransHop( hop1 );
     transMeta.addTransHop( hop2 );
 
-    RowMetaInterface row = null;
+    RowMetaInterface row;
     row = transMeta.getPrevInfoFields( udjc );
     assertNotNull( row );
     assertEquals( 1, row.size() );
@@ -462,7 +458,7 @@ public class TransMetaTest {
     String directory = "/home/admin";
     Node jobNode = Mockito.mock( Node.class );
     NodeList nodeList = new NodeList() {
-      ArrayList<Node> nodes = new ArrayList<>();
+      final ArrayList<Node> nodes = new ArrayList<>();
 
       {
 
@@ -493,6 +489,7 @@ public class TransMetaTest {
     Mockito.when( jobNode.getChildNodes() ).thenReturn( nodeList );
 
     Repository rep = Mockito.mock( Repository.class );
+    Mockito.when( rep.getBowl() ).thenReturn( new RepositoryBowl( rep ) );
     RepositoryDirectory repDirectory =
       new RepositoryDirectory( new RepositoryDirectory( new RepositoryDirectory(), "home" ), "admin" );
     Mockito.when( rep.findDirectory( Mockito.eq( directory ) ) ).thenReturn( repDirectory );
@@ -510,8 +507,34 @@ public class TransMetaTest {
   }
 
   @Test
+  public void testLoadXml_whenRepoFileIsPassedAndConnectedToRepository() throws KettleException {
+    String directory = "/home/admin";
+    TransMeta inputTransMeta = new TransMeta( DefaultBowl.getInstance(),
+      getClass().getResource( "one-step-trans.ktr" ).getPath() );
+    String xml = inputTransMeta.getXML();
+    xml = xml.replaceAll( "<directory>/</directory>", "<directory>/home/admin</directory>" );
+    InputStream inputStream = new ByteArrayInputStream( xml.getBytes( StandardCharsets.UTF_8 ) );
+
+    Repository rep = Mockito.mock( Repository.class );
+    Mockito.when( rep.getBowl() ).thenReturn( new RepositoryBowl( rep ) );
+    RepositoryDirectory repDirectory =
+      new RepositoryDirectory( new RepositoryDirectory( new RepositoryDirectory(), "home" ), "admin" );
+    Mockito.when( rep.findDirectory( directory ) ).thenReturn( repDirectory );
+    VariableSpace variableSpace = Mockito.mock( VariableSpace.class );
+    Mockito.when( variableSpace.listVariables() ).thenReturn( new String[ 0 ] );
+
+    TransMeta meta = new TransMeta( inputStream, null, rep, true, variableSpace, null );
+
+    assertEquals( repDirectory.getPath(),
+      meta.getVariable( Const.INTERNAL_VARIABLE_TRANSFORMATION_REPOSITORY_DIRECTORY ) );
+    assertEquals( repDirectory.getPath(),
+      meta.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+  }
+
+  @Test
   public void testTransWithOneStepIsConsideredUsed() throws Exception {
-    TransMeta transMeta = new TransMeta( getClass().getResource( "one-step-trans.ktr" ).getPath() );
+    TransMeta transMeta = new TransMeta( DefaultBowl.getInstance(),
+      getClass().getResource( "one-step-trans.ktr" ).getPath() );
     assertEquals( 1, transMeta.getUsedSteps().size() );
     Repository rep = mock( Repository.class );
     ProgressMonitorListener monitor = mock( ProgressMonitorListener.class );
@@ -526,7 +549,8 @@ public class TransMetaTest {
 
   @Test
   public void testGetCacheVersion() throws Exception {
-    TransMeta transMeta = new TransMeta( getClass().getResource( "one-step-trans.ktr" ).getPath() );
+    TransMeta transMeta = new TransMeta( DefaultBowl.getInstance(),
+      getClass().getResource( "one-step-trans.ktr" ).getPath() );
     int oldCacheVersion = transMeta.getCacheVersion();
     transMeta.setSizeRowset( 10 );
     int currCacheVersion = transMeta.getCacheVersion();
@@ -535,7 +559,8 @@ public class TransMetaTest {
 
   @Test
   public void testGetCacheVersionWithIrrelevantParameters() throws Exception {
-    TransMeta transMeta = new TransMeta( getClass().getResource( "one-step-trans.ktr" ).getPath() );
+    TransMeta transMeta = new TransMeta( DefaultBowl.getInstance(),
+      getClass().getResource( "one-step-trans.ktr" ).getPath() );
     int oldCacheVersion = transMeta.getCacheVersion();
     int currCacheVersion;
 
@@ -679,7 +704,7 @@ public class TransMetaTest {
   }
 
   @Test
-  public void testHasLoop_simpleLoop() throws Exception {
+  public void testHasLoop_simpleLoop() {
     //main->2->3->main
     TransMeta transMetaSpy = spy( transMeta );
     StepMeta stepMetaMain = createStepMeta( "mainStep" );
@@ -704,7 +729,7 @@ public class TransMetaTest {
   }
 
   @Test
-  public void testHasLoop_loopInPrevSteps() throws Exception {
+  public void testHasLoop_loopInPrevSteps() {
     //main->2->3->4->3
     TransMeta transMetaSpy = spy( transMeta );
     StepMeta stepMetaMain = createStepMeta( "mainStep" );
@@ -758,7 +783,7 @@ public class TransMetaTest {
     StepMeta prevStep1 = testStep( "prevStep1", emptyList(), asList( "field1", "field2" ) );
     StepMeta prevStep2 = testStep( "prevStep2", emptyList(), asList( "field3", "field4", "field5" ) );
 
-    StepMeta someStep = testStep( "step", asList( "prevStep1" ), asList( "outputField" ) );
+    StepMeta someStep = testStep( "step", List.of( "prevStep1" ), List.of( "outputField" ) );
 
     StepMeta after = new StepMeta( "after", new DummyTransMeta() );
 
@@ -804,17 +829,17 @@ public class TransMetaTest {
     RowMeta rowMetaWithFields = new RowMeta();
     StepIOMeta stepIOMeta = mock( StepIOMeta.class );
     when( stepIOMeta.getInfoStepnames() ).thenReturn( infoStepnames.toArray( new String[ 0 ] ) );
-    fieldNames.stream()
+    fieldNames
       .forEach( field -> rowMetaWithFields.addValueMeta( new ValueMetaString( field ) ) );
     StepMetaInterface newSmi = spy( smi );
     when( newSmi.getStepIOMeta() ).thenReturn( stepIOMeta );
 
     doAnswer( (Answer<Void>) invocationOnMock -> {
-      RowMetaInterface passedRmi = (RowMetaInterface) invocationOnMock.getArguments()[ 0 ];
+      RowMetaInterface passedRmi = (RowMetaInterface) invocationOnMock.getArguments()[ 1 ];
       passedRmi.addRowMeta( rowMetaWithFields );
       return null;
     } ).when( newSmi )
-      .getFields( any(), any(), any(), any(), any(), any(), any() );
+      .getFields( any(), any(), any(), any(), any(), any(), any(), any() );
 
     return newSmi;
   }
@@ -824,5 +849,240 @@ public class TransMetaTest {
     StepMeta stepMeta = mock( StepMeta.class );
     when( stepMeta.getName() ).thenReturn( name );
     return stepMeta;
+  }
+
+  @Test
+  public void testSetInternalEntryCurrentDirectoryWithFilename( ) {
+    TransMeta transMetaTest = new TransMeta();
+    transMetaTest.setFilename( "hasFilename" );
+    transMetaTest.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "Original value defined at run execution" );
+    transMetaTest.setVariable( Const.INTERNAL_VARIABLE_TRANSFORMATION_FILENAME_DIRECTORY, "file:///C:/SomeFilenameDirectory" );
+    transMetaTest.setVariable( Const.INTERNAL_VARIABLE_TRANSFORMATION_REPOSITORY_DIRECTORY, "/SomeRepDirectory" );
+    transMetaTest.setInternalEntryCurrentDirectory();
+
+    assertEquals( "file:///C:/SomeFilenameDirectory",  transMetaTest.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY )  );
+
+  }
+
+  @Test
+  public void testSetInternalEntryCurrentDirectoryWithRepository( ) {
+    TransMeta transMetaTest = new TransMeta();
+    RepositoryDirectoryInterface path = mock( RepositoryDirectoryInterface.class );
+
+    when( path.getPath() ).thenReturn( "aPath" );
+    Repository rep = mock( Repository.class );
+    Mockito.when( rep.getBowl() ).thenReturn( new RepositoryBowl( rep ) );
+    transMetaTest.setRepository( rep );
+    transMetaTest.setRepositoryDirectory( path );
+    transMetaTest.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "Original value defined at run execution" );
+    transMetaTest.setVariable( Const.INTERNAL_VARIABLE_TRANSFORMATION_FILENAME_DIRECTORY, "file:///C:/SomeFilenameDirectory" );
+    transMetaTest.setVariable( Const.INTERNAL_VARIABLE_TRANSFORMATION_REPOSITORY_DIRECTORY, "/SomeRepDirectory" );
+    transMetaTest.setInternalEntryCurrentDirectory();
+
+    assertEquals( "/SomeRepDirectory", transMetaTest.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+  }
+
+  @Test
+  public void testSetInternalEntryCurrentDirectoryWithoutFilenameOrRepository( ) {
+    TransMeta transMetaTest = new TransMeta();
+    transMetaTest.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "Original value defined at run execution" );
+    transMetaTest.setVariable( Const.INTERNAL_VARIABLE_TRANSFORMATION_FILENAME_DIRECTORY, "file:///C:/SomeFilenameDirectory" );
+    transMetaTest.setVariable( Const.INTERNAL_VARIABLE_TRANSFORMATION_REPOSITORY_DIRECTORY, "/SomeRepDirectory" );
+    transMetaTest.setInternalEntryCurrentDirectory();
+
+    assertEquals( "Original value defined at run execution", transMetaTest.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+  }
+
+  /**
+   * Tests that the filename is preserved during XML serialization and deserialization.
+   * This is critical for Carte remote execution where TransMeta is serialized to XML,
+   * sent to a slave server, and deserialized. The filename must be preserved so that
+   * lineage tracking and other features can identify the source transformation file.
+   */
+  @Test
+  public void testFilenamePreservedInXmlSerialization() throws Exception {
+    // Create a TransMeta with a filename set
+    TransMeta originalTransMeta = new TransMeta();
+    originalTransMeta.setName( "TestTransformation" );
+    String testFilename = "/path/to/test/transformation.ktr";
+    originalTransMeta.setFilename( testFilename );
+
+    // Serialize to XML
+    String xml = originalTransMeta.getXML();
+
+    // Verify the filename is in the XML
+    assertTrue( "Filename should be included in XML", xml.contains( "<filename>" + testFilename + "</filename>" ) );
+
+    // Deserialize from XML (simulating Carte receiving the transformation)
+    // When loading from Node (not from file), filename should be read from XML
+    org.w3c.dom.Document doc = XMLHandler.loadXMLString( xml );
+    Node transNode = XMLHandler.getSubNode( doc, TransMeta.XML_TAG );
+ 
+    TransMeta deserializedTransMeta = new TransMeta( transNode, null );
+
+    // Verify the filename is preserved after deserialization
+    assertEquals( "Filename should be preserved after XML deserialization", testFilename, deserializedTransMeta.getFilename() );
+  }
+
+  /**
+   * Tests that when loadXML is called, the filename is loaded from the XML.
+   * This is the expected behavior when TransMeta is deserialized on a Carte server.
+   * Note: loadXML calls clear() first, so any pre-existing filename will be cleared
+   * before the XML content is loaded.
+   */
+  @Test
+  public void testFilenameLoadedFromXmlOnLoadXML() throws Exception {
+    // Create a TransMeta with a filename set via XML
+    TransMeta sourceTransMeta = new TransMeta();
+    sourceTransMeta.setName( "TestTransformation" );
+    String originalFilename = "/original/path/transformation.ktr";
+    sourceTransMeta.setFilename( originalFilename );
+
+    // Serialize to XML
+    String xml = sourceTransMeta.getXML();
+    org.w3c.dom.Document doc = XMLHandler.loadXMLString( xml );
+    Node transNode = XMLHandler.getSubNode( doc, TransMeta.XML_TAG );
+
+    // Create a new TransMeta and load the XML (simulating Carte receiving the transformation)
+    TransMeta targetTransMeta = new TransMeta();
+
+    // Load XML into the TransMeta - this should load the filename from XML
+    targetTransMeta.loadXML( transNode, null, false );
+
+    // The filename from XML should be loaded
+    assertEquals( "Filename should be loaded from XML", originalFilename, targetTransMeta.getFilename() );
+  }
+
+  /**
+   * Tests that null filename doesn't cause issues in XML serialization.
+   */
+  @Test
+  public void testNullFilenameInXmlSerialization() throws Exception {
+    TransMeta transMetaWithNullFilename = new TransMeta();
+    transMetaWithNullFilename.setName( "TestTransformation" );
+    // Filename is null by default
+    assertNull( transMetaWithNullFilename.getFilename() );
+
+    // Serialize to XML - should not throw exception
+    String xml = transMetaWithNullFilename.getXML();
+
+    // Should have empty filename tag
+    assertTrue( "XML should contain filename tag even when null", xml.contains( "<filename/>" ) || xml.contains( "<filename></filename>" ) );
+
+    // Deserialize and verify
+    org.w3c.dom.Document doc = XMLHandler.loadXMLString( xml );
+    Node transNode = XMLHandler.getSubNode( doc, TransMeta.XML_TAG );
+
+    TransMeta deserializedTransMeta = new TransMeta( transNode, null );
+
+    // Filename should still be null/empty after deserialization
+    assertTrue( "Null filename should result in null or empty after deserialization",
+        deserializedTransMeta.getFilename() == null || deserializedTransMeta.getFilename().isEmpty() );
+  }
+
+  /**
+   * getUsedDatabaseConnectionNames throws NullPointerException when a step returns a null DatabaseMeta
+   * in its getUsedDatabaseConnections array.
+   */
+  @Test
+  public void testGetUsedDatabaseConnectionNamesNullDbInStep() {
+    // Arrange: a step whose getUsedDatabaseConnections returns an array containing a null element
+    StepMetaInterface stepMetaInterface = mock( StepMetaInterface.class );
+    when( stepMetaInterface.getUsedDatabaseConnections() ).thenReturn( new DatabaseMeta[] { null } );
+
+    StepMeta stepMeta = new StepMeta( "testStep", stepMetaInterface );
+    transMeta.addStep( stepMeta );
+
+    // Act & Assert: must not throw NullPointerException
+    java.util.Set<String> names = transMeta.getUsedDatabaseConnectionNames();
+    assertNotNull( names );
+  }
+
+  /**
+   * isDatabaseConnectionUsed must not throw when getUsedDatabaseConnections returns null.
+   */
+  @Test
+  public void testIsDatabaseConnectionUsedNullArray() {
+    StepMetaInterface stepMetaInterface = mock( StepMetaInterface.class );
+    when( stepMetaInterface.getUsedDatabaseConnections() ).thenReturn( null );
+
+    transMeta.addStep( new StepMeta( "testStep", stepMetaInterface ) );
+
+    DatabaseMeta target = mock( DatabaseMeta.class );
+    assertFalse( transMeta.isDatabaseConnectionUsed( target ) );
+  }
+
+  /**
+   * isDatabaseConnectionUsed must not throw when getUsedDatabaseConnections returns an array with a null element.
+   */
+  @Test
+  public void testIsDatabaseConnectionUsedNullDbInArray() {
+    StepMetaInterface stepMetaInterface = mock( StepMetaInterface.class );
+    when( stepMetaInterface.getUsedDatabaseConnections() ).thenReturn( new DatabaseMeta[] { null } );
+
+    transMeta.addStep( new StepMeta( "testStep", stepMetaInterface ) );
+
+    DatabaseMeta target = mock( DatabaseMeta.class );
+    assertFalse( transMeta.isDatabaseConnectionUsed( target ) );
+  }
+
+  /**
+   * databasesUpdated must not throw when getUsedDatabaseConnections returns an array with a null element.
+   */
+  @Test
+  public void testDatabasesUpdatedNullDbInArray() {
+    StepMetaInterface stepMetaInterface = mock( StepMetaInterface.class );
+    when( stepMetaInterface.getUsedDatabaseConnections() ).thenReturn( new DatabaseMeta[] { null } );
+
+    transMeta.addStep( new StepMeta( "testStep", stepMetaInterface ) );
+
+    // Should not throw NullPointerException
+    transMeta.databasesUpdated( "someConnection", java.util.Optional.empty() );
+    assertTrue( true );
+  }
+
+  /**
+   * allDatabasesUpdated must not throw when getUsedDatabaseConnections returns an array with a null element.
+   */
+  @Test
+  public void testAllDatabasesUpdatedNullDbInArray() {
+    StepMetaInterface stepMetaInterface = mock( StepMetaInterface.class );
+    when( stepMetaInterface.getUsedDatabaseConnections() ).thenReturn( new DatabaseMeta[] { null } );
+
+    transMeta.addStep( new StepMeta( "testStep", stepMetaInterface ) );
+
+    // Should not throw NullPointerException
+    transMeta.allDatabasesUpdated();
+    assertTrue( true );
+  }
+
+  /**
+   * getUsedDatabaseConnectionNames must not throw when getUsedDatabaseConnections returns null.
+   */
+  @Test
+  public void testGetUsedDatabaseConnectionNamesNullArray() {
+    StepMetaInterface stepMetaInterface = mock( StepMetaInterface.class );
+    when( stepMetaInterface.getUsedDatabaseConnections() ).thenReturn( null );
+
+    transMeta.addStep( new StepMeta( "testStep", stepMetaInterface ) );
+
+    java.util.Set<String> names = transMeta.getUsedDatabaseConnectionNames();
+    assertNotNull( names );
+    assertTrue( names.isEmpty() );
+  }
+
+  /**
+   * allDatabasesUpdated must not throw when getUsedDatabaseConnections returns null.
+   */
+  @Test
+  public void testAllDatabasesUpdatedNullArray() {
+    StepMetaInterface stepMetaInterface = mock( StepMetaInterface.class );
+    when( stepMetaInterface.getUsedDatabaseConnections() ).thenReturn( null );
+
+    transMeta.addStep( new StepMeta( "testStep", stepMetaInterface ) );
+
+    // Should not throw NullPointerException
+    transMeta.allDatabasesUpdated();
+    assertTrue( true );
   }
 }

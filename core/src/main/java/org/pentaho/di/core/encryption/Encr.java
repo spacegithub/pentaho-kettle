@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.encryption;
 
@@ -29,6 +21,7 @@ import org.pentaho.di.core.KettleClientEnvironment;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.plugins.PluginInterface;
 import org.pentaho.di.core.plugins.PluginRegistry;
+import org.pentaho.support.encryption.PasswordEncoderException;
 
 /**
  * This class handles basic encryption of passwords in Kettle. Note that it's not really encryption, it's more
@@ -57,13 +50,19 @@ public class Encr {
     PluginRegistry registry = PluginRegistry.getInstance();
     PluginInterface plugin = registry.findPluginWithId( TwoWayPasswordEncoderPluginType.class, encoderPluginId );
     if ( plugin == null ) {
-      throw new KettleException( "Unable to find plugin with ID '" + encoderPluginId + "'" );
+      throw new KettleException( "Unable to find plugin with ID '" + encoderPluginId + "'.  If this is a test, make sure"
+        + " kettle-core tests jar is a dependency.  If this is live make sure a kettle-password-encoder-plugins.xml"
+        + " exits in the classpath" );
     }
     encoder = (TwoWayPasswordEncoderInterface) registry.loadClass( plugin );
 
     // Load encoder specific options...
     //
-    encoder.init();
+    try {
+      encoder.init();
+    } catch ( PasswordEncoderException e ) {
+      throw new KettleException( e );
+    }
   }
 
   /**
@@ -115,7 +114,7 @@ public class Encr {
    * The word that is put before a password to indicate an encrypted form. If this word is not present, the password is
    * considered to be NOT encrypted
    */
-  public static final String PASSWORD_ENCRYPTED_PREFIX = "Encrypted ";
+  @SuppressWarnings( "squid:S2068" ) public static final String PASSWORD_ENCRYPTED_PREFIX = "Encrypted ";
 
   /**
    * Encrypt the password, but only if the password doesn't contain any variables.

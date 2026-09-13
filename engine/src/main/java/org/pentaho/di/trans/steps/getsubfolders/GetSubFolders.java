@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.getsubfolders;
 
@@ -87,7 +79,8 @@ public class GetSubFolders extends BaseStep implements StepInterface {
       if ( meta.isFoldernameDynamic() ) {
         data.inputRowMeta = getInputRowMeta();
         data.outputRowMeta = data.inputRowMeta.clone();
-        meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+        meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+          metaStore );
 
         // Get total previous fields
         data.totalpreviousfields = data.inputRowMeta.size();
@@ -113,12 +106,11 @@ public class GetSubFolders extends BaseStep implements StepInterface {
       } else {
         // Create the output row meta-data
         data.outputRowMeta = new RowMeta();
-        meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore ); // get the
-                                                                                                      // metadata
-                                                                                                      // populated
+        meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+          metaStore );
         // data.nrStepFields= data.outputRowMeta.size();
 
-        data.files = meta.getFolderList( this );
+        data.files = meta.getFolderList( getTransMeta().getBowl(), this );
         data.filessize = data.files.nrOfFiles();
         handleMissingFiles();
 
@@ -150,7 +142,7 @@ public class GetSubFolders extends BaseStep implements StepInterface {
           String[] filesname = { filename };
           String[] filesrequired = { GetSubFoldersMeta.NO };
           // Get files list
-          data.files = meta.getDynamicFolderList( getTransMeta(), filesname, filesrequired );
+          data.files = meta.getDynamicFolderList( getTransMeta().getBowl(), getTransMeta(), filesname, filesrequired );
           data.filessize = data.files.nrOfFiles();
           data.filenr = 0;
         }
@@ -188,7 +180,7 @@ public class GetSubFolders extends BaseStep implements StepInterface {
         }
 
         // uri
-        extraData[outputIndex++] = data.file.getName().getURI();
+        extraData[outputIndex++] = Const.optionallyDecodeUriString( data.file.getName().getURI() );
 
         // rooturi
         extraData[outputIndex++] = data.file.getName().getRootURI();

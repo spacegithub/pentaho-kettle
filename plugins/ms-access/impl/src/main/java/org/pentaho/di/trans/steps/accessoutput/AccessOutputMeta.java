@@ -1,30 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.accessoutput;
 
 import java.io.File;
 import java.io.IOException;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +25,7 @@ import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.annotations.Step;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
@@ -64,8 +56,10 @@ import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
 
 import com.healthmarketscience.jackcess.Column;
+import com.healthmarketscience.jackcess.ColumnBuilder;
 import com.healthmarketscience.jackcess.DataType;
 import com.healthmarketscience.jackcess.Database;
+import com.healthmarketscience.jackcess.DatabaseBuilder;
 import com.healthmarketscience.jackcess.Table;
 
 /*
@@ -251,222 +245,205 @@ public class AccessOutputMeta extends BaseStepMeta implements StepMetaInterface 
   public RowMetaInterface getRequiredFields( VariableSpace space ) throws KettleException {
     String realFilename = space.environmentSubstitute( filename );
     File file = new File( realFilename );
-    Database db = null;
     try {
       if ( !file.exists() || !file.isFile() ) {
         throw new KettleException( BaseMessages.getString(
           PKG, "AccessOutputMeta.Exception.FileDoesNotExist", realFilename ) );
       }
 
-      // open the database and get the table
-      db = Database.open( file );
-      String realTablename = space.environmentSubstitute( tablename );
-      Table table = db.getTable( realTablename );
-      if ( table == null ) {
-        throw new KettleException( BaseMessages.getString(
-          PKG, "AccessOutputMeta.Exception.TableDoesNotExist", realTablename ) );
-      }
+      // Open the database in read-only mode and get the table metadata.
+      try ( Database db = new DatabaseBuilder( file ).setReadOnly( true ).open() ) {
+        String realTablename = space.environmentSubstitute( tablename );
+        Table table = db.getTable( realTablename );
+        if ( table == null ) {
+          throw new KettleException( BaseMessages.getString(
+            PKG, "AccessOutputMeta.Exception.TableDoesNotExist", realTablename ) );
+        }
 
-      RowMetaInterface layout = getLayout( table );
-      return layout;
+        return getLayout( table );
+      }
     } catch ( Exception e ) {
       throw new KettleException( BaseMessages.getString( PKG, "AccessOutputMeta.Exception.ErrorGettingFields" ), e );
-    } finally {
-      try {
-        if ( db != null ) {
-          db.close();
-        }
-      } catch ( IOException e ) {
-        throw new KettleException(
-          BaseMessages.getString( PKG, "AccessOutputMeta.Exception.ErrorClosingDatabase" ), e );
-      }
     }
   }
 
-  public static final RowMetaInterface getLayout( Table table ) throws SQLException, KettleStepException {
+  public static final RowMetaInterface getLayout( Table table ) throws KettleStepException {
     RowMetaInterface row = new RowMeta();
-    List<Column> columns = table.getColumns();
+    List<? extends Column> columns = table.getColumns();
     for ( int i = 0; i < columns.size(); i++ ) {
-      Column column = columns.get( i );
-
-      int valtype = ValueMetaInterface.TYPE_STRING;
-      int length = -1;
-      int precision = -1;
-
-      int type = column.getType().getSQLType();
-      switch ( type ) {
-        case java.sql.Types.CHAR:
-        case java.sql.Types.VARCHAR:
-        case java.sql.Types.LONGVARCHAR: // Character Large Object
-          valtype = ValueMetaInterface.TYPE_STRING;
-          length = column.getLength();
-          break;
-
-        case java.sql.Types.CLOB:
-          valtype = ValueMetaInterface.TYPE_STRING;
-          length = DatabaseMeta.CLOB_LENGTH;
-          break;
-
-        case java.sql.Types.BIGINT:
-          valtype = ValueMetaInterface.TYPE_INTEGER;
-          precision = 0; // Max 9.223.372.036.854.775.807
-          length = 15;
-          break;
-
-        case java.sql.Types.INTEGER:
-          valtype = ValueMetaInterface.TYPE_INTEGER;
-          precision = 0; // Max 2.147.483.647
-          length = 9;
-          break;
-
-        case java.sql.Types.SMALLINT:
-          valtype = ValueMetaInterface.TYPE_INTEGER;
-          precision = 0; // Max 32.767
-          length = 4;
-          break;
-
-        case java.sql.Types.TINYINT:
-          valtype = ValueMetaInterface.TYPE_INTEGER;
-          precision = 0; // Max 127
-          length = 2;
-          break;
-
-        case java.sql.Types.DECIMAL:
-        case java.sql.Types.DOUBLE:
-        case java.sql.Types.FLOAT:
-        case java.sql.Types.REAL:
-        case java.sql.Types.NUMERIC:
-          valtype = ValueMetaInterface.TYPE_NUMBER;
-          length = column.getLength();
-          precision = column.getPrecision();
-          if ( length >= 126 ) {
-            length = -1;
-          }
-          if ( precision >= 126 ) {
-            precision = -1;
-          }
-
-          if ( type == java.sql.Types.DOUBLE || type == java.sql.Types.FLOAT || type == java.sql.Types.REAL ) {
-            if ( precision == 0 ) {
-              precision = -1; // precision is obviously incorrect if the type if Double/Float/Real
-            }
-          } else {
-            if ( precision == 0 && length < 18 && length > 0 ) { // Among others Oracle is affected here.
-              valtype = ValueMetaInterface.TYPE_INTEGER;
-            }
-          }
-          if ( length > 18 || precision > 18 ) {
-            valtype = ValueMetaInterface.TYPE_BIGNUMBER;
-          }
-
-          break;
-
-        case java.sql.Types.DATE:
-        case java.sql.Types.TIME:
-        case java.sql.Types.TIMESTAMP:
-          valtype = ValueMetaInterface.TYPE_DATE;
-          break;
-
-        case java.sql.Types.BOOLEAN:
-        case java.sql.Types.BIT:
-          valtype = ValueMetaInterface.TYPE_BOOLEAN;
-          break;
-
-        case java.sql.Types.BINARY:
-        case java.sql.Types.BLOB:
-        case java.sql.Types.VARBINARY:
-        case java.sql.Types.LONGVARBINARY:
-          valtype = ValueMetaInterface.TYPE_BINARY;
-          break;
-
-        default:
-          valtype = ValueMetaInterface.TYPE_STRING;
-          length = column.getLength();
-          break;
-      }
-
-      ValueMetaInterface v;
-      try {
-        v = ValueMetaFactory.createValueMeta( column.getName(), valtype );
-      } catch ( KettlePluginException e ) {
-        throw new KettleStepException( e );
-      }
-      v.setLength( length, precision );
-      row.addValueMeta( v );
+      ColumnLayout layout = resolveColumnLayout( columns.get( i ) );
+      row.addValueMeta( createValueMeta( columns.get( i ).getName(), layout ) );
     }
 
     return row;
   }
 
-  public static final List<Column> getColumns( RowMetaInterface row ) {
-    List<Column> list = new ArrayList<Column>();
+  private static ColumnLayout resolveColumnLayout( Column column ) throws KettleStepException {
+    int type = getSqlType( column );
+    switch ( type ) {
+      case java.sql.Types.CHAR:
+      case java.sql.Types.VARCHAR:
+      case java.sql.Types.LONGVARCHAR:
+        return new ColumnLayout( ValueMetaInterface.TYPE_STRING, column.getLength(), -1 );
+      case java.sql.Types.CLOB:
+        return new ColumnLayout( ValueMetaInterface.TYPE_STRING, DatabaseMeta.CLOB_LENGTH, -1 );
+      case java.sql.Types.BIGINT:
+        return new ColumnLayout( ValueMetaInterface.TYPE_INTEGER, 15, 0 );
+      case java.sql.Types.INTEGER:
+        return new ColumnLayout( ValueMetaInterface.TYPE_INTEGER, 9, 0 );
+      case java.sql.Types.SMALLINT:
+        return new ColumnLayout( ValueMetaInterface.TYPE_INTEGER, 4, 0 );
+      case java.sql.Types.TINYINT:
+        return new ColumnLayout( ValueMetaInterface.TYPE_INTEGER, 2, 0 );
+      case java.sql.Types.DECIMAL:
+      case java.sql.Types.DOUBLE:
+      case java.sql.Types.FLOAT:
+      case java.sql.Types.REAL:
+      case java.sql.Types.NUMERIC:
+        return resolveNumericColumnLayout( column, type );
+      case java.sql.Types.DATE:
+      case java.sql.Types.TIME:
+      case java.sql.Types.TIMESTAMP:
+        return new ColumnLayout( ValueMetaInterface.TYPE_DATE, -1, -1 );
+      case java.sql.Types.BOOLEAN:
+      case java.sql.Types.BIT:
+        return new ColumnLayout( ValueMetaInterface.TYPE_BOOLEAN, -1, -1 );
+      case java.sql.Types.BINARY:
+      case java.sql.Types.BLOB:
+      case java.sql.Types.VARBINARY:
+      case java.sql.Types.LONGVARBINARY:
+        return new ColumnLayout( ValueMetaInterface.TYPE_BINARY, -1, -1 );
+      default:
+        return new ColumnLayout( ValueMetaInterface.TYPE_STRING, column.getLength(), -1 );
+    }
+  }
+
+  private static int getSqlType( Column column ) throws KettleStepException {
+    try {
+      return column.getType().getSQLType();
+    } catch ( IOException e ) {
+      throw new KettleStepException( BaseMessages.getString( PKG, "AccessOutputMeta.Exception.ErrorGettingFields" ), e );
+    }
+  }
+
+  private static ColumnLayout resolveNumericColumnLayout( Column column, int type ) {
+    int valueType = ValueMetaInterface.TYPE_NUMBER;
+    int length = normalizeLengthOrPrecision( column.getLength() );
+    int precision = normalizeLengthOrPrecision( column.getPrecision() );
+
+    if ( isFloatingPointType( type ) ) {
+      if ( precision == 0 ) {
+        precision = -1;
+      }
+    } else if ( precision == 0 && length < 18 && length > 0 ) {
+      valueType = ValueMetaInterface.TYPE_INTEGER;
+    }
+
+    if ( length > 18 || precision > 18 ) {
+      valueType = ValueMetaInterface.TYPE_BIGNUMBER;
+    }
+
+    return new ColumnLayout( valueType, length, precision );
+  }
+
+  private static boolean isFloatingPointType( int type ) {
+    return type == java.sql.Types.DOUBLE || type == java.sql.Types.FLOAT || type == java.sql.Types.REAL;
+  }
+
+  private static int normalizeLengthOrPrecision( int value ) {
+    return value >= 126 ? -1 : value;
+  }
+
+  private static ValueMetaInterface createValueMeta( String columnName, ColumnLayout layout ) throws KettleStepException {
+    try {
+      ValueMetaInterface valueMeta = ValueMetaFactory.createValueMeta( columnName, layout.valueType );
+      valueMeta.setLength( layout.length, layout.precision );
+      return valueMeta;
+    } catch ( KettlePluginException e ) {
+      throw new KettleStepException( e );
+    }
+  }
+
+  private static final class ColumnLayout {
+    private final int valueType;
+    private final int length;
+    private final int precision;
+
+    private ColumnLayout( int valueType, int length, int precision ) {
+      this.valueType = valueType;
+      this.length = length;
+      this.precision = precision;
+    }
+  }
+
+  public static final List<ColumnBuilder> getColumns( RowMetaInterface row ) {
+    List<ColumnBuilder> list = new ArrayList<>();
 
     for ( int i = 0; i < row.size(); i++ ) {
       ValueMetaInterface value = row.getValueMeta( i );
-
-      Column column = new Column();
-      column.setName( value.getName() );
-
-      int length = value.getLength();
-
-      switch ( value.getType() ) {
-        case ValueMetaInterface.TYPE_INTEGER:
-          if ( length < 3 ) {
-            column.setType( DataType.BYTE );
-            length = DataType.BYTE.getFixedSize();
-          } else {
-            if ( length < 5 ) {
-              column.setType( DataType.INT );
-              length = DataType.INT.getFixedSize();
-            } else {
-              column.setType( DataType.LONG );
-              length = DataType.LONG.getFixedSize();
-            }
-          }
-          break;
-        case ValueMetaInterface.TYPE_NUMBER:
-          column.setType( DataType.DOUBLE );
-          length = DataType.DOUBLE.getFixedSize();
-          break;
-        case ValueMetaInterface.TYPE_DATE:
-          column.setType( DataType.SHORT_DATE_TIME );
-          length = DataType.SHORT_DATE_TIME.getFixedSize();
-          break;
-        case ValueMetaInterface.TYPE_STRING:
-          if ( length < 255 ) {
-            column.setType( DataType.TEXT );
-            length *= DataType.TEXT.getUnitSize();
-          } else {
-            column.setType( DataType.MEMO );
-            length *= DataType.MEMO.getUnitSize();
-          }
-          break;
-        case ValueMetaInterface.TYPE_BINARY:
-          column.setType( DataType.BINARY );
-          break;
-        case ValueMetaInterface.TYPE_BOOLEAN:
-          column.setType( DataType.BOOLEAN );
-          length = DataType.BOOLEAN.getFixedSize();
-          break;
-        case ValueMetaInterface.TYPE_BIGNUMBER:
-          column.setType( DataType.NUMERIC );
-          length = DataType.NUMERIC.getFixedSize();
-          break;
-        default:
-          break;
-      }
-
-      if ( length >= 0 ) {
-        column.setLength( (short) length );
+      ColumnBuilder column = new ColumnBuilder( value.getName() );
+      ColumnSpec columnSpec = resolveColumnSpec( value );
+      column.setType( columnSpec.dataType );
+      if ( columnSpec.length >= 0 ) {
+        column.setLength( columnSpec.length );
       }
       if ( value.getPrecision() >= 1 && value.getPrecision() <= 28 ) {
-        column.setPrecision( (byte) value.getPrecision() );
+        column.setPrecision( value.getPrecision() );
       }
 
       list.add( column );
     }
 
     return list;
+  }
+
+  private static ColumnSpec resolveColumnSpec( ValueMetaInterface value ) {
+    int length = value.getLength();
+    switch ( value.getType() ) {
+      case ValueMetaInterface.TYPE_INTEGER:
+        return resolveIntegerColumnSpec( length );
+      case ValueMetaInterface.TYPE_NUMBER:
+        return new ColumnSpec( DataType.DOUBLE, DataType.DOUBLE.getFixedSize() );
+      case ValueMetaInterface.TYPE_DATE:
+        return new ColumnSpec( DataType.SHORT_DATE_TIME, DataType.SHORT_DATE_TIME.getFixedSize() );
+      case ValueMetaInterface.TYPE_STRING:
+        return resolveStringColumnSpec( length );
+      case ValueMetaInterface.TYPE_BINARY:
+        return new ColumnSpec( DataType.BINARY, length );
+      case ValueMetaInterface.TYPE_BOOLEAN:
+        return new ColumnSpec( DataType.BOOLEAN, DataType.BOOLEAN.getFixedSize() );
+      case ValueMetaInterface.TYPE_BIGNUMBER:
+        return new ColumnSpec( DataType.NUMERIC, DataType.NUMERIC.getFixedSize() );
+      default:
+        return new ColumnSpec( DataType.TEXT, length );
+    }
+  }
+
+  private static ColumnSpec resolveIntegerColumnSpec( int length ) {
+    if ( length < 3 ) {
+      return new ColumnSpec( DataType.BYTE, DataType.BYTE.getFixedSize() );
+    }
+    if ( length < 5 ) {
+      return new ColumnSpec( DataType.INT, DataType.INT.getFixedSize() );
+    }
+    return new ColumnSpec( DataType.LONG, DataType.LONG.getFixedSize() );
+  }
+
+  private static ColumnSpec resolveStringColumnSpec( int length ) {
+    if ( length < 255 ) {
+      return new ColumnSpec( DataType.TEXT, length * DataType.TEXT.getUnitSize() );
+    }
+    return new ColumnSpec( DataType.MEMO, length * DataType.MEMO.getUnitSize() );
+  }
+
+  private static final class ColumnSpec {
+    private final DataType dataType;
+    private final int length;
+
+    private ColumnSpec( DataType dataType, int length ) {
+      this.dataType = dataType;
+      this.length = length;
+    }
   }
 
   public static Object[] createObjectsForRow( RowMetaInterface rowMeta, Object[] rowData ) throws KettleValueException {
@@ -486,10 +463,10 @@ public class AccessOutputMeta extends BaseStepMeta implements StepMetaInterface 
       switch ( valueMeta.getType() ) {
         case ValueMetaInterface.TYPE_INTEGER:
           if ( length < 3 ) {
-            values[i] = new Byte( valueMeta.getInteger( valueData ).byteValue() );
+            values[i] = Byte.valueOf( valueMeta.getInteger( valueData ).byteValue() );
           } else {
             if ( length < 5 ) {
-              values[i] = new Short( valueMeta.getInteger( valueData ).shortValue() );
+              values[i] = Short.valueOf( valueMeta.getInteger( valueData ).shortValue() );
             } else {
               values[i] = valueMeta.getInteger( valueData );
             }
@@ -617,13 +594,18 @@ public class AccessOutputMeta extends BaseStepMeta implements StepMetaInterface 
     this.doNotOpeNnewFileInit = doNotOpenNewFileInit;
   }
 
+  @Override
   public String[] getUsedLibraries() {
     return new String[] {
-      "jackcess-1.1.13.jar", "commons-collections-3.1.jar", "commons-logging.jar", "commons-lang-2.2.jar",
-      "commons-dbcp-1.2.1.jar", "commons-pool-1.3.jar", };
+      "jackcess-4.0.11.jar", "commons-lang3-3.18.0.jar" };
   }
 
   /**
+   * @param executionBowl
+   *          For file access
+   * @param globalManagementBowl
+   *          if needed for access to the current "global" (System or Repository) level config for export. If null, no
+   *          global config will be exported.
    * @param space
    *          the variable space to use
    * @param definitions
@@ -635,15 +617,18 @@ public class AccessOutputMeta extends BaseStepMeta implements StepMetaInterface 
    *
    * @return the filename of the exported resource
    */
-  public String exportResources( VariableSpace space, Map<String, ResourceDefinition> definitions,
-    ResourceNamingInterface resourceNamingInterface, Repository repository, IMetaStore metaStore ) throws KettleException {
+  @Override
+  public String exportResources( Bowl executionBowl, Bowl globalManagementBowl, VariableSpace space,
+      Map<String, ResourceDefinition> definitions, ResourceNamingInterface namingInterface,
+      Repository repository, IMetaStore metaStore ) throws KettleException {
     try {
       // The object that we're modifying here is a copy of the original!
       // So let's change the filename from relative to absolute by grabbing the file object...
       //
       if ( !Utils.isEmpty( filename ) ) {
-        FileObject fileObject = KettleVFS.getFileObject( space.environmentSubstitute( filename ), space );
-        filename = resourceNamingInterface.nameResource( fileObject, space, true );
+        FileObject fileObject = KettleVFS.getInstance( executionBowl )
+          .getFileObject( space.environmentSubstitute( filename ), space );
+        filename = namingInterface.nameResource( fileObject, space, true );
       }
 
       return null;

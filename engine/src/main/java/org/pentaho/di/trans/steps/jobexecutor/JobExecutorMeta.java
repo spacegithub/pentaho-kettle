@@ -1,27 +1,22 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.jobexecutor;
 
+import org.pentaho.di.base.IMetaFileLoader;
+import org.pentaho.di.base.MetaFileLoaderImpl;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
@@ -31,7 +26,6 @@ import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettlePluginException;
 import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.core.exception.KettleXMLException;
-import org.pentaho.di.core.logging.LogChannel;
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaBoolean;
@@ -39,7 +33,6 @@ import org.pentaho.di.core.row.value.ValueMetaFactory;
 import org.pentaho.di.core.row.value.ValueMetaInteger;
 import org.pentaho.di.core.row.value.ValueMetaNone;
 import org.pentaho.di.core.row.value.ValueMetaString;
-import org.pentaho.di.core.util.CurrentDirectoryResolver;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.xml.XMLHandler;
@@ -69,6 +62,7 @@ import org.pentaho.di.trans.step.StepDataInterface;
 import org.pentaho.di.trans.step.StepIOMeta;
 import org.pentaho.di.trans.step.StepIOMetaInterface;
 import org.pentaho.di.trans.step.StepInterface;
+import org.pentaho.di.trans.step.StepHelperInterface;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepMetaInterface;
 import org.pentaho.di.trans.step.errorhandling.Stream;
@@ -492,7 +486,7 @@ public class JobExecutorMeta extends BaseStepMeta implements StepMetaInterface, 
   }
 
   @Override
-  public void getFields( RowMetaInterface row, String origin, RowMetaInterface[] info, StepMeta nextStep,
+  public void getFields( Bowl bowl, RowMetaInterface row, String origin, RowMetaInterface[] info, StepMeta nextStep,
     VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
 
     row.clear();
@@ -512,7 +506,7 @@ public class JobExecutorMeta extends BaseStepMeta implements StepMetaInterface, 
     } else if ( nextStep != null
       && resultFilesTargetStepMeta != null && nextStep.equals( resultFilesTargetStepMeta ) ) {
       if ( !Utils.isEmpty( resultFilesFileNameField ) ) {
-        ValueMetaInterface value = new ValueMetaString( "filename", 255, 0 );
+        ValueMetaInterface value = new ValueMetaString( resultFilesFileNameField, 255, 0 );
         row.addValueMeta( value );
       }
     } else if ( nextStep != null
@@ -601,113 +595,22 @@ public class JobExecutorMeta extends BaseStepMeta implements StepMetaInterface, 
     return targetSteps.toArray( new String[targetSteps.size()] );
   }
 
-  public static final synchronized JobMeta loadJobMeta( JobExecutorMeta executorMeta, Repository rep,
+  public static final synchronized JobMeta loadJobMeta( Bowl bowl, JobExecutorMeta executorMeta, Repository rep,
     VariableSpace space ) throws KettleException {
-    return loadJobMeta( executorMeta, rep, null, space );
+    return loadJobMeta( bowl, executorMeta, rep, null, space );
   }
 
-  public static final synchronized JobMeta loadJobMeta( JobExecutorMeta executorMeta, Repository rep,
+  public static final synchronized JobMeta loadJobMeta( Bowl bowl, JobExecutorMeta executorMeta, Repository rep,
     IMetaStore metaStore, VariableSpace space ) throws KettleException {
-    JobMeta mappingJobMeta = null;
 
-    CurrentDirectoryResolver r = new CurrentDirectoryResolver();
-    VariableSpace tmpSpace = r.resolveCurrentDirectory( executorMeta.getSpecificationMethod(),
-        space, rep, executorMeta.getParentStepMeta(), executorMeta.getFileName() );
-
-    switch ( executorMeta.getSpecificationMethod() ) {
-      case FILENAME:
-        String realFilename = tmpSpace.environmentSubstitute( executorMeta.getFileName() );
-        try {
-          // OK, load the meta-data from file...
-          //
-          // Don't set internal variables: they belong to the parent thread!
-          //
-          if ( rep != null ) {
-            realFilename = r.normalizeSlashes( realFilename );
-            // need to try to load from the repository
-            try {
-              String dirStr = realFilename.substring( 0, realFilename.lastIndexOf( "/" ) );
-              String tmpFilename = realFilename.substring( realFilename.lastIndexOf( "/" ) + 1 );
-              RepositoryDirectoryInterface dir = rep.findDirectory( dirStr );
-              mappingJobMeta = rep.loadJob( tmpFilename, dir, null, null );
-            } catch ( KettleException ke ) {
-              // try without extension
-              if ( realFilename.endsWith( Const.STRING_JOB_DEFAULT_EXT ) ) {
-                try {
-                  String tmpFilename = realFilename.substring( realFilename.lastIndexOf( "/" ) + 1,
-                      realFilename.indexOf( "." + Const.STRING_JOB_DEFAULT_EXT ) );
-                  String dirStr = realFilename.substring( 0, realFilename.lastIndexOf( "/" ) );
-                  RepositoryDirectoryInterface dir = rep.findDirectory( dirStr );
-                  mappingJobMeta = rep.loadJob( tmpFilename, dir, null, null );
-                } catch ( KettleException ke2 ) {
-                  // fall back to try loading from file system (mappingJobMeta is going to be null)
-                }
-              }
-            }
-          }
-          if ( mappingJobMeta == null ) {
-            mappingJobMeta = new JobMeta( null, realFilename, rep, metaStore, null );
-            LogChannel.GENERAL.logDetailed( "Loading job from repository", "Job was loaded from XML file ["
-              + realFilename + "]" );
-          }
-        } catch ( Exception e ) {
-          throw new KettleException( BaseMessages.getString( PKG, "JobExecutorMeta.Exception.UnableToLoadJob" ), e );
-        }
-        break;
-
-      case REPOSITORY_BY_NAME:
-        String realJobname = tmpSpace.environmentSubstitute( executorMeta.getJobName() );
-        String realDirectory = tmpSpace.environmentSubstitute( executorMeta.getDirectoryPath() );
-
-        if ( rep != null ) {
-          if ( !Utils.isEmpty( realJobname ) && !Utils.isEmpty( realDirectory ) ) {
-            realDirectory = r.normalizeSlashes( realDirectory );
-            RepositoryDirectoryInterface repdir = rep.findDirectory( realDirectory );
-            if ( repdir != null ) {
-              try {
-                // reads the last revision in the repository...
-                //
-                mappingJobMeta = rep.loadJob( realJobname, repdir, null, null ); // TODO: FIXME: should we also pass an
-                                                                                 // external MetaStore into the
-                                                                                 // repository?
-                LogChannel.GENERAL.logDetailed( "Loading job from repository", "Executor job ["
-                  + realJobname + "] was loaded from the repository" );
-              } catch ( Exception e ) {
-                throw new KettleException( "Unable to load job [" + realJobname + "]", e );
-              }
-            }
-          }
-        } else {
-          // rep is null, let's try loading by filename
-          try {
-            mappingJobMeta = new JobMeta( null, realDirectory + "/" + realJobname, rep, metaStore, null );
-          } catch ( KettleException ke ) {
-            try {
-              // add .kjb extension and try again
-              mappingJobMeta = new JobMeta( null,
-                  realDirectory + "/" + realJobname + "." + Const.STRING_JOB_DEFAULT_EXT, rep, metaStore, null );
-            } catch ( KettleException ke2 ) {
-              throw new KettleException( BaseMessages.getString(
-                  PKG, "JobExecutorMeta.Exception.UnableToLoadJob", realJobname )
-                  + realDirectory );
-            }
-          }
-        }
-        break;
-
-      case REPOSITORY_BY_REFERENCE:
-        // Read the last revision by reference...
-        mappingJobMeta = rep.loadJob( executorMeta.getJobObjectId(), null );
-        break;
-      default:
-        break;
-    }
+    IMetaFileLoader<JobMeta> metaFileLoader = new MetaFileLoaderImpl<>( executorMeta, executorMeta.specificationMethod );
+    JobMeta mappingJobMeta = metaFileLoader.getMetaForStep( bowl, rep, metaStore, space );
 
     // Pass some important information to the mapping transformation metadata:
 
     //  When the child parameter does exist in the parent parameters, overwrite the child parameter by the
     // parent parameter.
-    StepWithMappingMeta.replaceVariableValues( mappingJobMeta, space );
+    StepWithMappingMeta.replaceVariableValues( mappingJobMeta, space, "Job" );
     if ( executorMeta.getParameters().isInheritingAllVariables() ) {
       // All other parent parameters need to get copied into the child parameters  (when the 'Inherit all
       // variables from the transformation?' option is checked)
@@ -791,14 +694,15 @@ public class JobExecutorMeta extends BaseStepMeta implements StepMetaInterface, 
    * @return JobMeta
    * @throws KettleException
    */
-  JobMeta loadJobMetaProxy( JobExecutorMeta executorMeta, Repository rep,
-                           VariableSpace space ) throws KettleException {
-    return loadJobMeta( executorMeta, rep, space );
+  JobMeta loadJobMetaProxy( Bowl bowl, JobExecutorMeta executorMeta, Repository rep,
+                            VariableSpace space ) throws KettleException {
+    return loadJobMeta( bowl, executorMeta, rep, space );
   }
 
   @Override
-  public String exportResources( VariableSpace space, Map<String, ResourceDefinition> definitions,
-    ResourceNamingInterface resourceNamingInterface, Repository repository, IMetaStore metaStore ) throws KettleException {
+  public String exportResources( Bowl executionBowl, Bowl globalManagementBowl, VariableSpace space,
+      Map<String, ResourceDefinition> definitions, ResourceNamingInterface resourceNamingInterface,
+      Repository repository, IMetaStore metaStore ) throws KettleException {
     try {
       // Try to load the transformation from repository or file.
       // Modify this recursively too...
@@ -808,14 +712,15 @@ public class JobExecutorMeta extends BaseStepMeta implements StepMetaInterface, 
       //
       // First load the executor job metadata...
       //
-      JobMeta executorJobMeta = loadJobMetaProxy( this, repository, space );
+      JobMeta executorJobMeta = loadJobMetaProxy( executionBowl, this, repository, space );
 
       // Also go down into the mapping transformation and export the files
       // there. (mapping recursively down)
       //
       String proposedNewFilename =
         executorJobMeta.exportResources(
-          executorJobMeta, definitions, resourceNamingInterface, repository, metaStore );
+          executionBowl, globalManagementBowl, executorJobMeta, definitions, resourceNamingInterface, repository,
+          metaStore );
 
       // To get a relative path to it, we inject
       // ${Internal.Entry.Current.Directory}
@@ -841,7 +746,7 @@ public class JobExecutorMeta extends BaseStepMeta implements StepMetaInterface, 
       return proposedNewFilename;
     } catch ( Exception e ) {
       throw new KettleException( BaseMessages.getString(
-        PKG, "JobExecutorMeta.Exception.UnableToLoadJob", fileName ) );
+        PKG, "JobExecutorMeta.Exception.UnableToLoadJob", fileName ), e );
     }
   }
 
@@ -1526,8 +1431,14 @@ public class JobExecutorMeta extends BaseStepMeta implements StepMetaInterface, 
    * @throws KettleException
    */
   @Override
-  public Object loadReferencedObject( int index, Repository rep, IMetaStore metaStore, VariableSpace space ) throws KettleException {
-    return loadJobMeta( this, rep, metaStore, space );
+  public Object loadReferencedObject( Bowl bowl, int index, Repository rep, IMetaStore metaStore, VariableSpace space )
+    throws KettleException {
+    return loadJobMeta( bowl, this, rep, metaStore, space );
+  }
+
+  @Override
+  public StepHelperInterface getStepHelperInterface() {
+    return new JobExecutorHelper( this );
   }
 
   public void setMetaStore( IMetaStore metaStore ) {

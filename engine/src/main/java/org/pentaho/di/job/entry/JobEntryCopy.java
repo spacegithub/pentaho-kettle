@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entry;
 
@@ -26,7 +18,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.lang.ArrayUtils;
 import org.pentaho.di.base.BaseMeta;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.AttributesInterface;
@@ -137,7 +128,7 @@ public class JobEntryCopy implements Cloneable, XMLInterface, GUIPositionInterfa
     try {
       String stype = XMLHandler.getTagValue( entrynode, "type" );
       PluginRegistry registry = PluginRegistry.getInstance();
-      PluginInterface jobPlugin = registry.findPluginWithId( JobEntryPluginType.class, stype );
+      PluginInterface jobPlugin = registry.findPluginWithId( JobEntryPluginType.class, stype, true );
       if ( jobPlugin == null ) {
         String name = XMLHandler.getTagValue( entrynode, "name" );
         entry = new MissingEntry( name, stype );
@@ -210,6 +201,11 @@ public class JobEntryCopy implements Cloneable, XMLInterface, GUIPositionInterfa
     JobEntryCopy ge = new JobEntryCopy();
     ge.replaceMeta( this );
     ge.setObjectId( null );
+
+    for ( final Map.Entry<String, Map<String, String>> attribute : attributesMap.entrySet() ) {
+      ge.attributesMap.put( attribute.getKey(), attribute.getValue() );
+    }
+
     return ge;
   }
 
@@ -494,16 +490,12 @@ public class JobEntryCopy implements Cloneable, XMLInterface, GUIPositionInterfa
   }
 
   private void setDeprecationAndSuggestedJobEntry() {
-    PluginRegistry registry = PluginRegistry.getInstance();
-    final List<PluginInterface> deprecatedJobEntries = registry.getPluginsByCategory( JobEntryPluginType.class,
-      BaseMessages.getString( JobMeta.class, "JobCategory.Category.Deprecated" ) );
-    for ( PluginInterface p : deprecatedJobEntries ) {
-      String[] ids = p.getIds();
-      if ( !ArrayUtils.isEmpty( ids ) && ids[0].equals( this.entry != null ? this.entry.getPluginId() : "" ) ) {
+    if( this.entry != null ) {
+      PluginRegistry registry = PluginRegistry.getInstance();
+      PluginInterface pi = registry.getPlugin( JobEntryPluginType.class, this.entry.getPluginId() );
+      if( pi != null && pi.isDeprecated() ) {
         this.isDeprecated = true;
-        this.suggestion = registry.findPluginWithId( JobEntryPluginType.class, this.entry.getPluginId() ) != null
-          ? registry.findPluginWithId( JobEntryPluginType.class, this.entry.getPluginId() ).getSuggestion() : "";
-        break;
+        this.suggestion = Const.NVL( pi.getSuggestion(), "" );
       }
     }
   }

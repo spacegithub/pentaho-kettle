@@ -1,29 +1,29 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.pur;
 
 import static org.junit.Assert.fail;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.mockito.Mockito.mock;
 
 import java.net.ConnectException;
 
+import com.sun.xml.ws.client.ClientTransportException;
 import org.junit.Before;
 import org.junit.Test;
+import org.pentaho.di.repository.KettleAuthenticationException;
 import org.pentaho.di.repository.KettleRepositoryLostException;
 
 public class UnifiedRepositoryInvocationHandlerTest {
@@ -33,11 +33,14 @@ public class UnifiedRepositoryInvocationHandlerTest {
     Object throwSomeException();
 
     Object throwChainedConnectException();
+
+    Object throwClientTransportException();
   };
 
   private static final Object returnValue = "return-value";
   private static final RuntimeException rte = new RuntimeException( "some-exception" );
   private static final ConnectException connectException = new ConnectException();
+  private static final ClientTransportException clientTransportExceptionException = mock( ClientTransportException.class );
 
   private static final IFace wrappee = new IFace() {
 
@@ -54,6 +57,11 @@ public class UnifiedRepositoryInvocationHandlerTest {
     @Override
     public Object throwChainedConnectException() {
       throw new RuntimeException( "wrapper-exception", connectException );
+    }
+
+    @Override
+    public Object throwClientTransportException() {
+      throw new RuntimeException( "wrapper-exception", clientTransportExceptionException );
     }
 
   };
@@ -94,6 +102,24 @@ public class UnifiedRepositoryInvocationHandlerTest {
       assertNotNull( "Should have found the original ConnectException" );
     } catch ( Throwable other ) {
       fail( "Should not catch something other than KettleRepositoryLostException" );
+    }
+  }
+
+  @Test
+  public void testThrowingClientTransportException() {
+    try {
+      testee.throwClientTransportException();
+    } catch ( KettleAuthenticationException kae ) {
+      Throwable found = kae;
+      while ( found != null ) {
+        if ( clientTransportExceptionException.equals( found ) ) {
+          break;
+        }
+        found = found.getCause();
+      }
+      assertNotNull( "Should have found the original ClientTransportException" );
+    } catch ( Throwable other ) {
+      fail( "Should not catch something other than KettleAuthenticationException" );
     }
   }
 }

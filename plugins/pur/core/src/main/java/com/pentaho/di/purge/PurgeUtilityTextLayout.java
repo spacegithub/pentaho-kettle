@@ -1,43 +1,47 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package com.pentaho.di.purge;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.ThreadContext;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.StringLayout;
+import org.apache.logging.log4j.core.layout.ByteBufferDestination;
+import org.apache.logging.log4j.status.StatusLogger;
+import org.apache.logging.log4j.util.Strings;
+
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-
-import org.apache.log4j.Layout;
-import org.apache.log4j.Level;
-import org.apache.log4j.helpers.LogLog;
-import org.apache.log4j.spi.LoggingEvent;
-import org.slf4j.MDC;
+import java.util.Map;
 
 /**
- * This class was derived from Log4j HTMLLayout.
+ * This class was derived from Log4j HTML
  * 
  * Appenders using this layout should have their encoding set to UTF-8 or UTF-16, otherwise events containing non ASCII
  * characters could result in corrupted log files.
  * 
  * @author tkafalas
  */
-public class PurgeUtilityTextLayout extends Layout implements IPurgeUtilityLayout {
+public class PurgeUtilityTextLayout implements StringLayout, IPurgeUtilityLayout {
 
   protected static final int BUF_SIZE = 256;
   protected static final int MAX_CAPACITY = 1024;
+  public static final String LINE_SEP = System.getProperty("line.separator");
+  private static final String REGEXP = Strings.LINE_SEPARATOR.equals("\n") ? "\n" : Strings.LINE_SEPARATOR + "|\n";
 
   private Level loggerLogLevel = Level.DEBUG;
 
@@ -75,13 +79,18 @@ public class PurgeUtilityTextLayout extends Layout implements IPurgeUtilityLayou
     return "text/plain";
   }
 
+  @Override
+  public Map<String, String> getContentFormat() {
+    return null;
+  }
+
   /**
    * No options to activate.
    */
   public void activateOptions() {
   }
 
-  public String format( LoggingEvent event ) {
+  public String format( LogEvent event ) {
 
     Level logLevel = event.getLevel();
     if ( sbuf.capacity() > MAX_CAPACITY ) {
@@ -90,17 +99,17 @@ public class PurgeUtilityTextLayout extends Layout implements IPurgeUtilityLayou
       sbuf.setLength( 0 );
     }
 
-    sbuf.append( Layout.LINE_SEP );
+    sbuf.append( LINE_SEP );
 
     if ( showTimeColumn() ) {
       DateFormat df = new SimpleDateFormat( "MM/dd/yyyy HH:mm:ss" );
       Date date = new Date();
-      date.setTime( event.timeStamp );
+      date.setTime( event.getTimeMillis() );
       String time = null;
       try {
         time = df.format( date );
       } catch ( Exception ex ) {
-        LogLog.error( "Error occured while converting date.", ex );
+        StatusLogger.getLogger().error( "Error occured while converting date.", ex );
       }
 
       sbuf.append( time );
@@ -108,7 +117,7 @@ public class PurgeUtilityTextLayout extends Layout implements IPurgeUtilityLayou
 
     // File/Folder
     sbuf.append( "\t" );
-    sbuf.append( MDC.get( PurgeUtilityLog.FILE_KEY ) );
+    sbuf.append( ThreadContext.get( PurgeUtilityLog.FILE_KEY ) );
 
     // debug level
     if ( showLevelColumn() ) {
@@ -119,12 +128,12 @@ public class PurgeUtilityTextLayout extends Layout implements IPurgeUtilityLayou
     // Code class and line
     if ( showCodeLineColumn() ) {
       sbuf.append( "\t" );
-      sbuf.append( MDC.get( PurgeUtilityLogger.CODE_LINE ) );
+      sbuf.append( ThreadContext.get( PurgeUtilityLogger.CODE_LINE ) );
     }
 
     // Message
     sbuf.append( "\t" );
-    sbuf.append( event.getRenderedMessage() );
+    sbuf.append( event.getMessage() );
 
     return sbuf.toString();
   }
@@ -132,19 +141,29 @@ public class PurgeUtilityTextLayout extends Layout implements IPurgeUtilityLayou
   /**
    * Returns appropriate headers.
    */
-  public String getHeader() {
+  public byte[] getHeader() {
     StringBuffer sbuf = new StringBuffer();
     sbuf.append( title );
-    return sbuf.toString();
+    return sbuf.toString().getBytes(StandardCharsets.UTF_8);
+  }
+
+  @Override
+  public byte[] toByteArray(LogEvent event) {
+    return format (event).getBytes(StandardCharsets.UTF_8);
+  }
+
+  @Override
+  public String toSerializable( LogEvent event ) {
+    return format (event);
   }
 
   /**
    * Returns the appropriate footers.
    */
-  public String getFooter() {
+  public byte[] getFooter() {
     StringBuffer sbuf = new StringBuffer();
     sbuf.append( "End of Log" );
-    return sbuf.toString();
+    return sbuf.toString().getBytes(StandardCharsets.UTF_8);
   }
 
   /**
@@ -155,14 +174,25 @@ public class PurgeUtilityTextLayout extends Layout implements IPurgeUtilityLayou
   }
 
   private boolean showCodeLineColumn() {
-    return Level.DEBUG.isGreaterOrEqual( loggerLogLevel ) ? true : false;
+    return Level.DEBUG.isMoreSpecificThan( loggerLogLevel ) ? true : false;
   }
 
   private boolean showTimeColumn() {
-    return Level.DEBUG.isGreaterOrEqual( loggerLogLevel ) ? true : false;
+
+    return Level.DEBUG.isMoreSpecificThan( loggerLogLevel ) ? true : false;
   }
 
   private boolean showLevelColumn() {
     return true;
+  }
+
+  @Override
+  public Charset getCharset() {
+    return StandardCharsets.UTF_8;
+  }
+
+  @Override
+  public void encode(LogEvent source, ByteBufferDestination destination) {
+
   }
 }

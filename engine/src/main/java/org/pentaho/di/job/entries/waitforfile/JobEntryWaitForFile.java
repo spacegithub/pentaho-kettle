@@ -1,44 +1,32 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.waitforfile;
 
-import org.pentaho.di.job.entry.validator.AndValidator;
-import org.pentaho.di.job.entry.validator.JobEntryValidatorUtils;
-
-import java.util.List;
-
+import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileType;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.core.ResultFile;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleDatabaseException;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleXMLException;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.core.xml.XMLHandler;
@@ -46,6 +34,8 @@ import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.job.entry.JobEntryBase;
 import org.pentaho.di.job.entry.JobEntryInterface;
+import org.pentaho.di.job.entry.validator.AndValidator;
+import org.pentaho.di.job.entry.validator.JobEntryValidatorUtils;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.resource.ResourceEntry;
@@ -53,6 +43,8 @@ import org.pentaho.di.resource.ResourceEntry.ResourceType;
 import org.pentaho.di.resource.ResourceReference;
 import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
+
+import java.util.List;
 
 /**
  * This defines a 'wait for file' job entry. Its use is to wait for a file to appear.
@@ -166,9 +158,36 @@ public class JobEntryWaitForFile extends JobEntryBase implements Cloneable, JobE
     return environmentSubstitute( getFilename() );
   }
 
+  // Utility to mark the result as unsuccessful and track errors
+  private void registerFailure( Result result ) {
+    result.setResult( false );
+    result.setNrErrors( result.getNrErrors() + 1 );
+  }
+
   public Result execute( Result previousResult, int nr ) {
     Result result = previousResult;
     result.setResult( false );
+
+    // Validate if Real Maximum Timeout is only digits.
+    int errorsCount = 0;
+    if ( !NumberUtils.isDigits( getRealMaximumTimeout() ) ) {
+      errorsCount++;
+      logError( "Invalid value for Maximum Timeout." );
+      return result;
+    }
+
+    // Validate if Real Check Cycle Time is only digits.
+    if ( !NumberUtils.isDigits( getRealCheckCycleTime() ) ) {
+      errorsCount++;
+      logError( "Invalid value for Check Cycle Time." );
+      return result;
+    }
+
+    if ( errorsCount > 0 ) {
+      result.setResult( false );
+      result.setNrErrors( errorsCount );
+    }
+
 
     // starttime (in seconds)
     long timeStart = System.currentTimeMillis() / 1000;
@@ -184,7 +203,7 @@ public class JobEntryWaitForFile extends JobEntryBase implements Cloneable, JobE
       }
 
       try {
-        fileObject = KettleVFS.getFileObject( realFilename, this );
+        fileObject = KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( realFilename, this );
 
         long iMaximumTimeout = Const.toInt( getRealMaximumTimeout(), Const.toInt( DEFAULT_MAXIMUM_TIMEOUT, 0 ) );
         long iCycleTime = Const.toInt( getRealCheckCycleTime(), Const.toInt( DEFAULT_CHECK_CYCLE_TIME, 0 ) );
@@ -219,7 +238,7 @@ public class JobEntryWaitForFile extends JobEntryBase implements Cloneable, JobE
 
         boolean continueLoop = true;
         while ( continueLoop && !parentJob.isStopped() ) {
-          fileObject = KettleVFS.getFileObject( realFilename, this );
+          fileObject = KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( realFilename, this );
 
           if ( fileObject.exists() ) {
             // file exists, we're happy to exit
@@ -252,7 +271,7 @@ public class JobEntryWaitForFile extends JobEntryBase implements Cloneable, JobE
                 if ( log.isBasic() ) {
                   logBasic( "Didn't detect file [" + realFilename + "] before timeout, failure" );
                 }
-                result.setResult( false );
+                registerFailure( result );
               }
             }
 
@@ -279,7 +298,7 @@ public class JobEntryWaitForFile extends JobEntryBase implements Cloneable, JobE
               }
             } catch ( InterruptedException e ) {
               // something strange happened
-              result.setResult( false );
+              registerFailure( result );
               continueLoop = false;
             }
           }
@@ -304,7 +323,7 @@ public class JobEntryWaitForFile extends JobEntryBase implements Cloneable, JobE
               Thread.sleep( iCycleTime * 1000 );
             } catch ( InterruptedException e ) {
               // something strange happened
-              result.setResult( false );
+              registerFailure( result );
               continueLoop = false;
             }
             oldSize = newSize;
@@ -323,6 +342,7 @@ public class JobEntryWaitForFile extends JobEntryBase implements Cloneable, JobE
         }
       } catch ( Exception e ) {
         logBasic( "Exception while waiting for file [" + realFilename + "] to stop growing", e );
+        registerFailure( result );
       } finally {
         if ( fileObject != null ) {
           try {
@@ -405,11 +425,11 @@ public class JobEntryWaitForFile extends JobEntryBase implements Cloneable, JobE
   @Override
   public void check( List<CheckResultInterface> remarks, JobMeta jobMeta, VariableSpace space,
     Repository repository, IMetaStore metaStore ) {
-    JobEntryValidatorUtils.andValidator().validate( this, "filename", remarks,
+    JobEntryValidatorUtils.andValidator().validate( parentJobMeta.getBowl(), this, "filename", remarks,
         AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
-    JobEntryValidatorUtils.andValidator().validate( this, "maximumTimeout", remarks,
+    JobEntryValidatorUtils.andValidator().validate( parentJobMeta.getBowl(), this, "maximumTimeout", remarks,
         AndValidator.putValidators( JobEntryValidatorUtils.integerValidator() ) );
-    JobEntryValidatorUtils.andValidator().validate( this, "checkCycleTime", remarks,
+    JobEntryValidatorUtils.andValidator().validate( parentJobMeta.getBowl(), this, "checkCycleTime", remarks,
         AndValidator.putValidators( JobEntryValidatorUtils.integerValidator() ) );
   }
 

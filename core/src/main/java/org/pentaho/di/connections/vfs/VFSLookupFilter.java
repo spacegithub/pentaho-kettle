@@ -1,0 +1,52 @@
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
+
+package org.pentaho.di.connections.vfs;
+
+import org.pentaho.di.connections.LookupFilter;
+
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Created by bmorrise on 2/12/19.
+ */
+public class VFSLookupFilter implements LookupFilter {
+
+  private ConcurrentHashMap<String, String> keyLookup = new ConcurrentHashMap<>();
+
+  @Override public String filter( String input ) {
+    boolean found = false;
+    Pattern pattern = Pattern.compile( "^([\\w]+)://" );
+    Matcher matcher = pattern.matcher( input );
+    if ( matcher.find() ) {
+      found = true;
+      input = matcher.group( 1 );
+    }
+    String lookup = keyLookup.get( input );
+    if ( lookup != null ) {
+      return lookup;
+    }
+    if ( !found ) {
+      // return null to allow other filter to be called
+      return null;
+    }
+    return input;
+  }
+
+  public void addKeyLookup( String from, String to ) {
+    keyLookup.put( from, to );
+  }
+}

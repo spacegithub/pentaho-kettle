@@ -1,27 +1,18 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.trans;
 
-import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.core.RowMetaAndData;
@@ -36,12 +27,14 @@ import org.pentaho.di.trans.step.StepStatus;
 import org.pentaho.di.trans.steps.TransStepUtil;
 import org.pentaho.di.trans.steps.transexecutor.TransExecutorParameters;
 
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Semaphore;
 
 /**
  * Will run the given sub-transformation with the rows passed to execute
@@ -57,9 +50,11 @@ public class SubtransExecutor {
   private String subStep;
   private boolean stopped;
   Set<Trans> running;
+  private Semaphore semaphore;
+  private final int prefetchCount;
 
   public SubtransExecutor( String subTransName, Trans parentTrans, TransMeta subtransMeta, boolean shareVariables,
-                           TransExecutorParameters parameters, String subStep ) {
+                           TransExecutorParameters parameters, String subStep, int prefetchCount ) {
     this.subTransName = subTransName;
     this.parentTrans = parentTrans;
     this.subtransMeta = subtransMeta;
@@ -67,7 +62,9 @@ public class SubtransExecutor {
     this.parameters = parameters;
     this.subStep = subStep;
     this.statuses = new LinkedHashMap<>();
-    this.running = new ConcurrentHashSet<>();
+    this.running = ConcurrentHashMap.newKeySet();
+    this.prefetchCount = prefetchCount;
+    this.semaphore = new Semaphore( prefetchCount );
   }
 
   public Optional<Result> execute( List<RowMetaAndData> rows ) throws KettleException {
@@ -104,6 +101,7 @@ public class SubtransExecutor {
 
     Result subtransResult = subtrans.getResult();
     subtransResult.setRows( rowMetaAndData  );
+    releaseBufferPermits( rows.size() );
     return Optional.of( subtransResult );
   }
 
@@ -188,5 +186,17 @@ public class SubtransExecutor {
 
   public Trans getParentTrans() {
     return parentTrans;
+  }
+
+  private void releaseBufferPermits( int count ) {
+    semaphore.release( count );
+  }
+
+  public void acquireBufferPermit() throws InterruptedException {
+    semaphore.acquire();
+  }
+
+  public int getPrefetchCount() {
+    return prefetchCount;
   }
 }

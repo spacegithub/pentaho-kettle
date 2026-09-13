@@ -1,25 +1,17 @@
 // CHECKSTYLE:FileLength:OFF
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.scriptvalues_mod;
 
@@ -34,6 +26,7 @@ import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.WrappedException;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.database.Database;
 import org.pentaho.di.core.database.DatabaseMeta;
@@ -49,11 +42,11 @@ import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.steps.loadfileinput.LoadFileInput;
 
-import javax.mail.Message;
-import javax.mail.Session;
-import javax.mail.Transport;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeMessage;
+import jakarta.mail.Message;
+import jakarta.mail.Session;
+import jakarta.mail.Transport;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeMessage;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -541,7 +534,7 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
             }
             Object[][] resultArr = new Object[list.size()][];
             list.toArray( resultArr );
-            db.disconnect();
+            db.close();
             return resultArr;
           }
         } catch ( Exception er ) {
@@ -575,18 +568,13 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
           startDate.setTime( dIn1 );
           endDate.setTime( dIn2 );
 
-          /*
-           * Changed by: Ingo Klose, SHS VIVEON AG, Date: 27.04.2007
-           *
-           * Calculating time differences using getTimeInMillis() leads to false results when crossing Daylight
-           * Savingstime borders. In order to get correct results the time zone offsets have to be added.
-           *
-           * Fix: 1. calculate correct milli seconds for start and end date 2. replace endDate.getTimeInMillis() with
-           * endL and startDate.getTimeInMillis() with startL
-           */
-          long endL = endDate.getTimeInMillis() + endDate.getTimeZone().getOffset( endDate.getTimeInMillis() );
-          long startL =
-            startDate.getTimeInMillis() + startDate.getTimeZone().getOffset( startDate.getTimeInMillis() );
+          long endL = endDate.getTimeInMillis();
+          long startL = startDate.getTimeInMillis();
+
+          if ( compensateForLocalTime() ) {
+            endL += endDate.getTimeZone().getOffset( endL );
+            startL += startDate.getTimeZone().getOffset( startL );
+          }
 
           if ( strType.equals( "y" ) ) {
             return new Double( endDate.get( Calendar.YEAR ) - startDate.get( Calendar.YEAR ) );
@@ -631,6 +619,23 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
     } else {
       throw Context.reportRuntimeError( "The function call dateDiff requires 3 arguments." );
     }
+  }
+
+  /**
+   * <p>Check if DateDiff should compensate for Local time based on the value of a Kettle property ({@link
+   * Const#KETTLE_DATEDIFF_DST_AWARE}).</p>
+   * <p>This influences calculations where the period between the given dates includes a DST change.</p>
+   * <p>Returning {@code true} means that the difference should be done using the dates as local time; returning {@code
+   * false}, means that dates should be used as UTC.</p>
+   *
+   * @return {@code true} if it is to compensate and {@code false} otherwise
+   * @see Const#KETTLE_DATEDIFF_DST_AWARE
+   */
+  protected static boolean compensateForLocalTime() {
+    String dstAware =
+      Const.NVL( System.getProperty( Const.KETTLE_DATEDIFF_DST_AWARE ), Const.KETTLE_DATEDIFF_DST_AWARE_DEFAULT );
+
+    return Const.KETTLE_DATEDIFF_DST_AWARE_DEFAULT.equals( dstAware );
   }
 
   public static Object getNextWorkingDay( Context actualContext, Scriptable actualObject, Object[] ArgList,
@@ -1771,7 +1776,7 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
   private static void checkAndLoadJSFile( Context actualContext, Scriptable eval_scope, String fileName ) {
     Reader inStream = null;
     try {
-      inStream = new InputStreamReader( KettleVFS.getInputStream( fileName ) );
+      inStream = new InputStreamReader( KettleVFS.getInstance( getBowl( eval_scope ) ).getInputStream( fileName ) );
       actualContext.evaluateReader( eval_scope, inStream, fileName, 1, null );
     } catch ( FileNotFoundException Signal ) {
       Context.reportError( "Unable to open file \"" + fileName + "\" (reason: \"" + Signal.getMessage() + "\")" );
@@ -1799,6 +1804,12 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
         // Ignore
       }
     }
+  }
+
+  private static Bowl getBowl( Scriptable scope ) {
+    Object scmO = scope.get( "_step_", scope );
+    ScriptValuesMod scm = (ScriptValuesMod) Context.jsToJava( scmO, ScriptValuesMod.class );
+    return scm.getTransMeta().getBowl();
   }
 
   public static void setVariable( Context actualContext, Scriptable actualObject, Object[] arguments,
@@ -1839,9 +1850,15 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
   static void setRootScopeVariable( Trans trans, String variableName, String variableValue ) {
     trans.setVariable( variableName, variableValue );
 
+    VariableSpace currentSpace = trans;
     VariableSpace parentSpace = trans.getParentVariableSpace();
-    while ( parentSpace != null ) {
+
+    // Due to changes operated under BACKLOG-36347 and PDI-19604,
+    // a Transformation can be, itself, its parent VariableScope.
+    // We have to make this validation in order to avoid an infinite loop
+    while ( currentSpace != parentSpace && parentSpace != null ) {
       parentSpace.setVariable( variableName, variableValue );
+      currentSpace = parentSpace;
       parentSpace = parentSpace.getParentVariableSpace();
     }
   }
@@ -2026,7 +2043,7 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
         FileObject fileObject = null;
 
         try {
-          fileObject = KettleVFS.getFileObject( Context.toString( ArgList[0] ) );
+          fileObject = KettleVFS.getInstance( getBowl( actualObject ) ).getFileObject( Context.toString( ArgList[0] ) );
           if ( fileObject.exists() ) {
             if ( fileObject.getType() == FileType.FILE ) {
               if ( !fileObject.delete() ) {
@@ -2065,7 +2082,7 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
         FileObject fileObject = null;
 
         try {
-          fileObject = KettleVFS.getFileObject( Context.toString( ArgList[0] ) );
+          fileObject = KettleVFS.getInstance( getBowl( actualObject ) ).getFileObject( Context.toString( ArgList[0] ) );
           if ( !fileObject.exists() ) {
             fileObject.createFolder();
           } else {
@@ -2102,9 +2119,10 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
 
         try {
           // Source file to copy
-          fileSource = KettleVFS.getFileObject( Context.toString( ArgList[0] ) );
+          Bowl bowl = getBowl( actualObject );
+          fileSource = KettleVFS.getInstance( bowl ).getFileObject( Context.toString( ArgList[0] ) );
           // Destination filename
-          fileDestination = KettleVFS.getFileObject( Context.toString( ArgList[1] ) );
+          fileDestination = KettleVFS.getInstance( bowl ).getFileObject( Context.toString( ArgList[1] ) );
           if ( fileSource.exists() ) {
             // Source file exists...
             if ( fileSource.getType() == FileType.FILE ) {
@@ -2161,7 +2179,7 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
 
         try {
           // Source file
-          file = KettleVFS.getFileObject( Context.toString( ArgList[0] ) );
+          file = KettleVFS.getInstance( getBowl( actualObject ) ).getFileObject( Context.toString( ArgList[0] ) );
           long filesize = 0;
           if ( file.exists() ) {
             if ( file.getType().equals( FileType.FILE ) ) {
@@ -2204,7 +2222,7 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
 
         try {
           // Source file
-          file = KettleVFS.getFileObject( Context.toString( ArgList[0] ) );
+          file = KettleVFS.getInstance( getBowl( actualObject ) ).getFileObject( Context.toString( ArgList[0] ) );
           boolean isafile = false;
           if ( file.exists() ) {
             if ( file.getType().equals( FileType.FILE ) ) {
@@ -2247,7 +2265,7 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
 
         try {
           // Source file
-          file = KettleVFS.getFileObject( Context.toString( ArgList[0] ) );
+          file = KettleVFS.getInstance( getBowl( actualObject ) ).getFileObject( Context.toString( ArgList[0] ) );
           boolean isafolder = false;
           if ( file.exists() ) {
             if ( file.getType().equals( FileType.FOLDER ) ) {
@@ -2290,7 +2308,7 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
 
         try {
           // Source file
-          file = KettleVFS.getFileObject( Context.toString( ArgList[0] ) );
+          file = KettleVFS.getInstance( getBowl( actualObject ) ).getFileObject( Context.toString( ArgList[0] ) );
           String Filename = null;
           if ( file.exists() ) {
             Filename = file.getName().getBaseName().toString();
@@ -2331,7 +2349,7 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
 
         try {
           // Source file
-          file = KettleVFS.getFileObject( Context.toString( ArgList[0] ) );
+          file = KettleVFS.getInstance( getBowl( actualObject ) ).getFileObject( Context.toString( ArgList[0] ) );
           String Extension = null;
           if ( file.exists() ) {
             Extension = file.getName().getExtension().toString();
@@ -2372,7 +2390,7 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
 
         try {
           // Source file
-          file = KettleVFS.getFileObject( Context.toString( ArgList[0] ) );
+          file = KettleVFS.getInstance( getBowl( actualObject ) ).getFileObject( Context.toString( ArgList[0] ) );
           String foldername = null;
           if ( file.exists() ) {
             foldername = KettleVFS.getFilename( file.getParent() );
@@ -2414,7 +2432,7 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
 
         try {
           // Source file
-          file = KettleVFS.getFileObject( Context.toString( ArgList[0] ) );
+          file = KettleVFS.getInstance( getBowl( actualObject ) ).getFileObject( Context.toString( ArgList[0] ) );
           String dateformat = Context.toString( ArgList[1] );
           if ( isNull( dateformat ) ) {
             dateformat = "yyyy-MM-dd";
@@ -2547,9 +2565,10 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
 
         try {
           // Source file to move
-          fileSource = KettleVFS.getFileObject( Context.toString( ArgList[0] ) );
+          Bowl bowl = getBowl( actualObject );
+          fileSource = KettleVFS.getInstance( bowl ).getFileObject( Context.toString( ArgList[0] ) );
           // Destination filename
-          fileDestination = KettleVFS.getFileObject( Context.toString( ArgList[1] ) );
+          fileDestination = KettleVFS.getInstance( bowl ).getFileObject( Context.toString( ArgList[1] ) );
           if ( fileSource.exists() ) {
             // Source file exists...
             if ( fileSource.getType() == FileType.FILE ) {
@@ -2779,7 +2798,8 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
               return Context.getUndefinedValue();
             }
             // Returns file content
-            oRC = new String( LoadFileInput.getFileBinaryContent( Context.toString( ArgList[0] ) ) );
+            oRC = new String( LoadFileInput.getFileBinaryContent( getBowl( actualObject ),
+                                                                  Context.toString( ArgList[0] ) ) );
           } catch ( Exception e ) {
             throw Context
               .reportRuntimeError( "The function call loadFileContent throw an error : " + e.toString() );
@@ -2797,7 +2817,8 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
               encoding = Context.toString( ArgList[1] );
             }
             // Returns file content
-            oRC = new String( LoadFileInput.getFileBinaryContent( Context.toString( ArgList[0] ) ), encoding );
+            oRC = new String( LoadFileInput.getFileBinaryContent( getBowl( actualObject ),
+                                                                  Context.toString( ArgList[0] ) ), encoding );
           } catch ( Exception e ) {
             throw Context
               .reportRuntimeError( "The function call loadFileContent throw an error : " + e.toString() );

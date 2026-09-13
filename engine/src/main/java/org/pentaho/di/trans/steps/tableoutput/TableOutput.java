@@ -1,29 +1,23 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.tableoutput;
 
+import org.json.simple.JSONObject;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.RowMetaAndData;
+import org.pentaho.di.core.SQLStatement;
 import org.pentaho.di.core.database.Database;
 import org.pentaho.di.core.database.DatabaseInterface;
 import org.pentaho.di.core.exception.KettleDatabaseBatchException;
@@ -34,21 +28,20 @@ import org.pentaho.di.core.row.RowDataUtil;
 import org.pentaho.di.core.row.RowMeta;
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.di.core.row.value.ValueMetaInteger;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
-import org.pentaho.di.trans.step.BaseStep;
-import org.pentaho.di.trans.step.StepDataInterface;
-import org.pentaho.di.trans.step.StepInterface;
-import org.pentaho.di.trans.step.StepMeta;
-import org.pentaho.di.trans.step.StepMetaInterface;
+import org.pentaho.di.trans.step.*;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * Writes rows to a database table.
@@ -56,7 +49,11 @@ import java.util.List;
  * @author Matt Casters
  * @since 6-apr-2003
  */
-public class TableOutput extends BaseStep implements StepInterface {
+public class TableOutput extends BaseDatabaseStep implements StepInterface {
+  public static final String STEP_NAME = "stepName";
+  public static final String DETAILS = "details";
+  public static final String TABLE_OUTPUT_STEP = "Table Output Step";
+  public static final String CONNECTION = "connection";
   private static Class<?> PKG = TableOutputMeta.class; // for i18n purposes, needed by Translator2!!
 
   private TableOutputMeta meta;
@@ -86,7 +83,8 @@ public class TableOutput extends BaseStep implements StepInterface {
         truncateTable();
       }
       data.outputRowMeta = getInputRowMeta().clone();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
       if ( !meta.specifyFields() ) {
         // Just take the input row
@@ -481,13 +479,11 @@ public class TableOutput extends BaseStep implements StepInterface {
         // Batch updates are not supported on PostgreSQL (and look-a-likes)
         // together with error handling (PDI-366).
         // For these situations we can use savepoints to help out.
-        //
         data.useSafePoints =
           data.databaseMeta.getDatabaseInterface().useSafePoints() && getStepMeta().isDoingErrorHandling();
 
         // Get the boolean that indicates whether or not we can/should release
         // savepoints during data load.
-        //
         data.releaseSavepoint = dbInterface.releaseSavepoint();
 
         // Disable batch mode in case
@@ -495,7 +491,6 @@ public class TableOutput extends BaseStep implements StepInterface {
         // - if we need to pick up auto-generated keys
         // - if you are running the transformation as a single database transaction (unique connections)
         // - if we are reverting to save-points
-        //
         data.batchMode =
           meta.useBatchUpdate()
             && data.commitSize > 0 && !meta.isReturningGeneratedKeys()
@@ -503,34 +498,13 @@ public class TableOutput extends BaseStep implements StepInterface {
 
         // Per PDI-6211 : give a warning that batch mode operation in combination with step error handling can lead to
         // incorrectly processed rows.
-        //
         if ( getStepMeta().isDoingErrorHandling() && !dbInterface.supportsErrorHandlingOnBatchUpdates() ) {
           log.logMinimal( BaseMessages.getString(
             PKG, "TableOutput.Warning.ErrorHandlingIsNotFullySupportedWithBatchProcessing" ) );
         }
 
-        if ( meta.getDatabaseMeta() == null ) {
-          throw new KettleException( BaseMessages.getString(
-            PKG, "TableOutput.Exception.DatabaseNeedsToBeSelected" ) );
-        }
-        if ( meta.getDatabaseMeta() == null ) {
-          logError( BaseMessages.getString( PKG, "TableOutput.Init.ConnectionMissing", getStepname() ) );
-          return false;
-        }
-
         if ( !dbInterface.supportsStandardTableOutput() ) {
           throw new KettleException( dbInterface.getUnsupportedTableOutputMessage() );
-        }
-
-        data.db = new Database( this, meta.getDatabaseMeta() );
-        data.db.shareVariablesWith( this );
-
-        if ( getTransMeta().isUsingUniqueConnections() ) {
-          synchronized ( getTrans() ) {
-            data.db.connect( getTrans().getTransactionId(), getPartitionID() );
-          }
-        } else {
-          data.db.connect( getPartitionID() );
         }
 
         if ( log.isBasic() ) {
@@ -538,11 +512,10 @@ public class TableOutput extends BaseStep implements StepInterface {
         }
 
         // Postpone commit as long as possible. PDI-2091
-        //
         if ( data.commitSize == 0 ) {
           data.commitSize = Integer.MAX_VALUE;
         }
-        data.db.setCommit( data.commitSize );
+        data.db.setCommitSize( data.commitSize );
 
         if ( !meta.isPartitioningEnabled() && !meta.isTableNameInField() ) {
           data.tableName = environmentSubstitute( meta.getTableName() );
@@ -556,6 +529,11 @@ public class TableOutput extends BaseStep implements StepInterface {
       }
     }
     return false;
+  }
+
+  @Override
+  protected Class<?> getPKG() {
+    return PKG;
   }
 
   void truncateTable() throws KettleDatabaseException {
@@ -627,8 +605,6 @@ public class TableOutput extends BaseStep implements StepInterface {
             logError( "Unexpected error rolling back the database connection.", e );
           }
         }
-
-        data.db.disconnect();
       }
       super.dispose( smi, sdi );
     }

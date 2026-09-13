@@ -1,46 +1,48 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.www;
 
-import com.sun.jersey.spi.container.servlet.ServletContainer;
-import org.eclipse.jetty.plus.jaas.JAASLoginService;
-import org.eclipse.jetty.security.ConstraintMapping;
-import org.eclipse.jetty.security.ConstraintSecurityHandler;
+import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
+import org.eclipse.jetty.ee10.servlet.ServletHolder;
+import org.eclipse.jetty.ee10.servlet.security.ConstraintMapping;
+import org.eclipse.jetty.ee10.servlet.security.ConstraintSecurityHandler;
+import org.eclipse.jetty.security.Constraint;
+import org.eclipse.jetty.security.DefaultIdentityService;
 import org.eclipse.jetty.security.HashLoginService;
+import org.eclipse.jetty.security.UserStore;
+import org.eclipse.jetty.security.RolePrincipal;
+import org.eclipse.jetty.security.UserPrincipal;
+import org.eclipse.jetty.security.jaas.JAASLoginService;
+import org.eclipse.jetty.server.handler.ContextHandler;
+import org.eclipse.jetty.util.resource.Resource;
+import org.eclipse.jetty.util.resource.ResourceFactory;
+import org.glassfish.jersey.servlet.ServletContainer;
+import org.eclipse.jetty.http.HttpVersion;
+import org.eclipse.jetty.security.authentication.BasicAuthenticator;
 import org.eclipse.jetty.server.Connector;
-import org.eclipse.jetty.server.Handler;
+import org.eclipse.jetty.server.HttpConfiguration;
+import org.eclipse.jetty.server.HttpConnectionFactory;
+import org.eclipse.jetty.server.LowResourceMonitor;
+import org.eclipse.jetty.server.SecureRequestCustomizer;
 import org.eclipse.jetty.server.Server;
-import org.eclipse.jetty.server.UserIdentity;
-import org.eclipse.jetty.server.bio.SocketConnector;
+import org.eclipse.jetty.server.ServerConnector;
+import org.eclipse.jetty.server.SslConnectionFactory;
 import org.eclipse.jetty.server.handler.ContextHandlerCollection;
-import org.eclipse.jetty.server.handler.HandlerList;
 import org.eclipse.jetty.server.handler.ResourceHandler;
-import org.eclipse.jetty.server.ssl.SslSocketConnector;
-import org.eclipse.jetty.servlet.ServletContextHandler;
-import org.eclipse.jetty.servlet.ServletHolder;
-import org.eclipse.jetty.util.security.Constraint;
-import org.eclipse.jetty.util.security.Credential;
 import org.eclipse.jetty.util.security.Password;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
@@ -54,18 +56,21 @@ import org.pentaho.di.core.plugins.PluginInterface;
 import org.pentaho.di.core.plugins.PluginRegistry;
 import org.pentaho.di.i18n.BaseMessages;
 
-import javax.servlet.Servlet;
+import jakarta.servlet.Servlet;
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import static org.eclipse.jetty.security.Authenticator.BASIC_AUTH;
+import static org.eclipse.jetty.security.Constraint.Authorization.ANY_USER;
+
 public class WebServer {
 
   private static final int DEFAULT_DETECTION_TIMER = 20000;
+  public static final String SERVICE_NAME = "Kettle";
   private static Class<?> PKG = WebServer.class; // for i18n purposes, needed by Translator2!!
 
   private LogChannelInterface log;
@@ -150,26 +155,27 @@ public class WebServer {
   public void startServer() throws Exception {
     server = new Server();
 
-    List<String> roles = new ArrayList<String>();
-    roles.add( Constraint.ANY_ROLE );
-
     // Set up the security handler, optionally with JAAS
     //
     ConstraintSecurityHandler securityHandler = new ConstraintSecurityHandler();
-
+    
     if ( System.getProperty( "loginmodulename" ) != null
         && System.getProperty( "java.security.auth.login.config" ) != null ) {
-      JAASLoginService jaasLoginService = new JAASLoginService( "Kettle" );
+      JAASLoginService jaasLoginService = new JAASLoginService( SERVICE_NAME );
       jaasLoginService.setLoginModuleName( System.getProperty( "loginmodulename" ) );
+      if( jaasLoginService.getIdentityService() == null ) {
+        jaasLoginService.setIdentityService( new DefaultIdentityService() );
+      }
       securityHandler.setLoginService( jaasLoginService );
     } else {
-      roles.add( "default" );
       HashLoginService hashLoginService;
       SlaveServer slaveServer = transformationMap.getSlaveServerConfig().getSlaveServer();
       if ( !Utils.isEmpty( slaveServer.getPassword() ) ) {
-        hashLoginService = new HashLoginService( "Kettle" );
-        hashLoginService.putUser( slaveServer.getUsername(), new Password( slaveServer.getPassword() ),
-            new String[] { "default" } );
+        hashLoginService = new HashLoginService( SERVICE_NAME );
+        UserStore userStore = new UserStore();
+        userStore.addUser( slaveServer.getUsername(), new Password( slaveServer.getPassword() ),
+          new String[] { } );
+        hashLoginService.setUserStore( userStore );
       } else {
         // See if there is a kettle.pwd file in the KETTLE_HOME directory:
         if ( Utils.isEmpty( passwordFile ) ) {
@@ -180,41 +186,42 @@ public class WebServer {
             passwordFile = Const.getKettleLocalCartePasswordFile();
           }
         }
-        hashLoginService = new HashLoginService( "Kettle", passwordFile ) {
-          @Override public synchronized UserIdentity putUser( String userName, Credential credential, String[] roles ) {
-            List<String> newRoles = new ArrayList<String>();
-            newRoles.add( "default" );
-            Collections.addAll( newRoles, roles );
-            return super.putUser( userName, credential, newRoles.toArray( new String[newRoles.size()] ) );
+
+        hashLoginService = new HashLoginService( SERVICE_NAME, ResourceFactory.of( server ).newResource( passwordFile ) ) {
+          @Override
+          protected List<RolePrincipal> loadRoleInfo(UserPrincipal user ) {
+            List<RolePrincipal> newRoles = new ArrayList<>();
+            List<RolePrincipal> roles = super.loadRoleInfo( user );
+            if ( roles != null ) {
+              newRoles.addAll( roles );
+            }
+            return newRoles;
           }
         };
       }
       securityHandler.setLoginService( hashLoginService );
     }
 
-    Constraint constraint = new Constraint();
-    constraint.setName( Constraint.__BASIC_AUTH );
-    constraint.setRoles( roles.toArray( new String[roles.size()] ) );
-    constraint.setAuthenticate( true );
-
+    Constraint constraint = new Constraint.Builder().name( BASIC_AUTH ).authorization( ANY_USER ).build();
     ConstraintMapping constraintMapping = new ConstraintMapping();
     constraintMapping.setConstraint( constraint );
     constraintMapping.setPathSpec( "/*" );
 
     securityHandler.setConstraintMappings( new ConstraintMapping[] { constraintMapping } );
+    securityHandler.setAuthenticator( new BasicAuthenticator() );
 
+    
     // Add all the servlets defined in kettle-servlets.xml ...
     //
     ContextHandlerCollection contexts = new ContextHandlerCollection();
 
     // Root
     //
-    ServletContextHandler
-        root =
-        new ServletContextHandler( contexts, GetRootServlet.CONTEXT_PATH, ServletContextHandler.SESSIONS );
+    ServletContextHandler root = new ServletContextHandler( GetRootServlet.CONTEXT_PATH, ServletContextHandler.SESSIONS );
     GetRootServlet rootServlet = new GetRootServlet();
     rootServlet.setJettyMode( true );
     root.addServlet( new ServletHolder( rootServlet ), "/*" );
+    contexts.addHandler( root );
 
     PluginRegistry pluginRegistry = PluginRegistry.getInstance();
     List<PluginInterface> plugins = pluginRegistry.getPlugins( CartePluginType.class );
@@ -225,16 +232,16 @@ public class WebServer {
       servlet.setJettyMode( true );
 
       ServletContextHandler servletContext =
-        new ServletContextHandler( contexts, getContextPath( servlet ), ServletContextHandler.SESSIONS );
+        new ServletContextHandler( getContextPath( servlet ), ServletContextHandler.SESSIONS );
       ServletHolder servletHolder = new ServletHolder( (Servlet) servlet );
       servletContext.addServlet( servletHolder, "/*" );
+      contexts.addHandler( servletContext );
     }
 
     // setup jersey (REST)
     ServletHolder jerseyServletHolder = new ServletHolder( ServletContainer.class );
-    jerseyServletHolder.setInitParameter( "com.sun.jersey.config.property.resourceConfigClass",
-        "com.sun.jersey.api.core.PackagesResourceConfig" );
-    jerseyServletHolder.setInitParameter( "com.sun.jersey.config.property.packages", "org.pentaho.di.www.jaxrs" );
+    jerseyServletHolder.setInitParameter( "jakarta.ws.rs.Application" , "org.glassfish.jersey.server.ResourceConfig" );
+    jerseyServletHolder.setInitParameter( "jersey.config.server.provider.packages" , "org.pentaho.di.www.jaxrs" );
     root.addServlet( jerseyServletHolder, "/api/*" );
 
     // setup static resource serving
@@ -248,18 +255,25 @@ public class WebServer {
     // Allow png files to be shown for transformations and jobs...
     //
     ResourceHandler resourceHandler = new ResourceHandler();
-    resourceHandler.setResourceBase( "temp" );
+    resourceHandler.setBaseResourceAsString( "static" );
+
+    ContextHandler contextHandler = new ContextHandler();
+    contextHandler.setContextPath( "/static" );
+    contextHandler.setHandler( resourceHandler );
+    contexts.addHandler( contextHandler );
+
+    securityHandler.setHandler( contexts );
+
     // add all handlers/contexts to server
-
-    HandlerList handlers = new HandlerList();
-    handlers.setHandlers( new Handler[] { contexts, resourceHandler } );
-    securityHandler.setHandler( handlers );
-
     server.setHandler( securityHandler );
+    
+    // Configure listeners (Acceptors, ServerConnector/SSL, etc)
+    createListeners();
+    
+    // Call directly before server.start()
+    ExtensionPointHandler.callExtensionPoint( log, KettleExtensionPoint.BeforeCarteStartup.id, server );
 
     // Start execution
-    createListeners();
-
     server.start();
   }
 
@@ -284,7 +298,7 @@ public class WebServer {
     } catch ( KettleException e ) {
       // Log error but continue regular operations to make sure Carte can be shut down properly.
       //
-      log.logError( "Error calling extension point CarteStartup", e );
+      log.logError( "Error calling extension point CarteShutdown", e );
     }
 
     try {
@@ -317,57 +331,63 @@ public class WebServer {
 
   private void createListeners() {
 
-    SocketConnector connector = getConnector();
-    setupJettyOptions( connector );
-    connector.setPort( port );
-    connector.setHost( hostname );
-    connector.setName( BaseMessages.getString( PKG, "WebServer.Log.KettleHTTPListener", hostname ) );
+    ServerConnector serverConnector = getServerConnector();
+    serverConnector.setPort( port );
+    serverConnector.setHost( hostname );
+    serverConnector.setName( BaseMessages.getString( PKG, "WebServer.Log.KettleHTTPListener", hostname ) );
     log.logBasic( BaseMessages.getString( PKG, "WebServer.Log.CreateListener", hostname, "" + port ) );
 
-    server.setConnectors( new Connector[] { connector } );
+    server.setConnectors( new Connector[] { serverConnector } );
   }
 
-  private SocketConnector getConnector() {
+  private ServerConnector getServerConnector() {
+    ServerConnector serverConnector = null;
+    int jettyAcceptors = -1;
+
+    // Check if there's configuration for the number of acceptors to use
+    if ( validProperty( Const.KETTLE_CARTE_JETTY_ACCEPTORS ) ) {
+      jettyAcceptors = Integer.parseInt( System.getProperty( Const.KETTLE_CARTE_JETTY_ACCEPTORS ) );
+
+      log.logBasic(
+        BaseMessages.getString( PKG, "WebServer.Log.ConfigOptions", "acceptors", jettyAcceptors ) );
+    }
+
+    // Create the server with the configurated number of acceptors
     if ( sslConfig != null ) {
       log.logBasic( BaseMessages.getString( PKG, "WebServer.Log.SslModeUsing" ) );
-      SslSocketConnector connector = new SslSocketConnector();
-      connector.setKeystore( sslConfig.getKeyStore() );
-      connector.setPassword( sslConfig.getKeyStorePassword() );
-      connector.setKeyPassword( sslConfig.getKeyPassword() );
-      connector.setKeystoreType( sslConfig.getKeyStoreType() );
-      return connector;
+      SslContextFactory.Server sslContextFactory = new SslContextFactory.Server();
+      sslContextFactory.setKeyStorePath( sslConfig.getKeyStore() );
+      sslContextFactory.setKeyStorePassword( sslConfig.getKeyStorePassword() );
+      sslContextFactory.setKeyManagerPassword( sslConfig.getKeyPassword() );
+      sslContextFactory.setKeyStoreType( sslConfig.getKeyStoreType() );
+
+      HttpConfiguration https = new HttpConfiguration();
+      https.addCustomizer( new SecureRequestCustomizer() );
+      serverConnector = new ServerConnector( server, jettyAcceptors, -1,
+        new SslConnectionFactory( sslContextFactory, HttpVersion.HTTP_1_1.asString() ),
+        new HttpConnectionFactory( https ) );
     } else {
-      return new SocketConnector();
+      serverConnector = new ServerConnector( server, jettyAcceptors, -1 );
     }
 
-  }
-
-  /**
-   * Set up jetty options to the connector
-   *
-   * @param connector
-   */
-  protected void setupJettyOptions( SocketConnector connector ) {
-    if ( validProperty( Const.KETTLE_CARTE_JETTY_ACCEPTORS ) ) {
-      connector.setAcceptors( Integer.parseInt( System.getProperty( Const.KETTLE_CARTE_JETTY_ACCEPTORS ) ) );
-      log.logBasic(
-          BaseMessages.getString( PKG, "WebServer.Log.ConfigOptions", "acceptors", connector.getAcceptors() ) );
-    }
-
+    // Low resources options
     if ( validProperty( Const.KETTLE_CARTE_JETTY_ACCEPT_QUEUE_SIZE ) ) {
-      connector
-          .setAcceptQueueSize( Integer.parseInt( System.getProperty( Const.KETTLE_CARTE_JETTY_ACCEPT_QUEUE_SIZE ) ) );
+      serverConnector
+        .setAcceptQueueSize( Integer.parseInt( System.getProperty( Const.KETTLE_CARTE_JETTY_ACCEPT_QUEUE_SIZE ) ) );
       log.logBasic( BaseMessages
-          .getString( PKG, "WebServer.Log.ConfigOptions", "acceptQueueSize", connector.getAcceptQueueSize() ) );
+        .getString( PKG, "WebServer.Log.ConfigOptions", "acceptQueueSize", serverConnector.getAcceptQueueSize() ) );
     }
 
     if ( validProperty( Const.KETTLE_CARTE_JETTY_RES_MAX_IDLE_TIME ) ) {
-      connector.setLowResourceMaxIdleTime(
-          Integer.parseInt( System.getProperty( Const.KETTLE_CARTE_JETTY_RES_MAX_IDLE_TIME ) ) );
+      LowResourceMonitor lowResourceMonitor = new LowResourceMonitor( server );
+      lowResourceMonitor.setLowResourcesIdleTimeout(
+        Integer.parseInt( System.getProperty( Const.KETTLE_CARTE_JETTY_RES_MAX_IDLE_TIME ) ) );
+      server.addBean( lowResourceMonitor );
       log.logBasic( BaseMessages.getString( PKG, "WebServer.Log.ConfigOptions", "lowResourcesMaxIdleTime",
-          connector.getLowResourceMaxIdleTime() ) );
+        lowResourceMonitor.getLowResourcesIdleTimeout() ) );
     }
 
+    return serverConnector;
   }
 
   /**

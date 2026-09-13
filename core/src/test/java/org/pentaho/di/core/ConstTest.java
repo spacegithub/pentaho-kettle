@@ -1,28 +1,20 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core;
 
-import org.apache.commons.lang.SystemUtils;
+import org.apache.commons.lang3.SystemUtils;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.row.ValueMetaInterface;
 
@@ -30,7 +22,9 @@ import java.math.BigDecimal;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Date;
+import java.util.GregorianCalendar;
 import java.util.List;
 
 import org.junit.ClassRule;
@@ -630,7 +624,7 @@ public class ConstTest {
   private void testSplitStringRemoveEnclosureNested( String e, String d ) {
     //"""a,b,c"""
     String mask = "%s%s%sa" + "%s" + "b" + "%s" + "c%s%s%s";
-    String[] chunks = { e + e + "a" + d  + "b" + d + "c" + e + e};
+    String[] chunks = { e + "a", "b", "c" +  e };
 
     String stringToSplit = String.format( mask, e, e, e, d, d, e, e, e );
     String[] result = Const.splitString( stringToSplit, d, e, true );
@@ -666,6 +660,36 @@ public class ConstTest {
     assertEquals( result[0], "Hello\\, world" );
     assertEquals( result[1], "Hello\\, planet" );
     assertEquals( result[2], "Hello\\, 3rd rock" );
+  }
+
+    /**
+   * Test splitString with delimiter and string contains nested escaped enclosure
+   */
+  @Test
+  public void testSplitStringWithNestedEscapedEnclosure() {
+    String[] result;
+    String enclosure = "\"";
+    String delimiter = ",";
+    // Actual data contains enclosure withing data with escaped enclosure like: "0","Test\"Data1","Test\"Data2","Test\"Data3"
+    String splitString = "\"0\",\"Test\\\"Data1\",\"Test\\\"Data2\",\"Test\\\"Data3\"";
+
+    // Test with removeEnclosure=false
+    result = Const.splitString( splitString, delimiter, enclosure, false );
+    assertNotNull( result );
+    assertEquals( result.length, 4 );
+    assertEquals( result[0], "\"0\"" );
+    assertEquals( result[1], "\"Test\\\"Data1\"" );
+    assertEquals( result[2], "\"Test\\\"Data2\"" );
+    assertEquals( result[3], "\"Test\\\"Data3\"" );
+
+    // Test with removeEnclosure=true
+    result = Const.splitString( splitString, delimiter, enclosure, true );
+    assertNotNull( result );
+    assertEquals( result.length, 4 );
+    assertEquals( result[0], "0" );
+    assertEquals( result[1], "Test\\\"Data1" );
+    assertEquals( result[2], "Test\\\"Data2" );
+    assertEquals( result[3], "Test\\\"Data3" );
   }
 
   /**
@@ -1823,18 +1847,24 @@ public class ConstTest {
   public void testToInt() {
     assertEquals( 123, Const.toInt( "123", -12 ) );
     assertEquals( -12, Const.toInt( "123f", -12 ) );
+    assertEquals( -12, Const.toInt( "", -12 ) );
+    assertEquals( -12, Const.toInt( null, -12 ) );
   }
 
   @Test
   public void testToLong() {
     assertEquals( 1447252914241L, Const.toLong( "1447252914241", -12 ) );
     assertEquals( -1447252914241L, Const.toLong( "1447252914241L", -1447252914241L ) );
+    assertEquals( -1447252914241L, Const.toLong( "", -1447252914241L ) );
+    assertEquals( -1447252914241L, Const.toLong( null, -1447252914241L ) );
   }
 
   @Test
   public void testToDouble() {
     Assert.assertEquals( 123.45, Const.toDouble( "123.45", -12.34 ), 1e-15 );
     Assert.assertEquals( -12.34, Const.toDouble( "123asd", -12.34 ), 1e-15 );
+    Assert.assertEquals( -12.34, Const.toDouble( "", -12.34 ), 1e-15 );
+    Assert.assertEquals( -12.34, Const.toDouble( null, -12.34 ), 1e-15 );
   }
 
   @Test
@@ -2051,6 +2081,9 @@ public class ConstTest {
   public void testCreateName() {
     assertNull( Const.createName( null ) );
     assertEquals( "test - trans", Const.createName( "transformations" + Const.FILE_SEPARATOR + "test\t~- trans.ktr" ) );
+    assertEquals( "Transformation 3", Const.createName( "pvfs://localprojects/test/foo%20%25%20bar/Transformation%203.ktr" ) );
+    assertEquals( "Transformation 3", Const.createName( "/localprojects/test/foo%20%25%20bar/Transformation%203.ktr" ) );
+
   }
 
   @Test
@@ -2067,6 +2100,16 @@ public class ConstTest {
     assertTrue( formats.length > 0 );
     for ( String format : formats ) {
       assertTrue( format != null && !format.isEmpty() );
+    }
+  }
+
+  @Test
+  public void testGetTimelessDateFormats() {
+    final String[] formats = Const.getTimelessDateFormats();
+    assertTrue( formats.length > 0 );
+    for ( String format : formats ) {
+      assertTrue( format != null && !format.isEmpty() );
+      assertTrue( format != null && !format.toLowerCase().contains( "hh" ) );
     }
   }
 
@@ -2128,6 +2171,18 @@ public class ConstTest {
     assertEquals( "trim me hard ", Const.trimToType( source, ValueMetaInterface.TRIM_TYPE_LEFT ) );
     assertEquals( " trim me hard", Const.trimToType( source, ValueMetaInterface.TRIM_TYPE_RIGHT ) );
     assertEquals( source, Const.trimToType( source, ValueMetaInterface.TRIM_TYPE_NONE ) );
+  }
+
+  @Test
+  public void testTrimDate() {
+    Date now = new Date();
+    Date nowTrimed = Const.trimDate( now );
+    Calendar calendar = GregorianCalendar.getInstance();
+    calendar.setTime( nowTrimed  );
+    assertEquals( 0, calendar.get( Calendar.HOUR_OF_DAY ) );
+    assertEquals( 0, calendar.get( Calendar.MINUTE ) );
+    assertEquals( 0, calendar.get( Calendar.SECOND ) );
+    assertEquals( 0, calendar.get( Calendar.MILLISECOND ) );
   }
 
   @Test
@@ -2331,6 +2386,242 @@ public class ConstTest {
     for ( Const.ReleaseType type : Const.ReleaseType.values() ) {
       assertFalse( type.getMessage().isEmpty() );
     }
+  }
+
+  /**
+   * Comprehensive tests for XML escape/unescape methods with custom internal implementations
+   */
+  @Test
+  public void testXmlEscapeAllSpecialCharacters() {
+    // Test all special XML characters
+    String input = "<>&\"'";
+    String expected = "&lt;&gt;&amp;&quot;&apos;";
+    assertEquals( expected, Const.escapeXML( input ) );
+    assertEquals( expected, Const.escapeXml( input ) );
+  }
+
+  @Test
+  public void testXmlEscapeComplexContent() {
+    String input = "<tag attr=\"value\">content's & data</tag>";
+    String escaped = Const.escapeXML( input );
+    assertTrue( escaped.contains( "&lt;" ) );
+    assertTrue( escaped.contains( "&gt;" ) );
+    assertTrue( escaped.contains( "&quot;" ) );
+    assertTrue( escaped.contains( "&apos;" ) );
+    assertTrue( escaped.contains( "&amp;" ) );
+  }
+
+  @Test
+  public void testXmlUnescapeAllEntities() {
+    String input = "&lt;&gt;&amp;&quot;&apos;";
+    String expected = "<>&\"'";
+    assertEquals( expected, Const.unEscapeXml( input ) );
+  }
+
+  @Test
+  public void testXmlUnescapeNumericEntities() {
+    String input = "line1&#10;line2&#xD;line3";
+    String expected = "line1\nline2\rline3";
+    assertEquals( expected, Const.unEscapeXml( input ) );
+  }
+
+  @Test
+  public void testXmlEscapeUnescapeRoundTrip() {
+    String[] testData = {
+        "<test>",
+        "attribute=\"value\"",
+        "single's quote",
+        "multiple & ampersands & more",
+        "<nested>\"attr\"='value'</nested>",
+        "mixed <tag> & \"quotes\" and 's"
+    };
+
+    for ( String original : testData ) {
+      String escaped = Const.escapeXML( original );
+      String unescaped = Const.unEscapeXml( escaped );
+      assertEquals( "Round-trip failed for: " + original, original, unescaped );
+    }
+  }
+
+  @Test
+  public void testXmlEscapeNonEmptyString() {
+    String input = "text with no special chars";
+    assertEquals( input, Const.escapeXML( input ) );
+    assertEquals( input, Const.escapeXml( input ) );
+  }
+
+  @Test
+  public void testXmlEscapeEmptyString() {
+    assertEquals( "", Const.escapeXML( "" ) );
+    assertEquals( "", Const.escapeXml( "" ) );
+  }
+
+  @Test
+  public void testXmlUnescapeEmptyString() {
+    assertEquals( "", Const.unEscapeXml( "" ) );
+  }
+
+  @Test
+  public void testXmlEscapeNullString() {
+    assertNull( Const.escapeXML( null ) );
+    assertNull( Const.escapeXml( null ) );
+    assertNull( Const.unEscapeXml( null ) );
+  }
+
+  @Test
+  public void testHtmlEscapeAllSpecialCharacters() {
+    // HTML escaping should handle <, >, &, "
+    String input = "<>&\"";
+    String expected = "&lt;&gt;&amp;&quot;";
+    assertEquals( expected, Const.escapeHtml( input ) );
+  }
+
+  @Test
+  public void testHtmlEscapeSingleQuoteNotEscaped() {
+    // Const.escapeHtml does not escape single quotes
+    String input = "it's";
+    String escaped = Const.escapeHtml( input );
+    assertEquals( "it's", escaped );
+  }
+
+  @Test
+  public void testHtmlEscapeComplexContent() {
+    String input = "<div class=\"container\">HTML & content</div>";
+    String escaped = Const.escapeHtml( input );
+    assertTrue( escaped.contains( "&lt;" ) );
+    assertTrue( escaped.contains( "&gt;" ) );
+    assertTrue( escaped.contains( "&quot;" ) );
+    assertTrue( escaped.contains( "&amp;" ) );
+  }
+
+  @Test
+  public void testHtmlUnescapeAllEntities() {
+    String input = "&lt;&gt;&amp;&quot;";
+    String expected = "<>&\"";
+    assertEquals( expected, Const.unEscapeHtml( input ) );
+  }
+
+  @Test
+  public void testHtmlUnescapeNumericEntities() {
+    String input = "it&#39;s &lt;ok&gt;";
+    String expected = "it's <ok>";
+    assertEquals( expected, Const.unEscapeHtml( input ) );
+  }
+
+  @Test
+  public void testHtmlEscapeUnescapeRoundTrip() {
+    String[] testData = {
+        "<div>",
+        "class=\"myClass\"",
+        "HTML & more HTML",
+        "<tag attr=\"value\">content</tag>",
+        "text with <multiple> & \"special\" chars"
+    };
+
+    for ( String original : testData ) {
+      String escaped = Const.escapeHtml( original );
+      String unescaped = Const.unEscapeHtml( escaped );
+      assertEquals( "Round-trip failed for: " + original, original, unescaped );
+    }
+  }
+
+  @Test
+  public void testHtmlEscapeNormalText() {
+    String input = "just plain text";
+    assertEquals( input, Const.escapeHtml( input ) );
+  }
+
+  @Test
+  public void testHtmlEscapeEmptyString() {
+    assertEquals( "", Const.escapeHtml( "" ) );
+  }
+
+  @Test
+  public void testHtmlUnescapeEmptyString() {
+    assertEquals( "", Const.unEscapeHtml( "" ) );
+  }
+
+  @Test
+  public void testHtmlEscapeNullString() {
+    assertNull( Const.escapeHtml( null ) );
+    assertNull( Const.unEscapeHtml( null ) );
+  }
+
+  @Test
+  public void testEscapeSQLSpecialCharacters() {
+    // SQL escaping replaces single quotes with two single quotes
+    String input = "O'Reilly's library";
+    String expected = "O''Reilly''s library";
+    assertEquals( expected, Const.escapeSQL( input ) );
+  }
+
+  @Test
+  public void testEscapeSQLNoSpecialChars() {
+    String input = "SELECT * FROM table";
+    assertEquals( input, Const.escapeSQL( input ) );
+  }
+
+  @Test
+  public void testEscapeSQLEmptyString() {
+    assertEquals( "", Const.escapeSQL( "" ) );
+  }
+
+  @Test
+  public void testEscapeSQLNullString() {
+    assertNull( Const.escapeSQL( null ) );
+  }
+
+  @Test
+  public void testXmlUnescapeIncompleteEntity() {
+    // Test handling of incomplete entities (no closing semicolon)
+    String input = "text with &lt incomplete entity";
+    String result = Const.unEscapeXml( input );
+    assertTrue( result.contains( "&lt" ) ); // Should remain unchanged
+  }
+
+  @Test
+  public void testXmlUnescapeUnknownEntity() {
+    // Test handling of unknown entities
+    String input = "text with &unknown; entity";
+    String result = Const.unEscapeXml( input );
+    assertEquals( input, result ); // Should remain unchanged
+  }
+
+  @Test
+  public void testXmlEscapeMultipleConsecutiveSpecialChars() {
+    String input = "<<<>>>";
+    String expected = "&lt;&lt;&lt;&gt;&gt;&gt;";
+    assertEquals( expected, Const.escapeXML( input ) );
+  }
+
+  @Test
+  public void testHtmlUnescapeUnknownEntity() {
+    // Test handling of unknown HTML entities
+    String input = "text with &unknown; entity";
+    String result = Const.unEscapeHtml( input );
+    assertEquals( input, result ); // Should remain unchanged
+  }
+
+  @Test
+  public void testEscapeXmlWithAmpersandEntity() {
+    String input = "&amp;";
+    String escaped = Const.escapeXML( input );
+    assertEquals( "&amp;amp;", escaped );
+  }
+
+  @Test
+  public void testXmlPreservesLineBreaks() {
+    String input = "line1\nline2\rline3\r\nline4";
+    String escaped = Const.escapeXML( input );
+    assertTrue( escaped.contains( "\n" ) );
+    assertTrue( escaped.contains( "\r" ) );
+  }
+
+  @Test
+  public void testXmlPreservesNumbers() {
+    String input = "number 12345 and 67890";
+    String escaped = Const.escapeXML( input );
+    assertEquals( input, escaped );
   }
 
   private void doWithModifiedSystemProperty( final String key, final String value, Runnable action ) {

@@ -1,25 +1,17 @@
 //CHECKSTYLE:FileLength:OFF
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.textfileinput;
 
@@ -204,10 +196,6 @@ public class TextFileInputDialog extends BaseStepDialog implements StepDialogInt
   private Label wlEnclosure;
   private Text wEnclosure;
   private FormData fdlEnclosure, fdEnclosure;
-
-  private Label wlEnclBreaks;
-  private Button wEnclBreaks;
-  private FormData fdlEnclBreaks, fdEnclBreaks;
 
   private Label wlEscape;
   private Text wEscape;
@@ -1134,33 +1122,13 @@ public class TextFileInputDialog extends BaseStepDialog implements StepDialogInt
     fdEnclosure.right = new FormAttachment( 100, 0 );
     wEnclosure.setLayoutData( fdEnclosure );
 
-    // Allow Enclosure breaks checkbox
-    wlEnclBreaks = new Label( wContentComp, SWT.RIGHT );
-    wlEnclBreaks.setText( BaseMessages.getString( PKG, "TextFileInputDialog.EnclBreaks.Label" ) );
-    props.setLook( wlEnclBreaks );
-    fdlEnclBreaks = new FormData();
-    fdlEnclBreaks.left = new FormAttachment( 0, 0 );
-    fdlEnclBreaks.top = new FormAttachment( wEnclosure, margin );
-    fdlEnclBreaks.right = new FormAttachment( middle, -margin );
-    wlEnclBreaks.setLayoutData( fdlEnclBreaks );
-    wEnclBreaks = new Button( wContentComp, SWT.CHECK );
-    props.setLook( wEnclBreaks );
-    fdEnclBreaks = new FormData();
-    fdEnclBreaks.left = new FormAttachment( middle, 0 );
-    fdEnclBreaks.top = new FormAttachment( wEnclosure, margin );
-    wEnclBreaks.setLayoutData( fdEnclBreaks );
-
-    // Disable until the logic works...
-    wlEnclBreaks.setEnabled( false );
-    wEnclBreaks.setEnabled( false );
-
     // Escape
     wlEscape = new Label( wContentComp, SWT.RIGHT );
     wlEscape.setText( BaseMessages.getString( PKG, "TextFileInputDialog.Escape.Label" ) );
     props.setLook( wlEscape );
     fdlEscape = new FormData();
     fdlEscape.left = new FormAttachment( 0, 0 );
-    fdlEscape.top = new FormAttachment( wEnclBreaks, margin );
+    fdlEscape.top = new FormAttachment( wEnclosure, margin );
     fdlEscape.right = new FormAttachment( middle, -margin );
     wlEscape.setLayoutData( fdlEscape );
     wEscape = new Text( wContentComp, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
@@ -1168,7 +1136,7 @@ public class TextFileInputDialog extends BaseStepDialog implements StepDialogInt
     wEscape.addModifyListener( lsMod );
     fdEscape = new FormData();
     fdEscape.left = new FormAttachment( middle, 0 );
-    fdEscape.top = new FormAttachment( wEnclBreaks, margin );
+    fdEscape.top = new FormAttachment( wEnclosure, margin );
     fdEscape.right = new FormAttachment( 100, 0 );
     wEscape.setLayoutData( fdEscape );
 
@@ -2617,7 +2585,7 @@ public class TextFileInputDialog extends BaseStepDialog implements StepDialogInt
     TextFileInputMeta meta = new TextFileInputMeta();
     getInfo( meta );
     TextFileInputMeta previousMeta = (TextFileInputMeta) meta.clone();
-    FileInputList textFileList = meta.getTextFileList( transMeta );
+    FileInputList textFileList = meta.getTextFileList( transMeta.getBowl(), transMeta );
     InputStream fileInputStream;
     CompressionInputStream inputStream = null;
     StringBuilder lineStringBuilder = new StringBuilder( 256 );
@@ -2850,7 +2818,7 @@ public class TextFileInputDialog extends BaseStepDialog implements StepDialogInt
     getInfo( info );
 
     try {
-      if ( info.getTextFileList( transMeta ).nrOfFiles() > 0 ) {
+      if ( info.getTextFileList( transMeta.getBowl(), transMeta ).nrOfFiles() > 0 ) {
         String shellText = BaseMessages.getString( PKG, "TextFileInputDialog.LinesToView.DialogTitle" );
         String lineText = BaseMessages.getString( PKG, "TextFileInputDialog.LinesToView.DialogMessage" );
         EnterNumberDialog end = new EnterNumberDialog( shell, 100, shellText, lineText );
@@ -2893,7 +2861,7 @@ public class TextFileInputDialog extends BaseStepDialog implements StepDialogInt
   private List<String> getFirst( int nrlines, boolean skipHeaders ) throws KettleException {
     TextFileInputMeta meta = new TextFileInputMeta();
     getInfo( meta );
-    FileInputList textFileList = meta.getTextFileList( transMeta );
+    FileInputList textFileList = meta.getTextFileList( transMeta.getBowl(), transMeta );
 
     InputStream fi;
     CompressionInputStream f = null;

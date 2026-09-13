@@ -1,29 +1,22 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.dynamicsqlrow;
 
 import java.util.List;
 
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
@@ -44,15 +37,11 @@ import org.pentaho.di.repository.Repository;
 import org.pentaho.di.trans.DatabaseImpact;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
-import org.pentaho.di.trans.step.BaseStepMeta;
-import org.pentaho.di.trans.step.StepDataInterface;
-import org.pentaho.di.trans.step.StepInterface;
-import org.pentaho.di.trans.step.StepMeta;
-import org.pentaho.di.trans.step.StepMetaInterface;
+import org.pentaho.di.trans.step.*;
 import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
 
-public class DynamicSQLRowMeta extends BaseStepMeta implements StepMetaInterface {
+public class DynamicSQLRowMeta extends BaseDatabaseStepMeta implements StepMetaInterface {
   private static Class<?> PKG = DynamicSQLRowMeta.class; // for i18n purposes, needed by Translator2!!
 
   /** database connection */
@@ -222,7 +211,8 @@ public class DynamicSQLRowMeta extends BaseStepMeta implements StepMetaInterface
     queryonlyonchange = false;
   }
 
-  public void getFields( RowMetaInterface row, String name, RowMetaInterface[] info, StepMeta nextStep,
+  @Override
+  public void getFields( Bowl bowl, RowMetaInterface row, String name, RowMetaInterface[] info, StepMeta nextStep,
     VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
 
     if ( databaseMeta == null ) {
@@ -263,7 +253,7 @@ public class DynamicSQLRowMeta extends BaseStepMeta implements StepMetaInterface
           v.setOrigin( name );
         }
         row.addRowMeta( add );
-        db.disconnect();
+        db.close();
       } catch ( KettleDatabaseException dbe ) {
         throw new KettleStepException( BaseMessages.getString(
           PKG, "DynamicSQLRowMeta.Exception.ErrorObtainingFields" ), dbe );
@@ -388,7 +378,7 @@ public class DynamicSQLRowMeta extends BaseStepMeta implements StepMetaInterface
         cr = new CheckResult( CheckResult.TYPE_RESULT_ERROR, error_message, stepMeta );
         remarks.add( cr );
       } finally {
-        db.disconnect();
+        db.close();
       }
     } else {
       error_message = BaseMessages.getString( PKG, "DynamicSQLRowMeta.CheckResult.InvalidConnection" );
@@ -411,7 +401,8 @@ public class DynamicSQLRowMeta extends BaseStepMeta implements StepMetaInterface
     IMetaStore metaStore ) throws KettleStepException {
 
     RowMetaInterface out = prev.clone();
-    getFields( out, stepMeta.getName(), new RowMetaInterface[] { info, }, null, transMeta, repository, metaStore );
+    getFields( transMeta.getBowl(), out, stepMeta.getName(), new RowMetaInterface[] { info, }, null, transMeta,
+      repository, metaStore );
     if ( out != null ) {
       for ( int i = 0; i < out.size(); i++ ) {
         ValueMetaInterface outvalue = out.getValueMeta( i );

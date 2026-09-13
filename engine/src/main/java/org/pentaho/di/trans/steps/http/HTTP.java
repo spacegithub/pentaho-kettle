@@ -1,29 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.http;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
@@ -147,21 +139,23 @@ public class HTTP extends BaseStep implements StepInterface {
         // used for calculating the responseTime
         long startTime = System.currentTimeMillis();
 
+
+        HttpHost target = new HttpHost( uri.getHost(), uri.getPort(), uri.getScheme() );
+        // Create AuthCache instance
+        AuthCache authCache = new BasicAuthCache();
+        // Generate BASIC scheme object and add it to the local
+        // auth cache
+        BasicScheme basicAuth = new BasicScheme();
+        authCache.put( target, basicAuth );
+        // Add AuthCache to the execution context
+        HttpClientContext localContext = HttpClientContext.create();
+        localContext.setAuthCache( authCache );
+
         // Preemptive authentication
         if ( StringUtils.isNotBlank( data.realProxyHost ) ) {
-          HttpHost target = new HttpHost( data.realProxyHost, data.realProxyPort, "http" );
-          // Create AuthCache instance
-          AuthCache authCache = new BasicAuthCache();
-          // Generate BASIC scheme object and add it to the local
-          // auth cache
-          BasicScheme basicAuth = new BasicScheme();
-          authCache.put( target, basicAuth );
-          // Add AuthCache to the execution context
-          HttpClientContext localContext = HttpClientContext.create();
-          localContext.setAuthCache( authCache );
           httpResponse = httpClient.execute( target, method, localContext );
         } else {
-          httpResponse = httpClient.execute( method );
+          httpResponse = httpClient.execute( method, localContext );
         }
         // calculate the responseTime
         long responseTime = System.currentTimeMillis() - startTime;
@@ -262,14 +256,13 @@ public class HTTP extends BaseStep implements StepInterface {
       }
 
       uriBuilder = new URIBuilder( baseUrl ); // the base URL with variable substitution
-      List<NameValuePair> queryParams = uriBuilder.getQueryParams();
 
       for ( int i = 0; i < data.argnrs.length; i++ ) {
         String key = meta.getArgumentParameter()[ i ];
         String value = outputRowMeta.getString( row, data.argnrs[ i ] );
-        BasicNameValuePair basicNameValuePair = new BasicNameValuePair( key, value );
-        queryParams.add( basicNameValuePair );
+        uriBuilder.addParameter( key, value );
       }
+      List<NameValuePair> queryParams = uriBuilder.getQueryParams();
       if ( !queryParams.isEmpty() ) {
         uriBuilder.setParameters( queryParams );
       }
@@ -300,7 +293,8 @@ public class HTTP extends BaseStep implements StepInterface {
     if ( first ) {
       data.outputRowMeta = getInputRowMeta().clone();
       data.inputRowMeta = getInputRowMeta();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
       if ( meta.isUrlInField() ) {
         if ( Utils.isEmpty( meta.getUrlField() ) ) {

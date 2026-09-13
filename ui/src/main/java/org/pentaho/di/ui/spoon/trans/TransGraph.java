@@ -1,25 +1,17 @@
 //CHECKSTYLE:FileLength:OFF
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.spoon.trans;
 
@@ -119,14 +111,13 @@ import org.pentaho.di.repository.KettleRepositoryLostException;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.repository.RepositoryObjectType;
 import org.pentaho.di.repository.RepositoryOperation;
-import org.pentaho.di.shared.SharedObjects;
 import org.pentaho.di.trans.DatabaseImpact;
+import org.pentaho.di.trans.DefaultTransFactoryManager;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransExecutionConfiguration;
 import org.pentaho.di.trans.TransHopMeta;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.TransPainter;
-import org.pentaho.di.trans.TransSupplier;
 import org.pentaho.di.trans.debug.BreakPointListener;
 import org.pentaho.di.trans.debug.StepDebugMeta;
 import org.pentaho.di.trans.debug.TransDebugMeta;
@@ -1895,6 +1886,7 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
    * Allows for magnifying to any percentage entered by the user...
    */
   private void readMagnification() {
+    float previousMagnification = magnification;
     String possibleText = zoomLabel.getText();
     possibleText = possibleText.replace( "%", "" );
 
@@ -1902,12 +1894,17 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
     try {
       possibleFloatMagnification = Float.parseFloat( possibleText ) / 100;
       magnification = possibleFloatMagnification;
+      if ( magnification < MIN_ZOOM || magnification > MAX_ZOOM ) {
+        magnification = previousMagnification;
+        log.logError( "Invalid zoom value: " + zoomLabel.getText() );
+        throw new IllegalArgumentException( );
+      }
       if ( zoomLabel.getText().indexOf( '%' ) < 0 ) {
         zoomLabel.setText( zoomLabel.getText().concat( "%" ) );
       }
     } catch ( Exception e ) {
       modalMessageDialog( getString( "TransGraph.Dialog.InvalidZoomMeasurement.Title" ),
-        getString( "TransGraph.Dialog.InvalidZoomMeasurement.Message", zoomLabel.getText() ),
+        getString( "TransGraph.Dialog.InvalidZoomMeasurement.Message", String.valueOf( (int) ( MIN_ZOOM * 100 ) ), String.valueOf( (int) MAX_ZOOM * 100 ) ),
         SWT.YES | SWT.ICON_ERROR );
     }
     redraw();
@@ -2061,12 +2058,6 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
   @Override
   public void keyReleased( KeyEvent e ) {
   }
-
-  @Override
-  public boolean setFocus() {
-    return ( canvas != null ) ? canvas.setFocus() : false;
-  }
-
   public void renameStep( StepMeta stepMeta, String stepname ) {
     String newname = stepname;
 
@@ -2712,7 +2703,7 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
           StepMetaInterface stepMetaInterface = stepMeta.getStepMetaInterface();
           String activeReferencedObjectDescription = stepMetaInterface.getActiveReferencedObjectDescription();
           if ( getActiveSubtransformation( this, stepMeta ) != null && activeReferencedObjectDescription != null ) {
-            action = new Action( activeReferencedObjectDescription, Action.AS_DROP_DOWN_MENU ) {
+            action = new Action( activeReferencedObjectDescription, Action.AS_PUSH_BUTTON ) {
               @Override
               public void run() {
                 openMapping( stepMeta, -1 ); // negative by convention
@@ -2729,7 +2720,7 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
             for ( int i = 0; i < referencedObjects.length; i++ ) {
               final int index = i;
               String referencedObject = referencedObjects[ i ];
-              action = new Action( referencedObject, Action.AS_DROP_DOWN_MENU ) {
+              action = new Action( referencedObject, Action.AS_PUSH_BUTTON ) {
                 @Override
                 public void run() {
                   openMapping( stepMeta, index );
@@ -3553,29 +3544,6 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
     tid.setDirectoryChangeAllowed( allowDirectoryChange );
     TransMeta ti = tid.open();
 
-    // Load shared objects
-    //
-    if ( tid.isSharedObjectsFileChanged() ) {
-      try {
-        SharedObjects sharedObjects =
-          rep != null ? rep.readTransSharedObjects( transMeta ) : transMeta.readSharedObjects();
-        spoon.sharedObjectsFileMap.put( sharedObjects.getFilename(), sharedObjects );
-      } catch ( KettleException e ) {
-        // CHECKSTYLE:LineLength:OFF
-        new ErrorDialog( spoon.getShell(),
-          BaseMessages.getString( PKG, "Spoon.Dialog.ErrorReadingSharedObjects.Title" ), BaseMessages.getString( PKG,
-          "Spoon.Dialog.ErrorReadingSharedObjects.Message", spoon.makeTabName( transMeta, true ) ), e );
-      }
-
-      // If we added properties, add them to the variables too, so that they appear in the CTRL-SPACE variable
-      // completion.
-      //
-      spoon.setParametersAsVariablesInUI( transMeta, transMeta );
-
-      spoon.refreshTree();
-      spoon.delegates.tabs.renameTabs(); // cheap operation, might as will do it anyway
-    }
-
     spoon.setShellText();
     return ti != null;
   }
@@ -3876,7 +3844,12 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
           // memory
           // To be able to completely test this, we need to run it as we would normally do in pan
           //
-          trans = new TransSupplier( transMeta, log, this::createLegacyTrans ).get();
+          // Refresh config tree state before loading the new meta.
+          spoon.forceRefreshTree();
+
+          trans = DefaultTransFactoryManager.getInstance().getTransFactory( executionConfiguration.getRunConfiguration() )
+            .create( transMeta, spoon.rep, transMeta.getName(), transMeta.getRepositoryDirectory().getPath(),
+            transMeta.getFilename(), transMeta );
 
           trans.setRepository( spoon.getRepository() );
           trans.setMetaStore( spoon.getMetaStore() );
@@ -4024,6 +3997,8 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
 
         // Create a new transformation to execution
         //
+        // Refresh config tree state before beginning execution.
+        spoon.forceRefreshTree();
         trans = new Trans( transMeta );
         trans.setSafeModeEnabled( executionConfiguration.isSafeModeEnabled() );
         trans.setPreview( true );
@@ -4153,7 +4128,6 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
       halting = true;
       trans.stopAll();
       log.logMinimal( BaseMessages.getString( PKG, "TransLog.Log.ProcessingOfTransformationStopped" ) );
-
       running = false;
       initialized = false;
       halted = false;
@@ -4284,6 +4258,7 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
       @Override
       public void run() {
         try {
+          trans.setInitialLogBufferStartLine();
           trans.prepareExecution( args );
 
           // Do we capture data?
@@ -4397,7 +4372,6 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
     if ( trans != null ) {
       if ( trans.isFinished() && ( running || halted ) ) {
         log.logMinimal( BaseMessages.getString( PKG, "TransLog.Log.TransformationHasFinished" ) );
-
         running = false;
         initialized = false;
         halted = false;
@@ -4525,7 +4499,8 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
       } else {
         StepMetaInterface meta = stepMeta.getStepMetaInterface();
         if ( !Utils.isEmpty( meta.getReferencedObjectDescriptions() ) ) {
-          referencedMeta = meta.loadReferencedObject( index, spoon.rep, spoon.metaStore, transMeta );
+          referencedMeta = meta.loadReferencedObject( transMeta.getBowl(), index, spoon.rep, spoon.getMetaStore(),
+            transMeta );
         }
       }
       if ( referencedMeta == null ) {
@@ -5094,9 +5069,9 @@ public class TransGraph extends AbstractGraph implements XulEventHandler, Redraw
 
   private Trans createLegacyTrans() {
     try {
-      return new Trans( transMeta, spoon.rep, transMeta.getName(),
+      return new Trans( transMeta.getBowl(), transMeta, spoon.rep, transMeta.getName(),
         transMeta.getRepositoryDirectory().getPath(),
-        transMeta.getFilename() );
+        transMeta.getFilename(), transMeta);
     } catch ( KettleException e ) {
       throw new RuntimeException( e );
     }

@@ -1,0 +1,44 @@
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
+package org.pentaho.di.trans.steps.avro.output;
+
+import org.apache.avro.file.CodecFactory;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.variables.VariableSpace;
+
+import java.util.List;
+
+public interface IPentahoAvroOutputFormat extends IPentahoOutputFormat {
+
+  void setFields( List<? extends IAvroOutputField> fields ) throws Exception;
+
+  void setOutputFile( String file, boolean override ) throws Exception;
+
+  void setCompression( CodecFactory compression );
+
+  void setNameSpace( String namespace );
+
+  void setRecordName( String recordName );
+
+  void setDocValue( String docValue );
+
+  void setSchemaFilename( String schemaFilename );
+
+  void setBowl( Bowl bowl );
+
+  @SuppressWarnings( "squid:S00112" )
+  default void setVariableSpace( VariableSpace variableSpace ) {
+    throw new UnsupportedOperationException();
+  }
+}

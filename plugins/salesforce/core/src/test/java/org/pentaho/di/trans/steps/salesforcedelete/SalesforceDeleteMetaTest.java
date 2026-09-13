@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.salesforcedelete;
 
@@ -37,6 +29,7 @@ import java.util.Map;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
@@ -96,12 +89,12 @@ public class SalesforceDeleteMetaTest {
     SalesforceDeleteMeta meta = new SalesforceDeleteMeta();
     meta.setDefault();
     RowMetaInterface r = new RowMeta();
-    meta.getFields( r, "thisStep", null, null, new Variables(), null, null );
+    meta.getFields( DefaultBowl.getInstance(), r, "thisStep", null, null, new Variables(), null, null );
     assertEquals( 0, r.size() );
 
     r.clear();
     r.addValueMeta( new ValueMetaString( "testString" ) );
-    meta.getFields( r, "thisStep", null, null, new Variables(), null, null );
+    meta.getFields( DefaultBowl.getInstance(), r, "thisStep", null, null, new Variables(), null, null );
     assertEquals( 1, r.size() );
     assertEquals( ValueMetaInterface.TYPE_STRING, r.getValueMeta( 0 ).getType() );
     assertEquals( "testString", r.getValueMeta( 0 ).getName() );

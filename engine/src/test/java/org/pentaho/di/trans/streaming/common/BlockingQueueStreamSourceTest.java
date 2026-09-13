@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.streaming.common;
 
@@ -26,8 +18,9 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.pentaho.di.core.logging.LogChannel;
+import org.pentaho.di.trans.SubtransExecutor;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -37,16 +30,17 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static java.util.Collections.singletonList;
+//import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static junit.framework.TestCase.fail;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
@@ -57,11 +51,13 @@ public class BlockingQueueStreamSourceTest {
   @Mock private BaseStreamStep streamStep;
   @Mock private Semaphore semaphore;
   @Mock private LogChannel logChannel;
+  @Mock private SubtransExecutor subtransExecutor;
 
   private BlockingQueueStreamSource<String> streamSource;
 
   @Before
   public void before() {
+    when( streamStep.getSubtransExecutor() ).thenReturn( subtransExecutor );
     streamSource = new BlockingQueueStreamSource<String>( streamStep ) {
       @Override public void open() { }
     };
@@ -92,9 +88,9 @@ public class BlockingQueueStreamSourceTest {
   }
 
   @Test
-  public void rowIterableBlocksTillRowReceived() throws Exception {
+  public void rowIterableBlocksTillRowReceived() {
     streamSource.open();
-    Iterator<String> iterator = streamSource.observable().blockingIterable().iterator();
+    Iterator<String> iterator = streamSource.flowable().blockingIterable().iterator();
 
     // first call .hasNext() on the iterator while streamSource is empty
     Future<Boolean> hasNext = execSvc.submit( iterator::hasNext );
@@ -111,10 +107,10 @@ public class BlockingQueueStreamSourceTest {
 
 
   @Test
-  public void streamIsPausable() throws InterruptedException, ExecutionException, TimeoutException {
+  public void streamIsPausable() {
     streamSource.open();
 
-    Iterator<String> iter = streamSource.observable().blockingIterable().iterator();
+    Iterator<String> iter = streamSource.flowable().blockingIterable().iterator();
     Future<String> nextString = execSvc.submit( iter::next );
 
     // add a row
@@ -139,14 +135,14 @@ public class BlockingQueueStreamSourceTest {
   }
 
   @Test
-  public void testRowsFilled() throws ExecutionException, InterruptedException {
-
+  public void testRowsFilled() throws InterruptedException {
+    int rowCount = 4;
     // implement the blockingQueueStreamSource with an .open which will
     // launch a thread that sends rows to the queue.
     streamSource = new BlockingQueueStreamSource<String>( streamStep ) {
       @Override public void open() {
         execSvc.submit( () -> {
-          for ( int i = 0; i < 4; i++ ) {
+          for ( int i = 0; i < rowCount; i++ ) {
             acceptRows( singletonList( "new row " + i ) );
             try {
               Thread.sleep( 5 );
@@ -158,7 +154,7 @@ public class BlockingQueueStreamSourceTest {
       }
     };
     streamSource.open();
-    Iterator<String> iterator = streamSource.observable().blockingIterable().iterator();
+    Iterator<String> iterator = streamSource.flowable().blockingIterable().iterator();
 
     Future<List<String>> iterLoop = execSvc.submit( () -> {
       List<String> strings = new ArrayList<>();
@@ -168,36 +164,8 @@ public class BlockingQueueStreamSourceTest {
       return strings;
     } );
     final List<String> quickly = getQuickly( iterLoop );
-    assertThat( quickly.size(), equalTo( 4 ) );
-  }
-
-  @Test
-  public void bufferSizeLimitedToOneThousand() {
-    streamSource = new BlockingQueueStreamSource<String>( streamStep ) {
-      @Override public void open() {
-        for ( int i = 0; i < 1002; i++ ) {
-          acceptRows( singletonList( "new row " + i ) );
-        }
-      }
-    };
-    streamSource.open();
-    Iterator<String> iterator = streamSource.observable().blockingIterable().iterator();
-
-    List<String> strings = new ArrayList<>();
-    do {
-      strings.add( iterator.next() );
-    } while ( strings.size() < 1000 );
-
-    assertThat( strings.size(), equalTo( 1000 ) );
-    Future<String> submit = execSvc.submit( iterator::next );
-    try {
-      submit.get( 10, TimeUnit.MILLISECONDS );
-    } catch ( InterruptedException | ExecutionException e ) {
-      fail();
-    } catch ( TimeoutException e ) {
-      return;  //passed, this is what we wanted.  There should be nothing left in the iterator
-    }
-    fail( "expected timeout" );
+    assertThat( quickly.size(), equalTo( rowCount ) );
+    verify( subtransExecutor, times( rowCount ) ).acquireBufferPermit();
   }
 
   @Test
@@ -226,7 +194,7 @@ public class BlockingQueueStreamSourceTest {
       }
     };
     streamSource.open();
-    Iterator<String> iterator = streamSource.observable().blockingIterable().iterator();
+    Iterator<String> iterator = streamSource.flowable().blockingIterable().iterator();
 
     Future<List<String>> iterLoop = execSvc.submit( () -> {
       List<String> strings = new ArrayList<>();
@@ -250,7 +218,7 @@ public class BlockingQueueStreamSourceTest {
 
   private <T> T getQuickly( Future<T> future ) {
     try {
-      return future.get( 50, MILLISECONDS );
+      return future.get( 200, MILLISECONDS );
     } catch ( InterruptedException | ExecutionException | TimeoutException e ) {
       fail();
     }

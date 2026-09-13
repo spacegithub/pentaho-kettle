@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.database;
 
@@ -36,7 +28,7 @@ public class FirebirdDatabaseMeta extends BaseDatabaseMeta implements DatabaseIn
   @Override
   public int[] getAccessTypeList() {
     return new int[] {
-      DatabaseMeta.TYPE_ACCESS_NATIVE, DatabaseMeta.TYPE_ACCESS_ODBC, DatabaseMeta.TYPE_ACCESS_JNDI };
+      DatabaseMeta.TYPE_ACCESS_NATIVE, DatabaseMeta.TYPE_ACCESS_JNDI };
   }
 
   @Override
@@ -57,20 +49,12 @@ public class FirebirdDatabaseMeta extends BaseDatabaseMeta implements DatabaseIn
 
   @Override
   public String getDriverClass() {
-    if ( getAccessType() == DatabaseMeta.TYPE_ACCESS_ODBC ) {
-      return "sun.jdbc.odbc.JdbcOdbcDriver";
-    } else {
-      return "org.firebirdsql.jdbc.FBDriver";
-    }
+    return "org.firebirdsql.jdbc.FBDriver";
   }
 
   @Override
   public String getURL( String hostname, String port, String databaseName ) {
-    if ( getAccessType() == DatabaseMeta.TYPE_ACCESS_ODBC ) {
-      return "jdbc:odbc:" + databaseName;
-    } else {
-      return "jdbc:firebirdsql://" + hostname + ":" + port + "/" + databaseName;
-    }
+    return "jdbc:firebirdsql://" + hostname + ":" + port + "/" + databaseName;
   }
 
   /**
@@ -109,7 +93,7 @@ public class FirebirdDatabaseMeta extends BaseDatabaseMeta implements DatabaseIn
    *          The column defined as a value
    * @param tk
    *          the name of the technical key field
-   * @param use_autoinc
+   * @param useAutoinc
    *          whether or not this field uses auto increment
    * @param pk
    *          the name of the primary key field
@@ -118,9 +102,9 @@ public class FirebirdDatabaseMeta extends BaseDatabaseMeta implements DatabaseIn
    * @return the SQL statement to add a column to the specified table
    */
   @Override
-  public String getAddColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  public String getAddColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
     String pk, boolean semicolon ) {
-    return "ALTER TABLE " + tablename + " ADD " + getFieldDefinition( v, tk, pk, use_autoinc, true, false );
+    return "ALTER TABLE " + tablename + " ADD " + getFieldDefinition( v, tk, pk, useAutoinc, true, false );
   }
 
   /**
@@ -132,7 +116,7 @@ public class FirebirdDatabaseMeta extends BaseDatabaseMeta implements DatabaseIn
    *          The column defined as a value
    * @param tk
    *          the name of the technical key field
-   * @param use_autoinc
+   * @param useAutoinc
    *          whether or not this field uses auto increment
    * @param pk
    *          the name of the primary key field
@@ -141,23 +125,23 @@ public class FirebirdDatabaseMeta extends BaseDatabaseMeta implements DatabaseIn
    * @return the SQL statement to modify a column in the specified table
    */
   @Override
-  public String getModifyColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  public String getModifyColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
     String pk, boolean semicolon ) {
     return "ALTER TABLE "
       + tablename + " ALTER COLUMN " + v.getName() + " TYPE "
-      + getFieldDefinition( v, tk, pk, use_autoinc, false, false );
+      + getFieldDefinition( v, tk, pk, useAutoinc, false, false );
   }
 
   @Override
-  public String getFieldDefinition( ValueMetaInterface v, String tk, String pk, boolean use_autoinc,
-    boolean add_fieldname, boolean add_cr ) {
+  public String getFieldDefinition( ValueMetaInterface v, String tk, String pk, boolean useAutoinc,
+                                    boolean addFieldName, boolean addCr ) {
     String retval = "";
 
     String fieldname = v.getName();
     int length = v.getLength();
     int precision = v.getPrecision();
 
-    if ( add_fieldname ) {
+    if ( addFieldName ) {
       if ( Const.indexOfString( fieldname, getReservedWords() ) >= 0 ) {
         retval += getStartQuote() + fieldname + getEndQuote();
       } else {
@@ -229,7 +213,7 @@ public class FirebirdDatabaseMeta extends BaseDatabaseMeta implements DatabaseIn
         break;
     }
 
-    if ( add_cr ) {
+    if ( addCr ) {
       retval += Const.CR;
     }
 
@@ -321,7 +305,7 @@ public class FirebirdDatabaseMeta extends BaseDatabaseMeta implements DatabaseIn
    */
   public String getSQLListOfProcedures( String schemaName ) {
     return "SELECT RDB$PROCEDURE_NAME "
-      + "FROM RDB$PROCEDURES " + "WHERE RDB$OWNER_NAME = '" + getUsername().toUpperCase() + "' ";
+      + "FROM RDB$PROCEDURES " + "WHERE RDB$OWNER_NAME = '" + Const.NVL( getUsername(), "").toUpperCase() + "' ";
   }
 
   /**

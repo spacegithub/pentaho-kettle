@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.movefiles;
 
@@ -27,12 +19,18 @@ import org.pentaho.di.job.entry.validator.AndValidator;
 import org.pentaho.di.job.entry.validator.JobEntryValidatorUtils;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.FileStore;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.SystemUtils;
 import org.apache.commons.vfs2.AllFileSelector;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSelectInfo;
@@ -49,6 +47,7 @@ import org.pentaho.di.core.exception.KettleDatabaseException;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleXMLException;
 import org.pentaho.di.core.variables.VariableSpace;
+import org.pentaho.di.core.vfs.IKettleVFS;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.i18n.BaseMessages;
@@ -70,6 +69,7 @@ import org.w3c.dom.Node;
  */
 public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEntryInterface {
   private static Class<?> PKG = JobEntryMoveFiles.class; // for i18n purposes, needed by Translator2!!
+  private static String FILE_PREFIX = "file://";
 
   public boolean move_empty_folders;
   public boolean arg_from_previous;
@@ -401,7 +401,7 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
       }
       FileObject folder = null;
       try {
-        folder = KettleVFS.getFileObject( MoveToFolder, this );
+        folder = KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( MoveToFolder, this );
         if ( !folder.exists() ) {
           if ( log.isDetailed() ) {
             logDetailed( BaseMessages.getString( PKG, "JobMoveFiles.Log.Error.FolderMissing", MoveToFolder ) );
@@ -561,13 +561,17 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
     // Get real source, destination file and wildcard
     String realSourceFilefoldername = environmentSubstitute( sourcefilefoldername );
     String realDestinationFilefoldername = environmentSubstitute( destinationfilefoldername );
+
     String realWildcard = environmentSubstitute( wildcard );
 
     try {
-      sourcefilefolder = KettleVFS.getFileObject( realSourceFilefoldername, this );
-      destinationfilefolder = KettleVFS.getFileObject( realDestinationFilefoldername, this );
+      realDestinationFilefoldername = fixUpDestinationPath( realSourceFilefoldername, realDestinationFilefoldername );
+      IKettleVFS vfs = KettleVFS.getInstance( parentJobMeta.getBowl() );
+
+      sourcefilefolder = vfs.getFileObject( realSourceFilefoldername, this );
+      destinationfilefolder = vfs.getFileObject( realDestinationFilefoldername, this );
       if ( !Utils.isEmpty( MoveToFolder ) ) {
-        movetofolderfolder = KettleVFS.getFileObject( MoveToFolder, this );
+        movetofolderfolder = vfs.getFileObject( MoveToFolder, this );
       }
 
       if ( sourcefilefolder.exists() ) {
@@ -607,7 +611,8 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
 
               String destinationfilenamefull =
                 KettleVFS.getFilename( destinationfilefolder ) + Const.FILE_SEPARATOR + shortfilename;
-              FileObject destinationfile = KettleVFS.getFileObject( destinationfilenamefull, this );
+              destinationfilenamefull = fixUpDestinationPath( realSourceFilefoldername, destinationfilenamefull );
+              FileObject destinationfile = vfs.getFileObject( destinationfilenamefull, this );
 
               entrystatus =
                 MoveFile(
@@ -616,7 +621,7 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
             } else if ( sourcefilefolder.getType().equals( FileType.FILE ) && destination_is_a_file ) {
               // Source is a file, destination is a file
 
-              FileObject destinationfile = KettleVFS.getFileObject( realDestinationFilefoldername, this );
+              FileObject destinationfile = vfs.getFileObject( realDestinationFilefoldername, this );
 
               // return destination short filename
               String shortfilename = destinationfile.getName().getBaseName();
@@ -631,7 +636,8 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
 
               String destinationfilenamefull =
                 KettleVFS.getFilename( destinationfile.getParent() ) + Const.FILE_SEPARATOR + shortfilename;
-              destinationfile = KettleVFS.getFileObject( destinationfilenamefull, this );
+              destinationfilenamefull = fixUpDestinationPath( realSourceFilefoldername, destinationfilenamefull );
+              destinationfile = vfs.getFileObject( destinationfilenamefull, this );
 
               entrystatus =
                 MoveFile(
@@ -801,7 +807,7 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
 
           String movetofilenamefull =
             destinationfilename.getParent().toString() + Const.FILE_SEPARATOR + short_filename;
-          destinationfile = KettleVFS.getFileObject( movetofilenamefull, this );
+          destinationfile = KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( movetofilenamefull, this );
 
           if ( !simulate ) {
             sourcefilename.moveTo( destinationfile );
@@ -840,7 +846,7 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
           }
 
           String movetofilenamefull = movetofolderfolder.toString() + Const.FILE_SEPARATOR + short_filename;
-          destinationfile = KettleVFS.getFileObject( movetofilenamefull, this );
+          destinationfile = KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( movetofilenamefull, this );
           if ( !destinationfile.exists() ) {
             if ( !simulate ) {
               sourcefilename.moveTo( destinationfile );
@@ -881,7 +887,7 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
 
               String destinationfilenamefull =
                 movetofolderfolder.toString() + Const.FILE_SEPARATOR + short_filename;
-              destinationfile = KettleVFS.getFileObject( destinationfilenamefull, this );
+              destinationfile = KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( destinationfilenamefull, this );
 
               if ( !simulate ) {
                 sourcefilename.moveTo( destinationfile );
@@ -958,7 +964,7 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
 
         // Built destination filename
         file_name =
-          KettleVFS.getFileObject( realDestinationFilefoldername
+          KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( realDestinationFilefoldername
             + Const.FILE_SEPARATOR + short_filename_from_basefolder, this );
 
         if ( !Currentfile.getParent().toString().equals( sourcefilefolder.toString() ) ) {
@@ -983,7 +989,7 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
           // In the Base Folder...
           // Folders..only if include subfolders
           if ( Currentfile.getType() == FileType.FOLDER ) {
-            if ( include_subfolders && move_empty_folders && Utils.isEmpty( wildcard ) ) {
+            if ( include_subfolders && move_empty_folders && (Utils.isEmpty( realWildcard) ) ) {
               entrystatus =
                 MoveFile( shortfilename, Currentfile, file_name, movetofolderfolder, parentJob, result );
             }
@@ -1041,8 +1047,8 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
   private void addFileToResultFilenames( String fileaddentry, Result result, Job parentJob ) {
     try {
       ResultFile resultFile =
-        new ResultFile( ResultFile.FILE_TYPE_GENERAL, KettleVFS.getFileObject( fileaddentry, this ), parentJob
-          .getJobname(), toString() );
+        new ResultFile( ResultFile.FILE_TYPE_GENERAL, KettleVFS.getInstance( parentJobMeta.getBowl() )
+          .getFileObject( fileaddentry, this ), parentJob.getJobname(), toString() );
       result.getResultFiles().put( resultFile.getFile().toString(), resultFile );
 
       if ( log.isDebug() ) {
@@ -1201,6 +1207,62 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
     }
 
     return shortfilename;
+  }
+
+  /**
+   * Make sure exactly one local path uses the file prefix unless they are on the same mount point, in which case make
+   * them the same, for performance.
+   *
+   * Works around https://issues.apache.org/jira/browse/VFS-229
+   *
+   * This works through a strange/unexpected side effect. Paths with "file:///foo" versus "/foo" end up with different
+   * vfs FileSystem objects somehow in the way we look them up. This is probably not intentional. The commons-vfs code
+   * uses the FileSystem identity equality to determine if it's safe to use "rename" as opposed to "copy/delete".
+   *
+   * "rename" is significantly faster, and should be used when possible.
+   */
+  private String fixUpDestinationPath( String realSourcePath, String realDestinationPath ) throws IOException {
+    if ( SystemUtils.IS_OS_WINDOWS ) {
+      return realDestinationPath;
+    }
+
+    if ( ! ( isLocalFile( realSourcePath ) && isLocalFile( realDestinationPath ) ) ) {
+      return realDestinationPath;
+    }
+    boolean sourceHasFilePrefix = realSourcePath.startsWith( FILE_PREFIX );
+
+    String dest = removeFilePrefix( realDestinationPath );
+    Path sourcePath = Paths.get( removeFilePrefix( realSourcePath ) );
+    if ( !sourcePath.toFile().exists() ) {
+      // will be handled elsewhere, and would throw an NPE in getFileStore
+      return realDestinationPath;
+    }
+
+    Path destPath = Paths.get( dest );
+    FileStore srcFS = Files.getFileStore( sourcePath );
+
+    Path tpath = destPath;
+    while ( tpath != null && !tpath.toFile().exists() ) {
+      tpath = tpath.getParent();
+    }
+    FileStore destFS = Files.getFileStore( tpath );
+    boolean sameMount = Objects.equals( srcFS, destFS );
+
+    if ( sourceHasFilePrefix == sameMount ) {
+      return FILE_PREFIX + dest;
+    }
+    return dest;
+  }
+
+  private boolean isLocalFile( String path ) {
+    return path != null && ( path.startsWith( FILE_PREFIX ) || !KettleVFS.hasSchemePattern( path ) );
+  }
+
+  private String removeFilePrefix( String original ) {
+    if ( original != null && original.startsWith( FILE_PREFIX ) ) {
+      return original.substring( FILE_PREFIX.length() );
+    }
+    return original;
   }
 
   public void setAddDate( boolean adddate ) {
@@ -1365,7 +1427,8 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
 
   public void check( List<CheckResultInterface> remarks, JobMeta jobMeta, VariableSpace space,
     Repository repository, IMetaStore metaStore ) {
-    boolean res = JobEntryValidatorUtils.andValidator().validate( this, "arguments", remarks, AndValidator.putValidators( JobEntryValidatorUtils.notNullValidator() ) );
+    boolean res = JobEntryValidatorUtils.andValidator().validate( parentJobMeta.getBowl(), this, "arguments", remarks,
+      AndValidator.putValidators( JobEntryValidatorUtils.notNullValidator() ) );
 
     if ( res == false ) {
       return;
@@ -1376,7 +1439,8 @@ public class JobEntryMoveFiles extends JobEntryBase implements Cloneable, JobEnt
     AndValidator.putValidators( ctx, JobEntryValidatorUtils.notNullValidator(), JobEntryValidatorUtils.fileExistsValidator() );
 
     for ( int i = 0; i < source_filefolder.length; i++ ) {
-      JobEntryValidatorUtils.andValidator().validate( this, "arguments[" + i + "]", remarks, ctx );
+      JobEntryValidatorUtils.andValidator().validate( parentJobMeta.getBowl(), this, "arguments[" + i + "]", remarks,
+        ctx );
     }
   }
 

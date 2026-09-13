@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans;
 
@@ -30,7 +22,9 @@ import org.pentaho.di.core.RowSet;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.logging.LogChannelInterface;
 import org.pentaho.di.trans.TransMeta.TransformationType;
+import org.pentaho.di.trans.step.StepDataInterface;
 import org.pentaho.di.trans.step.StepMetaDataCombi;
+import org.pentaho.di.trans.step.StepMetaInterface;
 import org.pentaho.di.trans.step.errorhandling.StreamInterface;
 
 public class SingleThreadedTransExecutor {
@@ -268,6 +262,7 @@ public class SingleThreadedTransExecutor {
 
     // See if the steps support the SingleThreaded transformation type...
     //
+    log.logBasic( "Single Threaded Executor initializing Trans: [" + trans.getName( ) + "]" );
     for ( StepMetaDataCombi combi : steps ) {
       TransformationType[] types = combi.stepMeta.getStepMetaInterface().getSupportedTransformationTypes();
       boolean ok = false;
@@ -400,8 +395,31 @@ public class SingleThreadedTransExecutor {
     return trans.isStopped();
   }
 
+  public boolean beforeStartProcessing( StepMetaInterface smi, StepDataInterface sdi ) throws KettleException {
+    log.logBasic( "Single Threaded Executor Before Trans Start Processing: [" + trans.getName( ) + "]" );
+    // Call beforeStartProcessing
+    boolean result = false;
+    for ( StepMetaDataCombi combi : trans.getSteps() ) {
+      result = combi.step.beforeStartProcessing( combi.meta, combi.data ) || result;
+    }
+
+    return result;
+  }
+
+  public boolean afterFinishProcessing( StepMetaInterface smi, StepDataInterface sdi ) throws KettleException {
+    log.logBasic( "Single Threaded Executor After Trans Finish Processing: [" + trans.getName( ) + "]" );
+    // Call afterFinishProcessing
+    boolean result = false;
+    for ( StepMetaDataCombi combi : trans.getSteps() ) {
+      result = combi.step.afterFinishProcessing( combi.meta, combi.data ) || result;
+    }
+
+    return result;
+  }
+
   public void dispose() throws KettleException {
 
+    log.logBasic( "Single Threaded Executor Disposing Trans: [" + trans.getName( ) + "]" );
     // Call output done.
     //
     for ( StepMetaDataCombi combi : trans.getSteps() ) {

@@ -1,55 +1,56 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.util;
 
-import org.pentaho.di.core.exception.KettleException;
-import org.pentaho.di.core.extension.ExtensionPointHandler;
-import org.pentaho.di.core.extension.KettleExtensionPoint;
+import org.pentaho.di.base.AbstractMeta;
 import org.pentaho.di.core.logging.LogChannel;
-import org.pentaho.di.core.util.Utils;
-import org.pentaho.di.repository.RepositoryObject;
-import org.pentaho.di.ui.core.FileDialogOperation;
+import org.pentaho.di.repository.Repository;
+import org.pentaho.di.ui.core.events.dialog.FilterType;
+import org.pentaho.di.ui.core.events.dialog.ProviderFilterType;
+import org.pentaho.di.ui.core.events.dialog.SelectionAdapterFileDialogTextVar;
+import org.pentaho.di.ui.core.events.dialog.SelectionAdapterOptions;
+import org.pentaho.di.ui.core.events.dialog.SelectionOperation;
+import org.pentaho.di.ui.core.widget.TextVar;
 
 /**
  * Created by bmorrise on 8/17/17.
  */
 public class DialogHelper {
-
-  public static RepositoryObject selectRepositoryObject( String filter, LogChannel log ) {
-    try {
-      FileDialogOperation fileDialogOperation =
-        new FileDialogOperation( FileDialogOperation.OPEN, FileDialogOperation.ORIGIN_OTHER );
-      if ( !Utils.isEmpty( filter ) ) {
-        fileDialogOperation.setFilter( filter );
-      }
-      ExtensionPointHandler.callExtensionPoint( log, KettleExtensionPoint.SpoonOpenSaveRepository.id,
-        fileDialogOperation );
-      return (RepositoryObject) fileDialogOperation.getRepositoryObject();
-    } catch ( KettleException ke ) {
-      // Ignore
+  public static SelectionAdapterFileDialogTextVar constructSelectionAdapterFileDialogTextVarForKettleFile( LogChannel log
+                                                                                                           , TextVar wPath, AbstractMeta meta, SelectionOperation selectionOperation, FilterType filterType, Repository repository ) {
+    if ( repository != null ) {
+      ProviderFilterType[] providerFilterTypes = new ProviderFilterType[2];
+      providerFilterTypes[0] = ProviderFilterType.RECENTS;
+      providerFilterTypes[1] = ProviderFilterType.REPOSITORY;
+      return new SelectionAdapterFileDialogTextVar( log, wPath, meta,
+                                                    new SelectionAdapterOptions( meta.getBowl(), selectionOperation,
+                                                                                 new FilterType[] { filterType,
+        FilterType.XML, FilterType.ALL },
+                                                                                 filterType, providerFilterTypes ) );
     }
-
-    return null;
+    return new SelectionAdapterFileDialogTextVar( log, wPath, meta,
+                                                  new SelectionAdapterOptions( meta.getBowl(), selectionOperation,
+                                                                               new FilterType[] { filterType, FilterType.XML, FilterType.ALL }, filterType ) );
   }
 
+  public static SelectionAdapterFileDialogTextVar constructSelectionAdapterFileDialogTextVarForUserFile( LogChannel log
+                                                                                                         , TextVar wPath, AbstractMeta meta, SelectionOperation selectionOperation, FilterType[] filterTypes
+                                                                                                         , FilterType defaultFilterType ) {
+    ProviderFilterType[] providerFilterTypes = new ProviderFilterType[1];
+    providerFilterTypes[0] = ProviderFilterType.DEFAULT;
+    return new SelectionAdapterFileDialogTextVar( log, wPath, meta, new SelectionAdapterOptions( meta.getBowl(),
+                                                                                                 selectionOperation, filterTypes, defaultFilterType, providerFilterTypes ) );
+  }
 }

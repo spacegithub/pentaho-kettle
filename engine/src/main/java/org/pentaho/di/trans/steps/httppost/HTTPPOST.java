@@ -1,29 +1,23 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.httppost;
 
 
-import org.apache.commons.lang.StringUtils;
+import com.google.common.annotations.VisibleForTesting;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.vfs2.FileContent;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
@@ -50,7 +44,9 @@ import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.core.row.RowDataUtil;
 import org.pentaho.di.core.util.HttpClientManager;
+import org.pentaho.di.core.util.StringUtil;
 import org.pentaho.di.core.util.Utils;
+import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
@@ -60,8 +56,7 @@ import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepMetaInterface;
 
-import java.io.File;
-import java.io.FileInputStream;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
@@ -70,6 +65,8 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import static org.pentaho.di.trans.steps.httppost.HTTPPOSTMeta.DEFAULT_ENCODING;
 
 /**
  * Make a HTTP Post call
@@ -116,7 +113,7 @@ public class HTTPPOST extends BaseStep implements StepInterface {
       data.realUrl = data.inputRowMeta.getString( rowData, data.indexOfUrlField );
     }
     // Prepare HTTP POST
-    FileInputStream fis = null;
+    InputStream fis = null;
     try {
       if ( isDetailed() ) {
         logDetailed( BaseMessages.getString( PKG, "HTTPPOST.Log.ConnectingToURL", data.realUrl ) );
@@ -196,9 +193,9 @@ public class HTTPPOST extends BaseStep implements StepInterface {
         // content length is explicitly specified
 
         if ( meta.isPostAFile() ) {
-          File input = new File( tmp );
-          fis = new FileInputStream( input );
-          post.setEntity( new InputStreamEntity( fis, input.length() ) );
+          FileContent filecontent = KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( tmp ).getContent();
+          fis = filecontent.getInputStream();
+          post.setEntity( new InputStreamEntity( fis, filecontent.getSize() ) );
         } else {
           byte[] bytes;
           if ( ( data.realEncoding != null ) && ( data.realEncoding.length() > 0 ) ) {
@@ -220,21 +217,22 @@ public class HTTPPOST extends BaseStep implements StepInterface {
         // used for calculating the responseTime
         long startTime = System.currentTimeMillis();
 
+        HttpHost target = new HttpHost( uriBuilder.getHost(), uriBuilder.getPort(), uriBuilder.getScheme() );
+        // Create AuthCache instance
+        AuthCache authCache = new BasicAuthCache();
+        // Generate BASIC scheme object and add it to the local
+        // auth cache
+        BasicScheme basicAuth = new BasicScheme();
+        authCache.put( target, basicAuth );
+        // Add AuthCache to the execution context
+        HttpClientContext localContext = HttpClientContext.create();
+        localContext.setAuthCache( authCache );
+
         // Execute the POST method
         if ( StringUtils.isNotBlank( data.realProxyHost ) ) {
-          HttpHost target = new HttpHost( data.realProxyHost, data.realProxyPort, "http" );
-          // Create AuthCache instance
-          AuthCache authCache = new BasicAuthCache();
-          // Generate BASIC scheme object and add it to the local
-          // auth cache
-          BasicScheme basicAuth = new BasicScheme();
-          authCache.put( target, basicAuth );
-          // Add AuthCache to the execution context
-          HttpClientContext localContext = HttpClientContext.create();
-          localContext.setAuthCache( authCache );
           httpResponse = httpClient.execute( target, post, localContext );
         } else {
-          httpResponse = httpClient.execute( post );
+          httpResponse = httpClient.execute( post, localContext );
         }
         int statusCode = requestStatusCode( httpResponse );
 
@@ -362,7 +360,8 @@ public class HTTPPOST extends BaseStep implements StepInterface {
       first = false;
       data.inputRowMeta = getInputRowMeta();
       data.outputRowMeta = getInputRowMeta().clone();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
       if ( meta.isUrlInField() ) {
         if ( Utils.isEmpty( meta.getUrlField() ) ) {
@@ -499,7 +498,8 @@ public class HTTPPOST extends BaseStep implements StepInterface {
     return true;
   }
 
-  private String getRequestBodyParamsAsStr( NameValuePair[] pairs, String charset ) throws KettleException {
+  @VisibleForTesting
+  String getRequestBodyParamsAsStr( NameValuePair[] pairs, String charset ) throws KettleException {
     StringBuffer buf = new StringBuffer();
     try {
       for ( int i = 0; i < pairs.length; ++i ) {
@@ -509,10 +509,10 @@ public class HTTPPOST extends BaseStep implements StepInterface {
             buf.append( "&" );
           }
 
-          buf.append( URLEncoder.encode( pair.getName(), charset ) );
+          buf.append( URLEncoder.encode( pair.getName(), !StringUtil.isEmpty( charset ) ? charset : DEFAULT_ENCODING ) );
           buf.append( "=" );
           if ( pair.getValue() != null ) {
-            buf.append( URLEncoder.encode( pair.getValue(), charset ) );
+            buf.append( URLEncoder.encode( pair.getValue(), !StringUtil.isEmpty( charset ) ? charset : DEFAULT_ENCODING ) );
           }
         }
       }

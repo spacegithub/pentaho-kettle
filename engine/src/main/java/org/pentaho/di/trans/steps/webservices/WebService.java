@@ -1,29 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.webservices;
 
 import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
@@ -175,7 +167,8 @@ public class WebService extends BaseStep implements StepInterface {
       } else {
         data.outputRowMeta = new RowMeta();
       }
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
       defineIndexList( getInputRowMeta(), vCurrentRow );
     } else {
@@ -584,7 +577,7 @@ public class WebService extends BaseStep implements StepInterface {
        * continues working as intended
        */
 
-      TransformerFactory transformerFactory = TransformerFactory.newInstance();
+      TransformerFactory transformerFactory = XMLParserFactoryProducer.createSecureTransformerFactory();
       transformer = transformerFactory.newTransformer();
 
       transformer.setOutputProperty( OutputKeys.OMIT_XML_DECLARATION, "yes" );
@@ -794,11 +787,10 @@ public class WebService extends BaseStep implements StepInterface {
 
     // Create a new reader to feed into the XML Input Factory below...
     //
-    StringReader stringReader = new StringReader( response.toString() );
+    StringReader stringReader = new StringReader( response );
 
-    // TODO Very empirical : see if we can do something better here
     try {
-      XMLInputFactory vFactory = XMLInputFactory.newInstance();
+      XMLInputFactory vFactory = XMLParserFactoryProducer.createSecureXMLInputFactory();
       XMLStreamReader vReader = vFactory.createXMLStreamReader( stringReader );
 
       Object[] outputRowData = RowDataUtil.allocateRowData( data.outputRowMeta.size() );

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.database;
 
@@ -39,6 +31,7 @@ public class DatabaseFactory implements DatabaseFactoryInterface {
 
   private static Class<?> PKG = Database.class; // for i18n purposes, needed by Translator2!!
   private boolean success;
+  private Exception capturedException;
 
   public static final LoggingObjectInterface loggingObject = new SimpleLoggingObject(
     "Database factory", LoggingObjectType.GENERAL, null );
@@ -47,10 +40,9 @@ public class DatabaseFactory implements DatabaseFactoryInterface {
   }
 
   @Override
-  public String getConnectionTestReport( DatabaseMeta databaseMeta ) throws KettleDatabaseException {
+  public String getConnectionTestReport( DatabaseMeta databaseMeta ) {
     success = true; // default
     if ( databaseMeta.getAccessType() != DatabaseMeta.TYPE_ACCESS_PLUGIN ) {
-
       StringBuilder report = new StringBuilder();
 
       Database db = new Database( loggingObject, databaseMeta );
@@ -63,6 +55,8 @@ public class DatabaseFactory implements DatabaseFactoryInterface {
               .getName(), partitioningInformation[i].getPartitionId() )
               + Const.CR );
           } catch ( KettleException e ) {
+            this.capturedException = e;
+
             report.append( BaseMessages.getString(
               PKG, "DatabaseMeta.report.ConnectionWithPartError", databaseMeta.getName(),
               partitioningInformation[i].getPartitionId(), e.toString() )
@@ -70,7 +64,7 @@ public class DatabaseFactory implements DatabaseFactoryInterface {
             report.append( Const.getStackTracker( e ) + Const.CR );
             success = false;
           } finally {
-            db.disconnect();
+            db.close();
           }
 
           appendConnectionInfo( report, db.environmentSubstitute( partitioningInformation[i].getHostname() ), db
@@ -84,13 +78,15 @@ public class DatabaseFactory implements DatabaseFactoryInterface {
           report.append( BaseMessages.getString( PKG, "DatabaseMeta.report.ConnectionOk", databaseMeta.getName() )
             + Const.CR );
         } catch ( KettleException e ) {
+          this.capturedException = e;
+
           report.append( BaseMessages.getString( PKG, "DatabaseMeta.report.ConnectionError", databaseMeta
             .getName() )
             + e.toString() + Const.CR );
           report.append( Const.getStackTracker( e ) + Const.CR );
           success = false;
         } finally {
-          db.disconnect();
+          db.close();
         }
         if ( databaseMeta.getAccessType() == DatabaseMeta.TYPE_ACCESS_JNDI ) {
           appendJndiConnectionInfo( report, db.environmentSubstitute( databaseMeta.getDatabaseName() ) );
@@ -104,12 +100,12 @@ public class DatabaseFactory implements DatabaseFactoryInterface {
       success = false;
       return BaseMessages.getString( PKG, "BaseDatabaseMeta.TestConnectionReportNotImplemented.Message" );
     }
-
   }
 
   public DatabaseTestResults getConnectionTestResults( DatabaseMeta databaseMeta ) throws KettleDatabaseException {
     DatabaseTestResults databaseTestResults = new DatabaseTestResults();
     String message = getConnectionTestReport( databaseMeta );
+    databaseTestResults.setException( this.capturedException );
     databaseTestResults.setMessage( message );
     databaseTestResults.setSuccess( success );
     return databaseTestResults;

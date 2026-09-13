@@ -1,3 +1,16 @@
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.core.database;
 
 import org.pentaho.di.core.exception.KettleDatabaseException;
@@ -6,8 +19,8 @@ import org.pentaho.di.core.row.ValueMetaInterface;
 public class ConcreteBaseDatabaseMeta extends BaseDatabaseMeta {
 
   @Override
-  public String getFieldDefinition( ValueMetaInterface v, String tk, String pk, boolean use_autoinc,
-      boolean add_fieldname, boolean add_cr ) {
+  public String getFieldDefinition( ValueMetaInterface v, String tk, String pk, boolean useAutoinc,
+                                    boolean addFieldName, boolean addCr ) {
     return null;
   }
 
@@ -22,13 +35,13 @@ public class ConcreteBaseDatabaseMeta extends BaseDatabaseMeta {
   }
 
   @Override
-  public String getAddColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  public String getAddColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
       String pk, boolean semicolon ) {
     return null;
   }
 
   @Override
-  public String getModifyColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean use_autoinc,
+  public String getModifyColumnStatement( String tablename, ValueMetaInterface v, String tk, boolean useAutoinc,
       String pk, boolean semicolon ) {
     return null;
   }

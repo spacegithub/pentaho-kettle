@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.util;
 
@@ -237,25 +229,25 @@ public final class PluginPropertyHandler {
    */
   public static class SaveToPreferences extends AbstractHandler {
 
-    private final Preferences node;
+    private final Preferences preferences;
 
     /**
      * Constructor.
      *
-     * @param node
-     *          node to set.
+     * @param preferences
+     *          preferences to set.
      * @throws IllegalArgumentException
      *           if node is null.
      */
-    public SaveToPreferences( final Preferences node ) throws IllegalArgumentException {
+    public SaveToPreferences( final Preferences preferences ) throws IllegalArgumentException {
       super();
-      Assert.assertNotNull( node, "Node cannot be null" );
-      this.node = node;
+      Assert.assertNotNull( preferences, "Preferences cannot be null" );
+      this.preferences = preferences;
     }
 
     @Override
     protected void handle( final PluginProperty property ) {
-      property.saveToPreferences( this.node );
+      property.saveToPreferences( this.preferences );
     }
 
   }
@@ -266,25 +258,25 @@ public final class PluginPropertyHandler {
    */
   public static class ReadFromPreferences extends AbstractHandler {
 
-    private final Preferences node;
+    private final Preferences preferences;
 
     /**
      * Constructor.
      *
-     * @param node
+     * @param preferences
      *          node to set.
      * @throws IllegalArgumentException
      *           if node is null.
      */
-    public ReadFromPreferences( final Preferences node ) throws IllegalArgumentException {
+    public ReadFromPreferences( final Preferences preferences ) throws IllegalArgumentException {
       super();
-      Assert.assertNotNull( node, "Node cannot be null" );
-      this.node = node;
+      Assert.assertNotNull( preferences, "Preferences cannot be null" );
+      this.preferences = preferences;
     }
 
     @Override
     protected void handle( final PluginProperty property ) {
-      property.readFromPreferences( this.node );
+      property.readFromPreferences( this.preferences );
     }
 
   }

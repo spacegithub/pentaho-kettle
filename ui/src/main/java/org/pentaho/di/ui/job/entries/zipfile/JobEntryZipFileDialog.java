@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.job.entries.zipfile;
 
@@ -37,10 +29,8 @@ import org.eclipse.swt.layout.FormData;
 import org.eclipse.swt.layout.FormLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
-import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
@@ -48,8 +38,8 @@ import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.Props;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.job.entries.zipfile.JobEntryZipFile;
@@ -57,12 +47,18 @@ import org.pentaho.di.job.entry.JobEntryDialogInterface;
 import org.pentaho.di.job.entry.JobEntryInterface;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.ui.core.dialog.EnterSelectionDialog;
+import org.pentaho.di.ui.core.events.dialog.FilterType;
+import org.pentaho.di.ui.core.events.dialog.SelectionAdapterFileDialogTextVar;
+import org.pentaho.di.ui.core.events.dialog.SelectionAdapterOptions;
+import org.pentaho.di.ui.core.events.dialog.SelectionOperation;
 import org.pentaho.di.ui.core.gui.WindowProperty;
 import org.pentaho.di.ui.core.widget.ComboVar;
 import org.pentaho.di.ui.core.widget.TextVar;
 import org.pentaho.di.ui.job.dialog.JobDialog;
 import org.pentaho.di.ui.job.entry.JobEntryDialog;
 import org.pentaho.di.ui.trans.step.BaseStepDialog;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * This dialog allows you to edit the Zip File job entry settings.
@@ -76,6 +72,11 @@ public class JobEntryZipFileDialog extends JobEntryDialog implements JobEntryDia
   private static final String[] FILETYPES = new String[]{
     BaseMessages.getString( PKG, "JobZipFiles.Filetype.Zip" ),
     BaseMessages.getString( PKG, "JobZipFiles.Filetype.All" ) };
+
+  // Cache OS detection and pattern compilation for performance
+  private static final boolean IS_WINDOWS = String.valueOf( System.getProperty( "os.name" ) ).toLowerCase( Locale.ROOT ).contains( "win" );
+  private static final String WINDOWS_INVALID_CHARS = "<>:\"/\\\\|?*";
+  private static final Pattern WINDOWS_INVALID_PATTERN = Pattern.compile( "[" + WINDOWS_INVALID_CHARS + "]" );
 
   private Label wlName;
 
@@ -499,20 +500,9 @@ public class JobEntryZipFileDialog extends JobEntryDialog implements JobEntryDia
       }
     } );
 
-    wbZipFilename.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        FileDialog dialog = new FileDialog( shell, SWT.SAVE );
-        // dialog.setFilterExtensions(new String[] {"*"});
-        dialog.setFilterExtensions( new String[]{ "*.zip;*.ZIP", "*" } );
-        if ( wZipFilename.getText() != null ) {
-          dialog.setFileName( jobMeta.environmentSubstitute( wZipFilename.getText() ) );
-        }
-        dialog.setFilterNames( FILETYPES );
-        if ( dialog.open() != null ) {
-          wZipFilename.setText( dialog.getFilterPath() + Const.FILE_SEPARATOR + dialog.getFileName() );
-        }
-      }
-    } );
+    wbZipFilename.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wZipFilename, jobMeta,
+            new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.SAVE,
+                    new FilterType[] { FilterType.ZIP, FilterType.ALL }, FilterType.ZIP ) ) );
 
     // Create Parent Folder
     wlCreateParentFolder = new Label( wZipFile, SWT.RIGHT );
@@ -609,7 +599,7 @@ public class JobEntryZipFileDialog extends JobEntryDialog implements JobEntryDia
     // Prepare a list of possible DateTimeFormats...
     String[] dats = Const.getDateFormats();
 
-    // DateTimeFormat
+    // DateTimeFormat (filter the options based on OS restrictions)
     wlDateTimeFormat = new Label( wZipFile, SWT.RIGHT );
     wlDateTimeFormat.setText( BaseMessages.getString( PKG, "JobZipFiles.DateTimeFormat.Label" ) );
     props.setLook( wlDateTimeFormat );
@@ -628,7 +618,21 @@ public class JobEntryZipFileDialog extends JobEntryDialog implements JobEntryDia
     fdDateTimeFormat.right = new FormAttachment( 100, 0 );
     wDateTimeFormat.setLayoutData( fdDateTimeFormat );
     for ( int x = 0; x < dats.length; x++ ) {
-      wDateTimeFormat.add( dats[x] );
+      String format = dats[x];
+      boolean allowed = true;
+      if ( IS_WINDOWS ) {
+        if ( WINDOWS_INVALID_PATTERN.matcher( format ).find() ) {
+          allowed = false;
+        }
+      } else {
+        if ( format.contains( "/" ) ) {
+          allowed = false;
+        }
+      }
+
+      if ( allowed ) {
+        wDateTimeFormat.add( format );
+      }
     }
 
     wbShowFiles = new Button( wZipFile, SWT.PUSH | SWT.CENTER );
@@ -973,57 +977,15 @@ public class JobEntryZipFileDialog extends JobEntryDialog implements JobEntryDia
       }
     };
 
-    wbSourceDirectory.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        DirectoryDialog ddialog = new DirectoryDialog( shell, SWT.OPEN );
-        if ( wSourceDirectory.getText() != null ) {
-          ddialog.setFilterPath( jobMeta.environmentSubstitute( wSourceDirectory.getText() ) );
-        }
+    wbSourceDirectory.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wSourceDirectory, jobMeta,
+            new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FOLDER ) ) );
 
-        // Calling open() will open and run the dialog.
-        // It will return the selected directory, or
-        // null if user cancels
-        String dir = ddialog.open();
-        if ( dir != null ) {
-          // Set the text box to the new selection
-          wSourceDirectory.setText( dir );
-        }
+    wbMovetoDirectory.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wMovetoDirectory, jobMeta,
+            new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FOLDER ) ) );
 
-      }
-    } );
-
-    wbMovetoDirectory.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        DirectoryDialog ddialog = new DirectoryDialog( shell, SWT.OPEN );
-        if ( wMovetoDirectory.getText() != null ) {
-          ddialog.setFilterPath( jobMeta.environmentSubstitute( wMovetoDirectory.getText() ) );
-        }
-
-        // Calling open() will open and run the dialog.
-        // It will return the selected directory, or
-        // null if user cancels
-        String dir = ddialog.open();
-        if ( dir != null ) {
-          // Set the text box to the new selection
-          wMovetoDirectory.setText( dir );
-        }
-
-      }
-    } );
-
-    wbSourceFile.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        FileDialog dialog = new FileDialog( shell, SWT.OPEN );
-        dialog.setFilterExtensions( new String[]{ "*" } );
-        if ( wSourceDirectory.getText() != null ) {
-          dialog.setFileName( jobMeta.environmentSubstitute( wSourceDirectory.getText() ) );
-        }
-        dialog.setFilterNames( FILETYPES );
-        if ( dialog.open() != null ) {
-          wSourceDirectory.setText( dialog.getFilterPath() + Const.FILE_SEPARATOR + dialog.getFileName() );
-        }
-      }
-    } );
+    wbSourceFile.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wSourceDirectory, jobMeta,
+            new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FILE,
+                    new FilterType[] { FilterType.ZIP }, FilterType.ZIP  ) ) );
 
     wName.addSelectionListener( lsDef );
     wZipFilename.addSelectionListener( lsDef );

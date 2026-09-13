@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2017-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.csvinput;
 
@@ -72,7 +64,7 @@ public class CsvProcessRowInParallelTest extends CsvInputUnitTestBase {
   @Before
   public void setUp() {
     stepMockHelper =
-      StepMockUtil.getStepMockHelper( CsvInputMeta.class, "CsvInputEnclosureTest" );
+      StepMockUtil.getStepMockHelper( CsvInputMeta.class, "CsvProcessRowInParallelTest" );
   }
 
   @After
@@ -89,8 +81,8 @@ public class CsvProcessRowInParallelTest extends CsvInputUnitTestBase {
 
     File sharedFile = createTestFile( "UTF-8", fileContent );
 
-    assertEquals( createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ), 1 );
-    assertEquals( createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ), 1 );
+    assertEquals( 1, createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ) );
+    assertEquals( 1, createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ) );
   }
 
   @Test
@@ -104,8 +96,8 @@ public class CsvProcessRowInParallelTest extends CsvInputUnitTestBase {
 
     File sharedFile = createTestFile( "UTF-8", fileContent );
 
-    assertEquals( createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ), 2 );
-    assertEquals( createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ), 1 );
+    assertEquals( 2, createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ) );
+    assertEquals( 1, createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ) );
   }
 
   @Test
@@ -126,8 +118,8 @@ public class CsvProcessRowInParallelTest extends CsvInputUnitTestBase {
 
     File sharedFile = createTestFile( "UTF-8", fileContent );
 
-    assertEquals( createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ), 5 );
-    assertEquals( createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ), 5 );
+    assertEquals( 5, createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ) );
+    assertEquals( 5, createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ) );
   }
 
   @Test
@@ -148,8 +140,8 @@ public class CsvProcessRowInParallelTest extends CsvInputUnitTestBase {
 
     File sharedFile = createTestFile( "UTF-8", fileContent );
 
-    assertEquals( createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ), 5 );
-    assertEquals( createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ), 5 );
+    assertEquals( 5, createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ) );
+    assertEquals( 5, createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ) );
   }
 
 
@@ -162,8 +154,8 @@ public class CsvProcessRowInParallelTest extends CsvInputUnitTestBase {
 
     File sharedFile = createTestFile( "UTF-8", fileContent );
 
-    assertEquals( createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ), 1 );
-    assertEquals( createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ), 1 );
+    assertEquals( 1, createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ) );
+    assertEquals( 1, createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ) );
   }
 
   @Test
@@ -200,9 +192,9 @@ public class CsvProcessRowInParallelTest extends CsvInputUnitTestBase {
 
     File sharedFile = createTestFile( "UTF-8", fileContent );
 
-    assertEquals( createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ), 2 );
-    assertEquals( createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ), 2 );
-    assertEquals( createAndRunOneStep( sharedFile, 2, totalNumberOfSteps ), 2 );
+    assertEquals( 2, createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ) );
+    assertEquals( 2, createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ) );
+    assertEquals( 2, createAndRunOneStep( sharedFile, 2, totalNumberOfSteps ) );
   }
 
   /**
@@ -223,8 +215,8 @@ public class CsvProcessRowInParallelTest extends CsvInputUnitTestBase {
 
     File sharedFile = createTestFile( "UTF-8", fileContent );
 
-    assertEquals( createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ), 1 );
-    assertEquals( createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ), 2 );
+    assertEquals( 1, createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ) );
+    assertEquals( 2, createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ) );
   }
 
   @Test
@@ -239,8 +231,8 @@ public class CsvProcessRowInParallelTest extends CsvInputUnitTestBase {
 
     File sharedFile = createTestFile( "UTF-8", fileContent );
 
-    assertEquals( createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ), 1 );
-    assertEquals( createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ), 2 );
+    assertEquals( 1, createAndRunOneStep( sharedFile, 0, totalNumberOfSteps ) );
+    assertEquals( 2, createAndRunOneStep( sharedFile, 1, totalNumberOfSteps ) );
   }
 
   @Test
@@ -337,13 +329,10 @@ public class CsvProcessRowInParallelTest extends CsvInputUnitTestBase {
   }
 
   private CsvInputMeta createMeta( File file, TextFileInputField[] fields, boolean headerPresent, String delimiter ) {
-    CsvInputMeta meta = new CsvInputMeta();
+    CsvInputMeta meta = createMeta( file, fields );
 
-    meta.setFilename( file.getAbsolutePath() );
     meta.setDelimiter( delimiter );
-    meta.setEncoding( "utf-8" );
     meta.setEnclosure( "\"" );
-    meta.setBufferSize( "1024" );
 
     if ( !headerPresent ) {
       meta.setInputFields( fields );

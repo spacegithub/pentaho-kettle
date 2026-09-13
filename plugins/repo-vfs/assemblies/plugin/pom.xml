@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************* -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.pentaho.di.plugins</groupId>
+    <artifactId>repo-vfs-plugin-assemblies</artifactId>
+    <version>11.1.0.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>repo-vfs-plugin-assembly</artifactId>
+  <version>11.1.0.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>PDI Projects Plugin Assembly</name>
+  <description>Produces the plugin ZIP for PDI Projects</description>
+
+  <properties>
+    <resources.directory>${project.basedir}/src/main/resources</resources.directory>
+    <assembly.dir>${project.build.directory}/assembly</assembly.dir>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <artifactId>repo-vfs-ws</artifactId>
+      <groupId>org.pentaho.di.plugins</groupId>
+      <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-annotations</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-databind</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.module</groupId>
+          <artifactId>jackson-module-jaxb-annotations</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>jakarta.annotation</groupId>
+          <artifactId>jakarta.annotation-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>jakarta.inject</groupId>
+          <artifactId>jakarta.inject-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>jakarta.ws.rs</groupId>
+          <artifactId>jakarta.ws.rs-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>jakarta.xml.bind</groupId>
+          <artifactId>jakarta.xml.bind-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.glassfish.jersey.core</groupId>
+          <artifactId>jersey-common</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.osgi</groupId>
+          <artifactId>osgi-resource-locator</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.module</groupId>
+          <artifactId>jackson-module-jakarta-xmlbind-annotations</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jvnet.mimepull</groupId>
+          <artifactId>mimepull</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <artifactId>repo-vfs-pur</artifactId>
+      <groupId>org.pentaho.di.plugins</groupId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <artifactId>repo-vfs-pdi</artifactId>
+      <groupId>org.pentaho.di.plugins</groupId>
+      <version>${project.version}</version>
+    </dependency>
+  </dependencies>
+
+    <build>
+      <plugins>
+        <plugin>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <executions>
+            <execution>
+              <id>add-libs</id>
+              <phase>generate-resources</phase>
+              <goals>
+                <goal>copy-dependencies</goal>
+              </goals>
+              <configuration>
+                <outputDirectory>${assembly.dir}/lib</outputDirectory>
+                <includeScope>runtime</includeScope>
+                <excludeArtifactIds>repo-vfs-pdi</excludeArtifactIds>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+      </plugins>
+    </build>
+</project>

@@ -1,24 +1,16 @@
-/*******************************************************************************
+/*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.textfileoutput;
 
@@ -213,12 +205,12 @@ public class TextFileOutputData extends BaseStepData implements StepDataInterfac
 
     @Override
     public String getLastFileName() {
-      return namesList.size() > 0 ? namesList.get( namesList.size() - 1 ) : null;
+      return namesList.isEmpty() ? null : namesList.get( namesList.size() - 1 );
     }
 
     @Override
     public FileStream getLastStream() {
-      return streamsList.size() > 0 ? streamsList.get( streamsList.size() - 1 ) : null;
+      return streamsList.isEmpty() ? null : streamsList.get( streamsList.size() - 1 );
     }
 
     @Override
@@ -409,6 +401,7 @@ public class TextFileOutputData extends BaseStepData implements StepDataInterfac
   public OutputStream fos;
 
   public RowMetaInterface outputRowMeta;
+  public RowMetaInterface inputRowMeta;
 
   public byte[] binarySeparator;
   public byte[] binaryEnclosure;

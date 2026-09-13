@@ -1,28 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.cluster;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +40,7 @@ import org.pentaho.di.repository.RepositoryElementInterface;
 import org.pentaho.di.repository.RepositoryObjectType;
 import org.pentaho.di.shared.SharedObjectInterface;
 import org.pentaho.di.www.SlaveServerDetection;
+import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
 /**
@@ -57,13 +51,14 @@ import org.w3c.dom.Node;
  * @author Matt
  * @since 17-nov-2006
  */
-public class ClusterSchema extends ChangedFlag implements Cloneable, SharedObjectInterface, VariableSpace,
+public class ClusterSchema extends ChangedFlag implements Cloneable, SharedObjectInterface<ClusterSchema>, VariableSpace,
   RepositoryElementInterface, XMLInterface {
   private static Class<?> PKG = ClusterSchema.class; // for i18n purposes, needed by Translator2!!
 
   public static final String XML_TAG = "clusterschema";
 
   public static final RepositoryObjectType REPOSITORY_ELEMENT_TYPE = RepositoryObjectType.CLUSTER_SCHEMA;
+  public static final Comparator<ClusterSchema> COMPARATOR = Comparator.comparing( ClusterSchema::getName, String.CASE_INSENSITIVE_ORDER );
 
   /** the name of the cluster schema */
   private String name;
@@ -168,6 +163,7 @@ public class ClusterSchema extends ChangedFlag implements Cloneable, SharedObjec
     xml.append( "        " ).append( XMLHandler.addTagValue( "sockets_flush_interval", socketsFlushInterval ) );
     xml.append( "        " ).append( XMLHandler.addTagValue( "sockets_compressed", socketsCompressed ) );
     xml.append( "        " ).append( XMLHandler.addTagValue( "dynamic", dynamic ) );
+    appendObjectId( xml );
 
     xml.append( "        " ).append( XMLHandler.openTag( "slaveservers" ) ).append( Const.CR );
     for ( int i = 0; i < slaveServers.size(); i++ ) {
@@ -189,10 +185,11 @@ public class ClusterSchema extends ChangedFlag implements Cloneable, SharedObjec
     socketsCompressed = "Y".equalsIgnoreCase( XMLHandler.getTagValue( clusterSchemaNode, "sockets_compressed" ) );
     dynamic = "Y".equalsIgnoreCase( XMLHandler.getTagValue( clusterSchemaNode, "dynamic" ) );
 
+    readObjectId( clusterSchemaNode );
     Node slavesNode = XMLHandler.getSubNode( clusterSchemaNode, "slaveservers" );
     int nrSlaves = XMLHandler.countNodes( slavesNode, "name" );
     for ( int i = 0; i < nrSlaves; i++ ) {
-      Node serverNode = XMLHandler.getSubNodeByNr( slavesNode, "name", i );
+      Node serverNode = XMLHandler.getSubNodeByNr( slavesNode, "name", i, false );
       String serverName = XMLHandler.getNodeValue( serverNode );
       SlaveServer slaveServer = SlaveServer.findSlaveServer( referenceSlaveServers, serverName );
       if ( slaveServer != null ) {
@@ -526,5 +523,16 @@ public class ClusterSchema extends ChangedFlag implements Cloneable, SharedObjec
    */
   public void setChangedDate( Date changedDate ) {
     this.changedDate = changedDate;
+  }
+
+  @Override
+  public ClusterSchema makeClone() {
+    return (ClusterSchema)clone();
+  }
+
+  @Override
+  public Node toNode() throws KettleException {
+    Document doc = XMLHandler.loadXMLString( getXML() );
+    return XMLHandler.getSubNode( doc, XML_TAG );
   }
 }

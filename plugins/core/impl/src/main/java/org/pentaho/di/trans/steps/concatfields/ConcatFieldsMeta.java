@@ -1,33 +1,28 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.concatfields;
 
 import java.util.List;
+import java.util.Map;
 
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.annotations.Step;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.util.StringUtil;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
@@ -42,14 +37,18 @@ import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.Repository;
+import org.pentaho.di.resource.ResourceDefinition;
+import org.pentaho.di.resource.ResourceNamingInterface;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.StepDataInterface;
+import org.pentaho.di.trans.step.StepHelperInterface;
 import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepMetaInjectionInterface;
 import org.pentaho.di.trans.step.StepMetaInterface;
 import org.pentaho.di.trans.steps.textfileoutput.TextFileField;
+import org.pentaho.di.trans.steps.textfileoutput.TextFileOutputData;
 import org.pentaho.di.trans.steps.textfileoutput.TextFileOutputMeta;
 import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
@@ -107,27 +106,30 @@ public class ConcatFieldsMeta extends TextFileOutputMeta implements StepMetaInte
     super.setDefault();
     // overwrite header
     super.setHeaderEnabled( false );
+    // PDI-18028: ConcatFields doesn't need or use the 'fileName' field!
+    super.setFileName( StringUtil.EMPTY_STRING );
+    super.setFileNameInField( false );
     // set default for new properties specific to the concat fields
-    targetFieldName = "";
+    targetFieldName = StringUtil.EMPTY_STRING;
     targetFieldLength = 0;
     removeSelectedFields = false;
   }
 
   @Deprecated
-  public void getFieldsModifyInput( RowMetaInterface row, String name, RowMetaInterface[] info, StepMeta nextStep,
-                                    VariableSpace space ) throws KettleStepException {
-    getFieldsModifyInput( row, name, info, nextStep, space, null, null );
+  public void getFieldsModifyInput( Bowl bowl, RowMetaInterface row, String name, RowMetaInterface[] info,
+                                    StepMeta nextStep, VariableSpace space ) throws KettleStepException {
+    getFieldsModifyInput( bowl, row, name, info, nextStep, space, null, null );
   }
 
-  public void getFieldsModifyInput( RowMetaInterface row, String name, RowMetaInterface[] info, StepMeta nextStep,
-                                    VariableSpace space, Repository repository, IMetaStore metaStore )
+  public void getFieldsModifyInput( Bowl bowl, RowMetaInterface row, String name, RowMetaInterface[] info,
+                                    StepMeta nextStep, VariableSpace space, Repository repository, IMetaStore metaStore )
     throws KettleStepException {
     // the field precisions and lengths are altered! see TextFileOutputMeta.getFields().
-    super.getFields( row, name, info, nextStep, space, repository, metaStore );
+    super.getFields( bowl, row, name, info, nextStep, space, repository, metaStore );
   }
 
   @Override
-  public void getFields( RowMetaInterface row, String name, RowMetaInterface[] info, StepMeta nextStep,
+  public void getFields( Bowl bowl, RowMetaInterface row, String name, RowMetaInterface[] info, StepMeta nextStep,
                          VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
     // do not call the super class from TextFileOutputMeta since it modifies the source meta data
     // see getFieldsModifyInput() instead
@@ -173,10 +175,18 @@ public class ConcatFieldsMeta extends TextFileOutputMeta implements StepMetaInte
       "Y"
         .equalsIgnoreCase( XMLHandler
           .getTagValue( stepnode, ConcatFieldsNodeNameSpace, "removeSelectedFields" ) );
+
+    // PDI-18028: Avoid fileName handling!
+    super.setFileName( StringUtil.EMPTY_STRING );
+    super.setFileNameInField( false );
   }
 
   @Override
   public String getXML() {
+    // PDI-18028: Avoid fileName handling!
+    super.setFileName( StringUtil.EMPTY_STRING );
+    super.setFileNameInField( false );
+
     String retval = super.getXML();
     retval = retval + "    <" + ConcatFieldsNodeNameSpace + ">" + Const.CR;
     retval = retval + XMLHandler.addTagValue( "targetFieldName", targetFieldName );
@@ -195,11 +205,19 @@ public class ConcatFieldsMeta extends TextFileOutputMeta implements StepMetaInte
       (int) rep.getStepAttributeInteger( id_step, ConcatFieldsNodeNameSpace + "targetFieldLength" );
     removeSelectedFields =
       rep.getStepAttributeBoolean( id_step, ConcatFieldsNodeNameSpace + "removeSelectedFields" );
+
+    // PDI-18028: Avoid fileName handling!
+    super.setFileName( StringUtil.EMPTY_STRING );
+    super.setFileNameInField( false );
   }
 
   @Override
   public void saveRep( Repository rep, IMetaStore metaStore, ObjectId id_transformation, ObjectId id_step )
     throws KettleException {
+    // PDI-18028: Avoid fileName handling!
+    super.setFileName( StringUtil.EMPTY_STRING );
+    super.setFileNameInField( false );
+
     super.saveRep( rep, metaStore, id_transformation, id_step );
     rep.saveStepAttribute(
       id_transformation, id_step, ConcatFieldsNodeNameSpace + "targetFieldName", targetFieldName );
@@ -213,7 +231,7 @@ public class ConcatFieldsMeta extends TextFileOutputMeta implements StepMetaInte
   public void check( List<CheckResultInterface> remarks, TransMeta transMeta, StepMeta stepMeta,
                      RowMetaInterface prev, String[] input, String[] output, RowMetaInterface info, VariableSpace space,
                      Repository repository, IMetaStore metaStore ) {
-    CheckResult cr;
+    CheckResult cr = null;
 
     // Check Target Field Name
     if ( Utils.isEmpty( targetFieldName ) ) {
@@ -238,20 +256,20 @@ public class ConcatFieldsMeta extends TextFileOutputMeta implements StepMetaInte
           PKG, "ConcatFieldsMeta.CheckResult.FieldsReceived", "" + prev.size() ), stepMeta );
       remarks.add( cr );
 
-      String error_message = "";
-      boolean error_found = false;
+      String errorMessage = StringUtil.EMPTY_STRING;
+      boolean errorFound = false;
 
       // Starting from selected fields in ...
       for ( int i = 0; i < getOutputFields().length; i++ ) {
         int idx = prev.indexOfValue( getOutputFields()[ i ].getName() );
         if ( idx < 0 ) {
-          error_message += "\t\t" + getOutputFields()[ i ].getName() + Const.CR;
-          error_found = true;
+          errorMessage += "\t\t" + getOutputFields()[ i ].getName() + Const.CR;
+          errorFound = true;
         }
       }
-      if ( error_found ) {
-        error_message = BaseMessages.getString( PKG, "ConcatFieldsMeta.CheckResult.FieldsNotFound", error_message );
-        cr = new CheckResult( CheckResultInterface.TYPE_RESULT_ERROR, error_message, stepMeta );
+      if ( errorFound ) {
+        errorMessage = BaseMessages.getString( PKG, "ConcatFieldsMeta.CheckResult.FieldsNotFound", errorMessage );
+        cr = new CheckResult( CheckResultInterface.TYPE_RESULT_ERROR, errorMessage, stepMeta );
         remarks.add( cr );
       } else {
         cr =
@@ -260,7 +278,6 @@ public class ConcatFieldsMeta extends TextFileOutputMeta implements StepMetaInte
         remarks.add( cr );
       }
     }
-
   }
 
   @Override
@@ -274,9 +291,96 @@ public class ConcatFieldsMeta extends TextFileOutputMeta implements StepMetaInte
     return new ConcatFieldsData();
   }
 
+  /**
+   * PDI-18028: ConcatFields doesn't need or use the 'fileName' field (from TextFileOutput)!
+   * @return Always <code>false</code>
+   */
+  @Override
+  public boolean isFileNameInField() {
+    return false;
+  }
+
+  /**
+   *
+   * @param retVal
+   * @param value
+   */
+  @Override
+  protected void saveSource( StringBuilder retVal, String value ) {
+    // PDI-18028: Avoid fileName handling!
+    super.setFileName( StringUtil.EMPTY_STRING );
+    super.setFileNameInField( false );
+
+    super.saveSource( retVal, value );
+  }
+
+  /**
+   * PDI-18028: ConcatFields doesn't need or use the 'fileName' field (from TextFileOutput)!
+   *
+   * @return Always <code>null</code>
+   */
+  @Override
+  public String exportResources( Bowl executionBowl, Bowl globalManagementBowl, VariableSpace space,
+      Map<String, ResourceDefinition> definitions, ResourceNamingInterface namingInterface,
+      Repository repository, IMetaStore metaStore ) throws KettleException {
+    return null;
+  }
+
   @Override
   public StepMetaInjectionInterface getStepMetaInjectionInterface() {
     return new ConcatFieldsMetaInjection( this );
   }
 
+  @Override
+  protected void calcMetaWithFieldOptions( TextFileOutputData data ) {
+    super.calcMetaWithFieldOptions( data );
+  }
+
+  /**
+   * <p>Creates a copy of the meta information of the modified input fields, so that we don't make any changes to the
+   * original meta information.</p>
+   * <p>It is based on the original meta information and augmented with the information the user configured.</p>
+   *
+   * @param data
+   */
+  protected synchronized void calcMetaWithFieldOptions( ConcatFieldsData data ) {
+    if ( null == metaWithFieldOptions ) {
+      if ( !Utils.isEmpty( getOutputFields() ) ) {
+        metaWithFieldOptions = new ValueMetaInterface[ getOutputFields().length ];
+
+        for ( int i = 0; i < getOutputFields().length; ++i ) {
+          ValueMetaInterface v = data.inputRowMetaModified.getValueMeta( data.fieldnrs[ i ] );
+
+          if ( v != null ) {
+            metaWithFieldOptions[ i ] = v.clone();
+
+            TextFileField field = getOutputFields()[ i ];
+            metaWithFieldOptions[ i ].setLength( field.getLength() );
+            metaWithFieldOptions[ i ].setPrecision( field.getPrecision() );
+            if ( !Utils.isEmpty( field.getFormat() ) ) {
+              metaWithFieldOptions[ i ].setConversionMask( field.getFormat() );
+            }
+            metaWithFieldOptions[ i ].setDecimalSymbol( field.getDecimalSymbol() );
+            metaWithFieldOptions[ i ].setGroupingSymbol( field.getGroupingSymbol() );
+            metaWithFieldOptions[ i ].setCurrencySymbol( field.getCurrencySymbol() );
+            metaWithFieldOptions[ i ].setTrimType( field.getTrimType() );
+            if ( !Utils.isEmpty( getEncoding() ) ) {
+              metaWithFieldOptions[ i ].setStringEncoding( getEncoding() );
+            }
+
+            // enable output padding by default to be compatible with v2.5.x
+            //
+            metaWithFieldOptions[ i ].setOutputPaddingEnabled( true );
+          }
+        }
+      } else {
+        metaWithFieldOptions = null;
+      }
+    }
+  }
+
+  @Override
+  public StepHelperInterface getStepHelperInterface() {
+    return new ConcatFieldsHelper();
+  }
 }

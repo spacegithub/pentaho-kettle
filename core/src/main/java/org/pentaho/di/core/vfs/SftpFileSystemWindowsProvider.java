@@ -1,33 +1,30 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.vfs;
 
 
+import com.jcraft.jsch.Session;
 import org.apache.commons.vfs2.FileName;
 import org.apache.commons.vfs2.FileSystem;
+import org.apache.commons.vfs2.FileSystemException;
 import org.apache.commons.vfs2.FileSystemOptions;
+import org.apache.commons.vfs2.UserAuthenticationData;
 import org.apache.commons.vfs2.provider.GenericFileName;
+import org.apache.commons.vfs2.provider.sftp.SftpClientFactory;
 import org.apache.commons.vfs2.provider.sftp.SftpFileProvider;
+import org.apache.commons.vfs2.util.UserAuthenticatorUtils;
 
 /**
  * This class serves two main purposes.
@@ -54,11 +51,41 @@ import org.apache.commons.vfs2.provider.sftp.SftpFileProvider;
  * This provider replaces {@link SftpFileProvider} in FileSystemManager (see overridden providers.xml).
  * And then used to spawn SftpFileSystemWindows and SftpFileObjectWithWindowsSupport.
  */
+
+// suppress the "too many parents" warning; can't be helped here
+@SuppressWarnings( "squid:S110" )
 public class SftpFileSystemWindowsProvider extends SftpFileProvider {
 
+  /**
+   * Creates a new Session.  Note that this method is borrowed from the parent class and should mirror it if the
+   * commons-vfs2 library is updated.
+   *
+   * @return A Session, never null.
+   */
+  static Session createSession( final GenericFileName rootName, final FileSystemOptions fileSystemOptions )
+    throws FileSystemException {
+    UserAuthenticationData authData = null;
+    try {
+      authData = UserAuthenticatorUtils.authenticate( fileSystemOptions, AUTHENTICATOR_TYPES );
+
+      return SftpClientFactory.createConnection( rootName.getHostName(), rootName.getPort(),
+        UserAuthenticatorUtils.getData( authData, UserAuthenticationData.USERNAME,
+          UserAuthenticatorUtils.toChar( rootName.getUserName() ) ),
+        UserAuthenticatorUtils.getData( authData, UserAuthenticationData.PASSWORD,
+          UserAuthenticatorUtils.toChar( rootName.getPassword() ) ),
+        fileSystemOptions );
+    } catch ( final Exception e ) {
+      throw new FileSystemException( "vfs.provider.sftp/connect.error", rootName, e );
+    } finally {
+      UserAuthenticatorUtils.cleanup( authData );
+    }
+  }
+
   @Override
-  protected FileSystem doCreateFileSystem( FileName name, FileSystemOptions fileSystemOptions ) {
-    return new SftpFileSystemWindows( (GenericFileName) name, null, fileSystemOptions );
+  protected FileSystem doCreateFileSystem( FileName name, FileSystemOptions fileSystemOptions )
+    throws FileSystemException {
+    return new SftpFileSystemWindows(
+      (GenericFileName) name, createSession( (GenericFileName) name, fileSystemOptions ), fileSystemOptions );
   }
 
 }

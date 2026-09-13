@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 /*******************************************************************************
  * Copyright (c) 2000, 2004 IBM Corporation and others.
@@ -48,6 +40,7 @@ import org.eclipse.swt.graphics.ImageData;
 import org.eclipse.swt.graphics.PaletteData;
 import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.widgets.Display;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.vfs.KettleVFS;
 
 public class ImageUtil {
@@ -139,7 +132,7 @@ public class ImageUtil {
   public static Image getImage( Display display, String location ) {
     // TODO: find other instances of getImage (plugin, steps) and transition them to new model through an laf manager
     try {
-      InputStream is = KettleVFS.getInputStream( location );
+      InputStream is = KettleVFS.getInstance( DefaultBowl.getInstance() ).getInputStream( location );
       Image im = new Image( display, is );
       is.close();
       return im;

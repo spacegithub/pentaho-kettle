@@ -1,28 +1,22 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.job;
 
 import org.apache.commons.vfs2.FileObject;
+import org.pentaho.di.base.IMetaFileLoader;
+import org.pentaho.di.base.MetaFileLoaderImpl;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
@@ -31,6 +25,7 @@ import org.pentaho.di.core.Result;
 import org.pentaho.di.core.ResultFile;
 import org.pentaho.di.core.RowMetaAndData;
 import org.pentaho.di.core.SQLStatement;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleDatabaseException;
 import org.pentaho.di.core.exception.KettleException;
@@ -45,7 +40,6 @@ import org.pentaho.di.core.parameters.DuplicateParamException;
 import org.pentaho.di.core.parameters.NamedParams;
 import org.pentaho.di.core.parameters.NamedParamsDefault;
 import org.pentaho.di.core.util.CurrentDirectoryResolver;
-import org.pentaho.di.core.util.StringUtil;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.variables.Variables;
@@ -57,6 +51,7 @@ import org.pentaho.di.job.Job;
 import org.pentaho.di.job.JobExecutionConfiguration;
 import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.job.entry.JobEntryBase;
+import org.pentaho.di.job.entry.JobEntryHelperInterface;
 import org.pentaho.di.job.entry.JobEntryInterface;
 import org.pentaho.di.job.entry.JobEntryRunConfigurableInterface;
 import org.pentaho.di.job.entry.validator.AndValidator;
@@ -353,6 +348,24 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
     return retval.toString();
   }
 
+  private void checkObjectLocationSpecificationMethod() {
+    if ( specificationMethod == null ) {
+      // Backward compatibility
+      //
+      // Default = Filename
+      //
+      specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
+
+      if ( !Utils.isEmpty( filename ) ) {
+        specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
+      } else if ( jobObjectId != null ) {
+        specificationMethod = ObjectLocationSpecificationMethod.REPOSITORY_BY_REFERENCE;
+      } else if ( !Utils.isEmpty( jobname ) ) {
+        specificationMethod = ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME;
+      }
+    }
+  }
+
   @Override
   public void loadXML( Node entrynode, List<DatabaseMeta> databases, List<SlaveServer> slaveServers,
     Repository rep, IMetaStore metaStore ) throws KettleXMLException {
@@ -390,7 +403,17 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
         }
       } else {
         specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
+        if ( Utils.isEmpty( filename ) && !Utils.isEmpty( directory ) && !Utils.isEmpty( jobname ) ) {
+          // this job was exported from a repository and is being loaded locally
+          // need to create a well formatted filename
+          filename = directory + RepositoryFile.SEPARATOR + jobname;
+          if ( !filename.toLowerCase().endsWith( RepositoryObjectType.JOB.getExtension() ) ) {
+            filename = filename + RepositoryObjectType.JOB.getExtension();
+          }
+        }
       }
+
+      checkObjectLocationSpecificationMethod( );
 
       argFromPrevious = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, "arg_from_previous" ) );
       paramsFromPrevious = "Y".equalsIgnoreCase( XMLHandler.getTagValue( entrynode, "params_from_previous" ) );
@@ -619,7 +642,8 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
       try {
         logChannelFileWriter =
           new LogChannelFileWriter(
-            this.getLogChannelId(), KettleVFS.getFileObject( realLogFilename ), setAppendLogfile );
+            this.getLogChannelId(), KettleVFS.getInstance( parentJobMeta.getBowl() )
+              .getFileObject( realLogFilename ), setAppendLogfile );
         logChannelFileWriter.startLogging();
       } catch ( KettleException e ) {
         logError( "Unable to open file appender for file [" + getLogFilename() + "] : " + e.toString() );
@@ -702,9 +726,10 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
       List<RowMetaAndData> rows = new ArrayList<RowMetaAndData>( result.getRows() );
 
       while ( ( first && !execPerRow )
-        || ( execPerRow && rows != null && iteration < rows.size() && result.getNrErrors() == 0 ) ) {
-        first = false;
+        || ( execPerRow && !rows.isEmpty() && iteration < rows.size() && result.getNrErrors() == 0 )
+        || ( execPerRow && rows.isEmpty() && iteration <= rows.size() && shouldConsiderOldBehaviourForEveryInputRow() ) ) {
 
+        first = false;
         // Clear the result rows of the result
         // Otherwise we double the amount of rows every iteration in the simple cases.
         //
@@ -712,8 +737,15 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
           result.getRows().clear();
         }
 
-        if ( rows != null && execPerRow ) {
-          resultRow = rows.get( iteration );
+        // PDI-18776: Get the result row from rows based on iteration index if rows is not empty otherwise result row is null
+        if ( rows != null && execPerRow && !rows.isEmpty() ) {
+          // This check is for avoiding OutOfBoundException in next statement as iteration <= rows.size() condition is not leaving while loop
+          // after processing the last row. Otherwise if iteration == rows.size() indicates that we processed already the last row and just need to break from the loop
+          if ( iteration != rows.size() ) {
+            resultRow = rows.get( iteration );
+          } else {
+            break;
+          }
         } else {
           resultRow = null;
         }
@@ -790,7 +822,9 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
           } else {
             // Just pass a single row
             List<RowMetaAndData> newList = new ArrayList<RowMetaAndData>();
-            newList.add( resultRow );
+            if ( resultRow != null ) {
+              newList.add( resultRow );
+            }
             sourceRows = newList;
           }
 
@@ -919,6 +953,7 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
           job.setInternalKettleVariables( this );
           job.copyParametersFrom( jobMeta );
           job.setInteractive( parentJob.isInteractive() );
+          job.setGatheringMetrics( parentJob.isGatheringMetrics() );
           if ( job.isInteractive() ) {
             job.getJobEntryListeners().addAll( parentJob.getJobEntryListeners() );
           }
@@ -946,6 +981,9 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
               //
               if ( isPassingAllParameters() ) {
                 String parentValue = parentJob.getParameterValue( parameterNames[idx] );
+                if ( Utils.isEmpty( parentValue ) ) {
+                  parentValue = parentJob.getParameterDefault( parameterNames[idx] );
+                }
                 if ( !Utils.isEmpty( parentValue ) ) {
                   job.setParameterValue( parameterNames[idx], parentValue );
                 }
@@ -959,6 +997,7 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
           job.setSourceRows( sourceRows );
 
           // Don't forget the logging...
+          job.setInitialLogBufferStartLine();
           job.beginProcessing();
 
           // Link the job with the sub-job
@@ -1093,7 +1132,8 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
               FileObject logfile = logChannelFileWriter.getLogFile();
               OutputStream logFileOutputStream = null;
               try {
-                logFileOutputStream = KettleVFS.getOutputStream( logfile, setAppendLogfile );
+                logFileOutputStream = KettleVFS.getInstance( parentJobMeta.getBowl() )
+                  .getOutputStream( logfile, setAppendLogfile );
                 logFileOutputStream.write( logFromCarte.getBytes() );
                 logFileOutputStream.flush();
               } catch ( Exception e ) {
@@ -1193,13 +1233,46 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
     return result;
   }
 
+  private boolean shouldConsiderOldBehaviourForEveryInputRow( ) {
+    boolean showWarnings = calculateExecuteForEveryRowKettleProperty( Const.KETTLE_COMPATIBILITY_SHOW_WARNINGS_EXECUTE_EVERY_INPUT_ROW, Const.COMPATIBILITY_SHOW_WARNINGS_EXECUTE_EVERY_INPUT_ROW );
+    boolean shouldExecuteWithZeroRows = calculateExecuteForEveryRowKettleProperty( Const.KETTLE_COMPATIBILITY_JOB_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT, Const.COMPATIBILITY_JOB_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT );
+
+    if ( showWarnings ) {
+      if ( shouldExecuteWithZeroRows ) {
+        log.logBasic(
+          "WARN Detected \"Execute for every row\" but no rows were detected, applying desired behavior, to execute. In case this is not desired behavior, please read property KETTLE_COMPATIBILITY_JOB_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT." );
+      } else {
+        log.logBasic(
+          "WARN Detected \"Execute for every row\" but no rows were detected, applying default behavior, not to execute. In case this is not desired behavior, please read property KETTLE_COMPATIBILITY_JOB_EXECUTE_FOR_EVERY_ROW_ON_NO_INPUT." );
+      }
+    }
+
+    return shouldExecuteWithZeroRows;
+  }
+
+  private boolean calculateExecuteForEveryRowKettleProperty( String kettleCompatabilityProperty, String compatibilityProperty ) {
+    String kValue = System.getProperty( kettleCompatabilityProperty );
+
+    if ( !Utils.isEmpty( kValue ) ) {
+      return "Y".equalsIgnoreCase( kValue );
+    }
+
+    String cValue = System.getProperty( compatibilityProperty );
+    if ( !Utils.isEmpty( cValue ) ) {
+      log.logError( compatibilityProperty + " property is deprecated, please use " + kettleCompatabilityProperty
+        + " and remove the old one." );
+    }
+
+    return "Y".equalsIgnoreCase( cValue );
+  }
+
   private boolean createParentFolder( String filename ) {
     // Check for parent folder
     FileObject parentfolder = null;
     boolean resultat = true;
     try {
       // Get parent folder
-      parentfolder = KettleVFS.getFileObject( filename, this ).getParent();
+      parentfolder = KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( filename, this ).getParent();
       if ( !parentfolder.exists() ) {
         if ( createParentFolder ) {
           if ( log.isDebug() ) {
@@ -1271,6 +1344,11 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
       throw new KettleException( BaseMessages.getString( PKG, "JobJobError.Recursive", jobMeta.getFilename() ) );
     }
 
+    //If file has VFS reference, just verify the filename
+    if ( isVfsReference( jobMeta.getFilename() ) && !jobMeta.getFilename().equals( parentJobMeta.getFilename() ) ) {
+      return;
+    }
+
     // Different directories: OK
     if ( parentJobMeta.getRepositoryDirectory() == null && jobMeta.getRepositoryDirectory() != null ) {
       return;
@@ -1339,14 +1417,11 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
    */
   @Deprecated
   public JobMeta getJobMeta( Repository rep, VariableSpace space ) throws KettleException {
-    if ( rep != null ) {
-      return getJobMeta( rep, rep.getMetaStore(), space );
-    } else {
-      return getJobMeta( rep, getMetaStore(), space );
-    }
+    parentJobMeta.getMetaFileCache( ); //Get the cache from the parent or create it
+    return getJobMeta( rep, getMetaStore(), space );
   }
 
-  private JobMeta getJobMetaFromRepository( Repository rep, CurrentDirectoryResolver r, String transPath ) throws KettleException {
+  protected JobMeta getJobMetaFromRepository( Repository rep, CurrentDirectoryResolver r, String transPath, VariableSpace tmpSpace ) throws KettleException {
     String realJobName = "";
     String realDirectory = "/";
 
@@ -1361,55 +1436,17 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
     if ( repositoryDirectory == null ) {
       throw new KettleException( "Unable to find repository directory [" + Const.NVL( realDirectory, "" ) + "]" );
     }
-    return rep.loadJob( realJobName, repositoryDirectory, null, null ); // reads
+    JobMeta jobMeta = rep.loadJob( realJobName, repositoryDirectory, null, null ); //reads
+    if ( jobMeta != null ) {
+      jobMeta.initializeVariablesFrom( tmpSpace );
+    }
+    return jobMeta;
   }
 
   public JobMeta getJobMeta( Repository rep, IMetaStore metaStore, VariableSpace space ) throws KettleException {
-    JobMeta jobMeta = null;
     try {
-      CurrentDirectoryResolver r = new CurrentDirectoryResolver();
-      VariableSpace tmpSpace = r.resolveCurrentDirectory( specificationMethod, space, rep, parentJob, getFilename() );
-
-      switch ( specificationMethod ) {
-        case FILENAME:
-          String realFilename = tmpSpace.environmentSubstitute( getFilename() );
-
-          try {
-            jobMeta = new JobMeta( tmpSpace, realFilename, rep, metaStore, null );
-          } catch ( KettleException e ) {
-            // try to load from repository, this job may have been developed locally and later uploaded to the repository
-            jobMeta = getJobMetaFromRepository( rep, r, realFilename );
-          }
-          break;
-        case REPOSITORY_BY_NAME:
-          String realDirectory = tmpSpace.environmentSubstitute( getDirectory() != null ? getDirectory() : "" );
-          String realJobName = tmpSpace.environmentSubstitute( getJobName() );
-
-          String transPath = StringUtil.trimEnd( realDirectory, '/' ) + RepositoryFile.SEPARATOR + StringUtil.trimStart( realJobName, '/' );
-
-          if ( transPath.startsWith( "file://" ) || transPath.startsWith( "zip:file://" ) || transPath.startsWith( "hdfs://" ) ) {
-            if ( !transPath.endsWith( RepositoryObjectType.JOB.getExtension() ) ) {
-              transPath = transPath + RepositoryObjectType.JOB.getExtension();
-            }
-            jobMeta = new JobMeta( tmpSpace, transPath, rep, metaStore, null );
-          } else {
-            jobMeta = getJobMetaFromRepository( rep, r, transPath );
-          }
-          break;
-        case REPOSITORY_BY_REFERENCE:
-          if ( rep != null ) {
-            // Load the last version...
-            //
-            jobMeta = rep.loadJob( jobObjectId, null );
-            break;
-          } else {
-            throw new KettleException(
-              "Could not execute job specified in a repository since we're not connected to one" );
-          }
-        default:
-          throw new KettleException( "The specified object location specification method '"
-            + specificationMethod + "' is not yet supported in this job entry." );
-      }
+      IMetaFileLoader<JobMeta> metaFileLoader = new MetaFileLoaderImpl<>( this, specificationMethod );
+      JobMeta jobMeta = metaFileLoader.getMetaForEntry( parentJobMeta.getBowl(), rep, metaStore, space );
 
       if ( jobMeta != null ) {
         jobMeta.setRepository( rep );
@@ -1471,8 +1508,9 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
    *           in case something goes wrong during the export
    */
   @Override
-  public String exportResources( VariableSpace space, Map<String, ResourceDefinition> definitions,
-    ResourceNamingInterface namingInterface, Repository repository, IMetaStore metaStore ) throws KettleException {
+  public String exportResources( Bowl executionBowl, Bowl globalManagementBowl, VariableSpace space,
+      Map<String, ResourceDefinition> definitions, ResourceNamingInterface namingInterface, Repository repository,
+      IMetaStore metaStore ) throws KettleException {
     // Try to load the transformation from repository or file.
     // Modify this recursively too...
     //
@@ -1488,7 +1526,8 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
     // recursively)
     //
     String proposedNewFilename =
-      jobMeta.exportResources( jobMeta, definitions, namingInterface, repository, metaStore );
+      jobMeta.exportResources( executionBowl, globalManagementBowl, jobMeta, definitions, namingInterface,
+        repository, metaStore );
 
     // To get a relative path to it, we inject
     // ${Internal.Entry.Current.Directory}
@@ -1519,19 +1558,19 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
   public void check( List<CheckResultInterface> remarks, JobMeta jobMeta, VariableSpace space,
     Repository repository, IMetaStore metaStore ) {
     if ( setLogfile ) {
-      JobEntryValidatorUtils.andValidator().validate( this, "logfile", remarks,
+      JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "logfile", remarks,
           AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
     }
 
     if ( null != directory ) {
       // if from repo
-      JobEntryValidatorUtils.andValidator().validate( this, "directory", remarks,
+      JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "directory", remarks,
           AndValidator.putValidators( JobEntryValidatorUtils.notNullValidator() ) );
-      JobEntryValidatorUtils.andValidator().validate( this, "jobName", remarks,
+      JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "jobName", remarks,
           AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
     } else {
       // else from xml file
-      JobEntryValidatorUtils.andValidator().validate( this, "filename", remarks,
+      JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "filename", remarks,
           AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
     }
   }
@@ -1702,7 +1741,8 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
    * @throws KettleException
    */
   @Override
-  public Object loadReferencedObject( int index, Repository rep, IMetaStore metaStore, VariableSpace space ) throws KettleException {
+  public Object loadReferencedObject( Bowl bowl, int index, Repository rep, IMetaStore metaStore, VariableSpace space )
+    throws KettleException {
     return getJobMeta( rep, metaStore, space );
   }
 
@@ -1726,4 +1766,21 @@ public class JobEntryJob extends JobEntryBase implements Cloneable, JobEntryInte
     }
   }
 
+  @Override public void callBeforeLog() {
+    if ( parentJob != null ) {
+      parentJob.callBeforeLog();
+    }
+  }
+
+  @Override
+  public void callAfterLog() {
+    if ( parentJob != null ) {
+      parentJob.callAfterLog();
+    }
+  }
+
+  @Override
+  public JobEntryHelperInterface getJobEntryHelperInterface() {
+    return new JobEntryJobHelper( this );
+  }
 }

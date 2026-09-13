@@ -1,31 +1,28 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.plugins;
 
+import org.pentaho.di.core.exception.KettleException;
+
+import java.io.File;
+import java.io.FileInputStream;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 
 /**
  * This interface describes the plugin itself, the IDs it listens too, what libraries (jar files) it uses, the names,
@@ -186,4 +183,34 @@ public interface PluginInterface {
       Optional.ofNullable( fragment.getClassLoaderGroup() ).ifPresent( this::setClassLoaderGroup );
     }
   }
+
+  /**
+   * @return Plugin properties
+   * Returns a Properties object containing any properties in a plugin.properties file
+   * in the plugin directopry. The method will return null if the plugin.properties
+   * does not exist.
+   **/
+  default Properties getPluginProperties() throws KettleException {
+    String pluginPropsFilePath = getPluginDirectory().getPath() + "/plugin.properties";
+    File pluginPropsFile = new File( pluginPropsFilePath );
+    if ( !pluginPropsFile.exists() ) {
+      return null;
+    }
+    Properties pluginProps = new Properties();
+    try {
+      pluginProps.load( new FileInputStream( pluginPropsFile ) );
+    } catch ( Exception e ) {
+      throw new KettleException( "Plugin's plugin.properties file could not be read.", e );
+    }
+    return pluginProps;
+  }
+  
+  /**
+   * @return a boolean that indicates if this plugin id is deprecated. The getSuggestion()
+   * should be used when deprecated to indicate an id of a replacement plugin id.
+   */
+  default boolean isDeprecated() {
+    return false;
+  }
+  
 }

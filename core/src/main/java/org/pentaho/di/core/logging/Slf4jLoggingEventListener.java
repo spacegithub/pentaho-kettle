@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.logging;
 
@@ -28,15 +20,21 @@ import java.util.function.Function;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
+import org.pentaho.di.repository.RepositoryObjectType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.pentaho.di.core.Const;
+import org.pentaho.di.core.util.EnvUtil;
+
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.commons.lang3.StringUtils.isNotBlank;
 import static org.pentaho.di.core.logging.LoggingObjectType.DATABASE;
 import static org.pentaho.di.core.logging.LoggingObjectType.TRANS;
 import static org.pentaho.di.core.logging.LoggingObjectType.STEP;
 import static org.pentaho.di.core.logging.LoggingObjectType.JOB;
 import static org.pentaho.di.core.logging.LoggingObjectType.JOBENTRY;
+import static org.pentaho.di.core.logging.LoggingObjectType.GENERAL;
 
 public class Slf4jLoggingEventListener implements KettleLoggingEventListener {
 
@@ -63,7 +61,7 @@ public class Slf4jLoggingEventListener implements KettleLoggingEventListener {
       LogMessage message = (LogMessage) messageObject;
       LoggingObjectInterface loggingObject = logObjProvider.apply( message.getLogChannelId() );
 
-      if ( loggingObject == null ) {
+      if ( loggingObject == null || ( loggingObject.getObjectType() == GENERAL && "Y".equals( EnvUtil.getSystemProperty( Const.KETTLE_LOG_GENERAL_OBJECTS_TO_DI_LOGGER ) ) ) ) {
         // this can happen if logObject has been discarded while log events are still in flight.
         logToLogger( diLogger, message.getLevel(),
           message.getSubject() + " " + message.getMessage() );
@@ -111,18 +109,35 @@ public class Slf4jLoggingEventListener implements KettleLoggingEventListener {
     while ( loggingObject != null ) {
       if ( loggingObject.getObjectType() == TRANS || loggingObject.getObjectType() == JOB ) {
         RepositoryDirectoryInterface rd = loggingObject.getRepositoryDirectory();
-        String filename = loggingObject.getFilename();
+        String name;
+        if ( isNotBlank( loggingObject.getFilename() ) ) {
+          name = loggingObject.getFilename();
+        } else {
+          name = loggingObject.getObjectType() == TRANS
+            ? ( loggingObject.getObjectName() + RepositoryObjectType.TRANSFORMATION.getExtension() )
+            : ( loggingObject.getObjectName() + RepositoryObjectType.JOB.getExtension() );
+        }
+
         if ( rd != null ) {
           String path = rd.getPath();
           if ( path.equals( SEPARATOR ) ) {
-            if ( filename != null && filename.length() > 0 ) {
-              subjects.add( filename );
+            if ( name != null && name.length() > 0 ) {
+              subjects.add( name );
             }
           } else {
-            subjects.add( path + SEPARATOR + filename );
+            // If the filename already includes the repository directory path, don't prepend it again.
+            // We only treat it as 'already includes' if the filename starts with the same directory boundary.
+            final boolean startsWithRepoPath = isNotBlank( name )
+              && ( name.startsWith( path + SEPARATOR ) || name.equals( path ) );
+
+            if ( startsWithRepoPath ) {
+              subjects.add( name );
+            } else {
+              subjects.add( path + SEPARATOR + name );
+            }
           }
-        } else if ( filename != null && filename.length() > 0 ) {
-          subjects.add( filename );
+        } else if ( name != null && name.length() > 0 ) {
+          subjects.add( name );
         }
       }
       loggingObject = loggingObject.getParent();

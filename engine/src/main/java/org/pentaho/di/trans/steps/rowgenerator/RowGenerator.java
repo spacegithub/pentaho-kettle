@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.rowgenerator;
 
@@ -90,10 +82,10 @@ public class RowGenerator extends BaseStep implements StepInterface {
     }
 
     for ( int i = 0; i < meta.getFieldName().length; i++ ) {
-      int valtype = ValueMetaFactory.getIdForValueMeta( meta.getFieldType()[i] );
       if ( meta.getFieldName()[i] != null ) {
-        ValueMetaInterface valueMeta = ValueMetaFactory.createValueMeta( meta.getFieldName()[i], valtype ); // build a
-                                                                                                            // value!
+        int valType = ValueMetaFactory.getIdForValueMeta( meta.getFieldType()[ i ] );
+        ValueMetaInterface valueMeta = ValueMetaFactory.createValueMeta( meta.getFieldName()[i], valType );
+
         valueMeta.setLength( meta.getFieldLength()[i] );
         valueMeta.setPrecision( meta.getFieldPrecision()[i] );
         valueMeta.setConversionMask( meta.getFieldFormat()[i] );
@@ -102,8 +94,7 @@ public class RowGenerator extends BaseStep implements StepInterface {
         valueMeta.setDecimalSymbol( meta.getDecimal()[i] );
         valueMeta.setOrigin( origin );
 
-        ValueMetaInterface stringMeta =
-          ValueMetaFactory.cloneValueMeta( valueMeta, ValueMetaInterface.TYPE_STRING );
+        ValueMetaInterface stringMeta = ValueMetaFactory.cloneValueMeta( valueMeta, ValueMetaInterface.TYPE_STRING );
 
         if ( meta.isSetEmptyString() != null && meta.isSetEmptyString()[i] ) {
           // Set empty string
@@ -127,9 +118,11 @@ public class RowGenerator extends BaseStep implements StepInterface {
             try {
               rowData[index] = valueMeta.convertData( stringMeta, stringValue );
             } catch ( KettleValueException e ) {
+              String message;
+
               switch ( valueMeta.getType() ) {
                 case ValueMetaInterface.TYPE_NUMBER:
-                  String message =
+                  message =
                     BaseMessages.getString( PKG, "RowGenerator.BuildRow.Error.Parsing.Number", valueMeta
                       .getName(), stringValue, e.toString() );
                   remarks.add( new CheckResult( CheckResultInterface.TYPE_RESULT_ERROR, message, null ) );
@@ -171,7 +164,6 @@ public class RowGenerator extends BaseStep implements StepInterface {
                       .getName(), stringValue );
                   remarks.add( new CheckResult( CheckResultInterface.TYPE_RESULT_ERROR, message, null ) );
                   break;
-
               }
             }
           }
@@ -188,7 +180,7 @@ public class RowGenerator extends BaseStep implements StepInterface {
   }
 
   @Override
-  public synchronized boolean processRow( StepMetaInterface smi, StepDataInterface sdi ) throws KettleException {
+  public boolean processRow( StepMetaInterface smi, StepDataInterface sdi ) throws KettleException {
     meta = (RowGeneratorMeta) smi;
     data = (RowGeneratorData) sdi;
 
@@ -263,7 +255,7 @@ public class RowGenerator extends BaseStep implements StepInterface {
         }
 
         // Create a row (constants) with all the values in it...
-        List<CheckResultInterface> remarks = new ArrayList<CheckResultInterface>(); // stores the errors...
+        List<CheckResultInterface> remarks = new ArrayList<>(); // stores the errors...
         RowMetaAndData outputRow = buildRow( meta, remarks, getStepname() );
         if ( !remarks.isEmpty() ) {
           for ( int i = 0; i < remarks.size(); i++ ) {

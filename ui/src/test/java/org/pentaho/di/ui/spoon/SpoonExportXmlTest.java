@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.spoon;
 
@@ -38,12 +30,15 @@ import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.trans.HasDatabasesInterface;
 import org.pentaho.di.trans.TransMeta;
+import org.pentaho.di.ui.core.FileDialogOperation;
+import org.pentaho.di.ui.core.events.dialog.FilterType;
 
 import static junit.framework.Assert.assertEquals;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 
 public class SpoonExportXmlTest {
   private VariableSpace mockedVariableSpace;
@@ -76,9 +71,9 @@ public class SpoonExportXmlTest {
 
     when( spoon.getActiveTransformation() ).thenReturn( transMeta );
     when( spoon.saveXMLFile( any( TransMeta.class ), anyBoolean() ) ).thenReturn( true );
-    when( spoon.saveXMLFile( anyBoolean() ) ).thenCallRealMethod();
+    when( spoon.saveXMLFile( anyBoolean(), anyString(), anyString() ) ).thenCallRealMethod();
 
-    spoon.saveXMLFile( true );
+    spoon.saveXMLFile( true, FilterType.XML.toString(), FileDialogOperation.EXPORT);
 
     tablesCommonValuesEqual( originTransLogTable, transMeta.getTransLogTable() );
     assertEquals( originTransLogTable.getLogInterval(), transMeta.getTransLogTable().getLogInterval() );
@@ -106,8 +101,11 @@ public class SpoonExportXmlTest {
     when( spoon.getActiveTransformation() ).thenReturn( null );
     when( spoon.getActiveJob() ).thenReturn( jobMeta );
     when( spoon.saveXMLFile( any( JobMeta.class ), anyBoolean() ) ).thenReturn( true );
-    when( spoon.saveXMLFile( anyBoolean() ) ).thenCallRealMethod();
-    spoon.saveXMLFile( true );
+    when( spoon.saveXMLFile( anyBoolean(), anyString(), anyString() ) ).thenCallRealMethod();
+
+    spoon.saveXMLFile( true, FilterType.XML.toString(), FileDialogOperation.EXPORT);
+
+
 
     tablesCommonValuesEqual( originJobLogTable, jobMeta.getJobLogTable() );
     assertEquals( originJobLogTable.getLogInterval(), jobMeta.getJobLogTable().getLogInterval() );

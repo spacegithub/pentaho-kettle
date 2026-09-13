@@ -1,36 +1,34 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.base;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
 import org.pentaho.di.cluster.SlaveServer;
+import org.pentaho.di.cluster.SlaveServerManagementInterface;
 import org.pentaho.di.core.AttributesInterface;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.EngineMetaInterface;
 import org.pentaho.di.core.NotePadMeta;
 import org.pentaho.di.core.Props;
 import org.pentaho.di.core.attributes.metastore.EmbeddedMetaStore;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.bowl.DefaultBowl;
+import org.pentaho.di.core.bowl.HasBowlInterface;
 import org.pentaho.di.core.changed.ChangedFlag;
 import org.pentaho.di.core.changed.ChangedFlagInterface;
 import org.pentaho.di.core.changed.PDIObserver;
@@ -70,8 +68,18 @@ import org.pentaho.di.repository.ObjectRevision;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.repository.RepositoryDirectory;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
+import org.pentaho.di.shared.ChangeTrackingDatabaseManager;
+import org.pentaho.di.shared.ChangeTrackingSlaveServerManager;
+import org.pentaho.di.shared.DatabaseManagementInterface;
+import org.pentaho.di.shared.DelegatingSharedObjectsIO;
+import org.pentaho.di.shared.MemorySharedObjectsIO;
+import org.pentaho.di.shared.PassthroughDbConnectionManager;
+import org.pentaho.di.shared.PassthroughSlaveServerManager;
 import org.pentaho.di.shared.SharedObjectInterface;
 import org.pentaho.di.shared.SharedObjects;
+import org.pentaho.di.shared.SharedObjectsIO;
+import org.pentaho.di.shared.VariableSharingDatabaseManager;
+import org.pentaho.di.shared.VariableSharingSlaveServerManager;
 import org.pentaho.di.trans.HasDatabasesInterface;
 import org.pentaho.di.trans.HasSlaveServersInterface;
 import org.pentaho.di.trans.steps.named.cluster.NamedClusterEmbedManager;
@@ -85,16 +93,17 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterface, HasDatabasesInterface, VariableSpace,
   EngineMetaInterface, NamedParams, HasSlaveServersInterface, AttributesInterface, HasRepositoryInterface,
-  LoggingObjectInterface {
+  HasBowlInterface, LoggingObjectInterface {
 
   /**
    * Constant = 1
@@ -132,12 +141,12 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
 
   protected RepositoryDirectoryInterface directory;
 
+  protected Bowl bowl = DefaultBowl.getInstance();
+
   /**
    * The repository to reference in the one-off case that it is needed
    */
   protected Repository repository;
-
-  protected List<DatabaseMeta> databases;
 
   protected Set<NameChangedListener> nameChangedListeners = Collections.newSetFromMap( new ConcurrentHashMap<NameChangedListener, Boolean>() );
 
@@ -147,13 +156,11 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
 
   protected Set<CurrentDirectoryChangedListener> currentDirectoryChangedListeners = Collections.newSetFromMap( new ConcurrentHashMap<CurrentDirectoryChangedListener, Boolean>() );
 
-  protected List<SlaveServer> slaveServers;
-
   protected List<NotePadMeta> notes;
 
   protected ChannelLogTable channelLogTable;
 
-  protected boolean changedNotes, changedDatabases;
+  protected boolean changedNotes;
 
   protected List<TransAction> undo;
 
@@ -180,7 +187,19 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
   @VisibleForTesting
   protected NamedClusterEmbedManager namedClusterEmbedManager;
 
-  protected String embeddedMetastoreProviderKey;
+  @SuppressWarnings( "java:S4738" )  // using guava for memoize
+  // memoized, load-once-on-demand supplier for the embedded provider key.
+  private Supplier<String> embeddedMetastoreProvKeySupplier = Suppliers.memoize( this::getEmbeddedMetastoreKey );
+
+  // This is used as default directory for new jobs/transformation while saving the file
+  private String defaultSaveDirectory;
+
+  private String getEmbeddedMetastoreKey() {
+    if ( getMetastoreLocatorOsgi() != null ) {
+      return getMetastoreLocatorOsgi().setEmbeddedMetastore( getEmbeddedMetaStore() );
+    }
+    return null;
+  }
 
   /**
    * If this is null, we load from the default shared objects file : $KETTLE_HOME/.kettle/shared.xml
@@ -205,6 +224,9 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
 
   private Boolean versioningEnabled;
 
+  //Caches JobMeta and TransMeta that were previously loaded during run.
+  private IMetaFileCache metaFileCache;
+
   public boolean isShowDialog() {
     return showDialog;
   }
@@ -221,22 +243,43 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
     this.alwaysShowRunOptions = alwaysShowRunOptions;
   }
 
-  /**
-   * The set of names of databases available only for this meta. The list is needed to distinguish connections when we
-   * load/save the meta in JCR repository.
-   * <p/>
-   * Should be {@code null} if we use old meta
-   *
-   * @see <a href="http://jira.pentaho.com/browse/PPP-3405">PPP-3405</a>,
-   * <a href="http://jira.pentaho.com/browse/PPP-3413">PPP-3413</a>
-   **/
-  protected Set<String> privateDatabases;
+  protected MemorySharedObjectsIO localSharedObjects = new MemorySharedObjectsIO();
+  // important, these need to be updated if the bowl is changed.
+  protected SharedObjectsIO combinedSharedObjects =
+      new DelegatingSharedObjectsIO( bowl.getSharedObjectsIO(), localSharedObjects );
+  protected DatabaseManagementInterface readDbManager = new VariableSharingDatabaseManager( this, 
+      new PassthroughDbConnectionManager( combinedSharedObjects ) );
 
-  /*
-   * (non-Javadoc)
-   *
-   * @see org.pentaho.di.repository.RepositoryElementInterface#getObjectId()
-   */
+  protected SlaveServerManagementInterface readSlaveServerManager = new VariableSharingSlaveServerManager( this, 
+      new ChangeTrackingSlaveServerManager( new PassthroughSlaveServerManager( combinedSharedObjects ) ) );
+
+  protected ChangeTrackingDatabaseManager localDbMgr =
+    new ChangeTrackingDatabaseManager( new PassthroughDbConnectionManager( localSharedObjects ) );
+  protected SlaveServerManagementInterface localSlaveServerMgr = 
+    new ChangeTrackingSlaveServerManager( new PassthroughSlaveServerManager( localSharedObjects ) );
+
+
+  protected void initializeSharedObjects() {
+    // NOTE: this has to assign new objects, not just clear existing ones, because it is used in clone(), and
+    // updating the original objects will update the source of the clone.
+    localSharedObjects.assertUnlocked();
+    localSharedObjects = new MemorySharedObjectsIO();
+    initializeNonLocalSharedObjects();
+  }
+
+  protected void initializeNonLocalSharedObjects() {
+    combinedSharedObjects =
+      new DelegatingSharedObjectsIO( bowl.getSharedObjectsIO(), localSharedObjects );
+
+    readDbManager = new VariableSharingDatabaseManager( this, 
+      new PassthroughDbConnectionManager( combinedSharedObjects ) );
+    localDbMgr = new ChangeTrackingDatabaseManager( new PassthroughDbConnectionManager( localSharedObjects ) );
+
+    readSlaveServerManager = new VariableSharingSlaveServerManager( this,
+      new PassthroughSlaveServerManager( combinedSharedObjects ) );
+    localSlaveServerMgr = new ChangeTrackingSlaveServerManager( new PassthroughSlaveServerManager( localSharedObjects ) );
+  }
+
   @Override
   public ObjectId getObjectId() {
     return objectId;
@@ -386,6 +429,26 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
   }
 
   /**
+   * Retrieves the Bowl for the execution context. This Bowl should not be used for write operations.
+   *
+   * @return Bowl The Bowl that should be used during execution.
+   */
+  public Bowl getBowl() {
+    return bowl;
+  }
+
+  /**
+   * Set the Bowl for the execution context. This Bowl should not be used for write operations.
+   *
+   */
+  public void setBowl( Bowl bowl ) {
+    this.bowl = Objects.requireNonNull( bowl );
+    initializeNonLocalSharedObjects();
+    // now that the bowl has changed, make sure we have up-to-date DatabaseMetas.
+    allDatabasesUpdated();
+  }
+
+  /**
    * Gets the repository.
    *
    * @return the repository
@@ -402,7 +465,21 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public void setRepository( Repository repository ) {
-    this.repository = repository;
+    if ( Objects.equals( this.repository, repository ) ) {
+      // covers both null
+      return;
+    }
+    if ( this.repository == null || repository == null || !Objects.equals( this.repository.getName(), repository.getName() ) ) {
+      // In debug, the existing this.repository is a PurRepository, but the incoming repository is a
+      // Proxy, probably caused by the xul call that eventually calls Spoon.saveToFile. Have to compare names instead
+      // of just references
+      this.repository = repository;
+      if ( repository != null ) {
+        setBowl( repository.getBowl() );
+      } else {
+        setBowl( DefaultBowl.getInstance() );
+      }
+    }
   }
 
   /**
@@ -426,6 +503,14 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
   protected abstract void setInternalFilenameKettleVariables( VariableSpace var );
 
   /**
+   * Return a list of the names of all the variables used by this meta or its contents
+   *
+   *
+   * @return List&lt;String&gt; the names of used variables
+   */
+  public abstract List<String> getUsedVariables();
+
+  /**
    * Find a database connection by it's name
    *
    * @param name The database name to look for
@@ -433,11 +518,19 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public DatabaseMeta findDatabase( String name ) {
-    for ( int i = 0; i < nrDatabases(); i++ ) {
-      DatabaseMeta ci = getDatabase( i );
-      if ( ( ci != null ) && ( ci.getName().equalsIgnoreCase( name ) )
-        || ( ci.getDisplayName().equalsIgnoreCase( name ) ) ) {
-        return ci;
+    try {
+      List<DatabaseMeta> databases = readDbManager.getAll();
+      return findMatchingDb( databases, name );
+    } catch ( KettleException ex ) {
+      return null;
+    }
+  }
+
+  protected DatabaseMeta findMatchingDb( List<DatabaseMeta> databases, String name ) {
+    for ( DatabaseMeta db : databases) {
+      if ( ( db != null ) && ( db.getName().equalsIgnoreCase( name ) )
+           || ( db.getDisplayName().equalsIgnoreCase( name ) ) ) {
+        return db;
       }
     }
     return null;
@@ -450,7 +543,11 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public int nrDatabases() {
-    return ( databases == null ? 0 : databases.size() );
+    try {
+      return readDbManager.getAll().size();
+    } catch ( KettleException ex ) {
+      return 0;
+    }
   }
 
   /*
@@ -460,25 +557,34 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public DatabaseMeta getDatabase( int i ) {
-    return databases.get( i );
+    return getDatabases().get( i );
   }
+
+  public abstract Set<String> getUsedDatabaseConnectionNames();
 
   public void importFromMetaStore() throws MetaStoreException, KettlePluginException {
     // Read the databases...
     //
-    if ( metaStore != null ) {
-      IMetaStoreElementType databaseType =
-        metaStore.getElementTypeByName(
-          PentahoDefaults.NAMESPACE, PentahoDefaults.DATABASE_CONNECTION_ELEMENT_TYPE_NAME );
-      if ( databaseType != null ) {
-        List<IMetaStoreElement> databaseElements = metaStore.getElements( PentahoDefaults.NAMESPACE, databaseType );
-        for ( IMetaStoreElement databaseElement : databaseElements ) {
-          addDatabase( DatabaseMetaStoreUtil.loadDatabaseMetaFromDatabaseElement(
-            metaStore, databaseElement ), false );
+    try {
+      if ( metaStore != null ) {
+        IMetaStoreElementType databaseType =
+          metaStore.getElementTypeByName(
+            PentahoDefaults.NAMESPACE, PentahoDefaults.DATABASE_CONNECTION_ELEMENT_TYPE_NAME );
+        if ( databaseType != null ) {
+          List<IMetaStoreElement> databaseElements = metaStore.getElements( PentahoDefaults.NAMESPACE, databaseType );
+          for ( IMetaStoreElement databaseElement : databaseElements ) {
+            DatabaseMeta imported = DatabaseMetaStoreUtil.loadDatabaseMetaFromDatabaseElement(
+              metaStore, databaseElement );
+            if ( localDbMgr.get( imported.getName() ) == null ) {
+              localDbMgr.add( imported );
+            }
+          }
         }
-      }
 
-      // TODO: do the same for slaves, clusters, partition schemas
+        // TODO: do the same for slaves, clusters, partition schemas
+      }
+    } catch ( KettleException ex ) {
+      throw new KettlePluginException( ex );
     }
   }
 
@@ -624,6 +730,16 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
     }
   }
 
+  /*
+   * Remove all listeners; to be used during imports and other times when the directory property is changed but
+   * we do not want to trigger the steps to update.
+   */
+  public void clearCurrentDirectoryChangedListeners() {
+    if ( currentDirectoryChangedListeners != null ) {
+      currentDirectoryChangedListeners.clear();
+    }
+  }
+
   /**
    * Notify listeners of a change in current directory.
    */
@@ -641,12 +757,10 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    * @param slaveServer The slave server to be added.
    */
   public void addOrReplaceSlaveServer( SlaveServer slaveServer ) {
-    int index = slaveServers.indexOf( slaveServer );
-    if ( index < 0 ) {
-      slaveServers.add( slaveServer );
-    } else {
-      SlaveServer previous = slaveServers.get( index );
-      previous.replaceMeta( slaveServer );
+    try {
+      localSlaveServerMgr.add( slaveServer );
+    } catch ( KettleException exception ) {
+      LogChannel.GENERAL.logBasic( exception.getMessage(), exception );
     }
     setChanged();
   }
@@ -658,7 +772,14 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public List<SlaveServer> getSlaveServers() {
-    return slaveServers;
+    try {
+      List<SlaveServer> slaveServers = readSlaveServerManager.getAll();
+      Collections.sort( slaveServers, SlaveServer.COMPARATOR );
+      return slaveServers;
+    } catch ( KettleException exception ) {
+      LogChannel.GENERAL.logError( exception.getMessage(), exception );
+      return null;
+    }
   }
 
   /**
@@ -667,7 +788,14 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    * @param slaveServers the slaveServers to set
    */
   public void setSlaveServers( List<SlaveServer> slaveServers ) {
-    this.slaveServers = slaveServers;
+    try {
+      localSlaveServerMgr.clear();
+      for ( SlaveServer slaveServer : slaveServers ) {
+        localSlaveServerMgr.add( slaveServer );
+      }
+    } catch ( KettleException exception ) {
+      LogChannel.GENERAL.logError( exception.getMessage(), exception );
+    }
   }
 
   /**
@@ -677,7 +805,17 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    * @return the slave server or null if we couldn't spot an approriate entry.
    */
   public SlaveServer findSlaveServer( String serverString ) {
-    return SlaveServer.findSlaveServer( slaveServers, serverString );
+    try {
+      List<SlaveServer> slaveServers = readSlaveServerManager.getAll();
+      for ( SlaveServer slaveServer : slaveServers ) {
+        if ( ( slaveServer != null ) && ( slaveServer.getName() != null && slaveServer.getName().equalsIgnoreCase( serverString ) ) ) {
+          return slaveServer;
+        }
+      }
+      return null;
+    } catch ( KettleException ex ) {
+      return null;
+    }
   }
 
   /**
@@ -686,7 +824,13 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    * @return An array list slave server names
    */
   public String[] getSlaveServerNames() {
-    return SlaveServer.getSlaveServerNames( slaveServers );
+    try {
+      List<SlaveServer> slaveServers = readSlaveServerManager.getAll();
+      Collections.sort( slaveServers, SlaveServer.COMPARATOR );
+      return slaveServers.stream().map( SlaveServer::getName ).toArray( String[]::new );
+    } catch ( KettleException ex ) {
+      return null;
+    }
   }
 
   /*
@@ -1103,19 +1247,7 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public void addOrReplaceDatabase( DatabaseMeta databaseMeta ) {
-    addDatabase( databaseMeta, true );
-  }
-
-  protected void addDatabase( DatabaseMeta databaseMeta, boolean replace ) {
-    int index = databases.indexOf( databaseMeta );
-    if ( index < 0 ) {
-      addDatabase( databaseMeta );
-    } else if ( replace ) {
-      DatabaseMeta previous = getDatabase( index );
-      previous.replaceMeta( databaseMeta );
-      previous.setShared( databaseMeta.isShared() );
-    }
-    changedDatabases = true;
+    addDatabase( databaseMeta );
   }
 
   /*
@@ -1125,9 +1257,10 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public void addDatabase( DatabaseMeta ci ) {
-    databases.add( ci );
-    Collections.sort( databases, DatabaseMeta.comparator );
-    changedDatabases = true;
+    try {
+      localDbMgr.add( ci );
+    } catch ( KettleException ex ) {
+    }
   }
 
   /*
@@ -1137,8 +1270,7 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public void addDatabase( int p, DatabaseMeta ci ) {
-    databases.add( p, ci );
-    changedDatabases = true;
+    addDatabase( ci );
   }
 
   /**
@@ -1148,8 +1280,62 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public List<DatabaseMeta> getDatabases() {
-    return databases;
+    try {
+      List<DatabaseMeta> databases = readDbManager.getAll();
+      Collections.sort( databases, DatabaseMeta.comparator );
+      return databases;
+    } catch ( KettleException ex ) {
+      return Collections.emptyList();
+    }
   }
+
+  /**
+   * Propagate a change to a database to all parts of the transformation or job. Update steps or entries that have their
+   * own copies of the database.
+   * <p/>
+   * This method should be used for any Create/Delete/Update operation at any level.
+   *
+   * @param name Name of the Database connection that has changed.
+   */
+  public void databaseUpdated( String name ) {
+    // NOTE that this does not need to update "changedDatabases" because that write would already have gone through
+    // localDbMgr.
+    try {
+      Optional<DatabaseMeta> newDb = Optional.ofNullable( readDbManager.get( name ) );
+      databasesUpdated( name, newDb );
+    } catch ( KettleException ex ) {
+    }
+  }
+
+  /**
+   * use the latest version of all databases used in the meta. Should be the equivalent of calling databaseUpdated( name
+   * ) with every name returned from getUsedDatabaseConnectionNames(), but may be more efficient.
+   *
+   */
+  public abstract void allDatabasesUpdated();
+
+  /**
+   * Propagate a change to a database to all parts of the transformation or job. Update steps or entries that have their
+   * own copies of the database.
+   * <p/>
+   *
+   *
+   * @param name The name of the updated database
+   * @param newDatabaseMeta the new DatabaseMeta, which could be empty if the database was deleted.
+   */
+  protected abstract void databasesUpdated( String name, Optional<DatabaseMeta> newDatabaseMeta ) throws KettleException;
+
+  // helper method for databasesUpdated()
+  protected void updateFields( DatabaseMeta existing, Optional<DatabaseMeta> newDb ) {
+    newDb.ifPresentOrElse( existing::replaceMeta,
+      // remember the name.
+      () -> {
+        DatabaseMeta newMeta = new DatabaseMeta();
+        newMeta.setName( existing.getName() );
+        existing.replaceMeta( newMeta );
+      } );
+  }
+
 
   /**
    * Gets the database names.
@@ -1157,11 +1343,13 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    * @return the database names
    */
   public String[] getDatabaseNames() {
-    String[] names = new String[databases.size()];
-    for ( int i = 0; i < names.length; i++ ) {
-      names[i] = databases.get( i ).getName();
+    try {
+      List<DatabaseMeta> databases = readDbManager.getAll();
+      Collections.sort( databases, DatabaseMeta.comparator );
+      return databases.stream().map( DatabaseMeta::getName ).toArray( String[]::new );
+    } catch ( KettleException ex ) {
+      return null;
     }
-    return names;
   }
 
   /*
@@ -1171,6 +1359,7 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public int indexOfDatabase( DatabaseMeta di ) {
+    List<DatabaseMeta> databases = getDatabases();
     return databases.indexOf( di );
   }
 
@@ -1181,8 +1370,13 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public void setDatabases( List<DatabaseMeta> databases ) {
-    Collections.sort( databases, DatabaseMeta.comparator );
-    this.databases = databases;
+    try {
+      localDbMgr.clear();
+      for ( DatabaseMeta db : databases ) {
+        localDbMgr.add( db );
+      }
+    } catch ( KettleException ex ) {
+    }
   }
 
   /*
@@ -1192,16 +1386,10 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public boolean haveConnectionsChanged() {
-    if ( changedDatabases ) {
+    if ( localDbMgr.hasChanged() ) {
       return true;
     }
 
-    for ( int i = 0; i < nrDatabases(); i++ ) {
-      DatabaseMeta ci = getDatabase( i );
-      if ( ci.hasChanged() ) {
-        return true;
-      }
-    }
     return false;
   }
 
@@ -1212,22 +1400,21 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
    */
   @Override
   public void removeDatabase( int i ) {
-    if ( i < 0 || i >= databases.size() ) {
-      return;
+    // note: getDatabase is operating on all databases, but remove is only working on Local.
+    try {
+      DatabaseMeta db = getDatabase( i );
+      if ( db != null ) {
+        localDbMgr.remove( db );
+      }
+    } catch ( KettleException ex ) {
     }
-    databases.remove( i );
-    changedDatabases = true;
   }
 
   /**
    * Clears the flags for whether the transformation's databases have changed.
    */
   public void clearChangedDatabases() {
-    changedDatabases = false;
-
-    for ( int i = 0; i < nrDatabases(); i++ ) {
-      getDatabase( i ).setChanged( false );
-    }
+    localDbMgr.clearChanged();
   }
 
   /**
@@ -1508,7 +1695,7 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
       }
 
       if ( Utils.isEmpty( value ) ) {
-        setVariable( key, defValue );
+        setVariable( key, Const.NVL( defValue, "" ) );
       } else {
         setVariable( key, value );
       }
@@ -1600,30 +1787,17 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
     SharedObjects sharedObjects = new SharedObjects( soFile );
     Map<?, SharedObjectInterface> objectsMap = sharedObjects.getObjectsMap();
 
-    // First read the databases...
-    // We read databases & slaves first because there might be dependencies
-    // that need to be resolved.
-    //
-    for ( SharedObjectInterface object : objectsMap.values() ) {
+    // This is basically only used for Steps now, and since those can no longer be shared, it's really just for
+    // backwards compatibility. All other shared object types are handled through the DefaultBowl instead.
+    for ( SharedObjectInterface<?> object : objectsMap.values() ) {
       loadSharedObject( object );
     }
 
     return sharedObjects;
   }
 
-  protected boolean loadSharedObject( SharedObjectInterface object ) {
-    if ( object instanceof DatabaseMeta ) {
-      DatabaseMeta databaseMeta = (DatabaseMeta) object;
-      databaseMeta.shareVariablesWith( this );
-      addOrReplaceDatabase( databaseMeta );
-    } else if ( object instanceof SlaveServer ) {
-      SlaveServer slaveServer = (SlaveServer) object;
-      slaveServer.shareVariablesWith( this );
-      addOrReplaceSlaveServer( slaveServer );
-    } else {
-      return false;
-    }
-    return true;
+  public boolean loadSharedObject( SharedObjectInterface object ) {
+    return false;
   }
 
   /**
@@ -1717,8 +1891,7 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
     setName( null );
     setFilename( null );
     notes = new ArrayList<NotePadMeta>();
-    databases = new ArrayList<DatabaseMeta>();
-    slaveServers = new ArrayList<SlaveServer>();
+    localSharedObjects.clear();
     channelLogTable = ChannelLogTable.getDefault( this, this );
     attributesMap = new HashMap<String, Map<String, String>>();
     max_undo = Const.MAX_UNDO;
@@ -1901,50 +2074,24 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
     return false;
   }
 
+
   /**
    * Returns the set of databases available only for this meta or <b>null</b> if it was not initialized.
-   * Note, that the internal collection is returned with no protection wrapper!
    *
    * @return <b>nonSharableDatabases</b>
    */
   public Set<String> getPrivateDatabases() {
-    return privateDatabases;
-  }
-
-  /**
-   * Sets private databases' names
-   *
-   * @param privateDatabases - The list of databases available only for this meta
-   */
-  public void setPrivateDatabases( Set<String> privateDatabases ) {
-    this.privateDatabases = privateDatabases;
-  }
-
-  @Override public void saveSharedObjects() throws KettleException {
     try {
-      // Load all the shared objects...
-      String soFile = environmentSubstitute( sharedObjectsFile );
-      SharedObjects sharedObjects = new SharedObjects( soFile );
-      // in-memory shared objects are supposed to be in sync, discard those on file to allow edit/delete
-      sharedObjects.setObjectsMap( new Hashtable<>() );
-
-      for ( SharedObjectInterface sharedObject : getAllSharedObjects() ) {
-        if ( sharedObject.isShared() ) {
-          sharedObjects.storeObject( sharedObject );
-        }
-      }
-
-      sharedObjects.saveToFile();
-    } catch ( Exception e ) {
-      throw new KettleException( "Unable to save shared ojects", e );
+      List<DatabaseMeta> databases = localDbMgr.getAll();
+      return databases.stream().map( DatabaseMeta::getName ).collect( Collectors.toSet() );
+    } catch ( KettleException ex ) {
+      return null;
     }
   }
 
-  protected List<SharedObjectInterface> getAllSharedObjects() {
-    List<SharedObjectInterface> shared = new ArrayList<>();
-    shared.addAll( databases );
-    shared.addAll( slaveServers );
-    return shared;
+  @Override
+  public void saveSharedObjects() throws KettleException {
+    // AbstractMeta is no longer responsible for storing shared objects. so this is a No-Op.
   }
 
   /**
@@ -2051,19 +2198,33 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
   }
 
   public void disposeEmbeddedMetastoreProvider() {
-    KettleVFS.closeEmbeddedFileSystem( embeddedMetastoreProviderKey );
-    if ( embeddedMetastoreProviderKey != null ) {
+    if ( embeddedMetastoreNoLongerUsed() && getEmbeddedMetastoreKey() != null ) {
+      KettleVFS.closeEmbeddedFileSystem( getEmbeddedMetastoreKey() );
       //Dispose of embedded metastore for this run
-      getMetastoreLocatorOsgi().disposeMetastoreProvider( embeddedMetastoreProviderKey );
+      getMetastoreLocatorOsgi().disposeMetastoreProvider( getEmbeddedMetastoreKey() );
     }
   }
 
-  public String getEmbeddedMetastoreProviderKey() {
-    return embeddedMetastoreProviderKey;
+  /**
+   * Check whether the embeddedMetastore is used anywhere else up the Trans / Job hierarchy.
+   * It's possible for a Parent JobMeta to be shared by multiple child job copies, for example,
+   * and we want to make sure it's only closed when the parent is done.
+   */
+  private boolean embeddedMetastoreNoLongerUsed() {
+    boolean topLevel = !( this.getParent() instanceof AbstractMeta );
+    return topLevel || !embeddedMetastoreUsedByAParent( embeddedMetaStore, this.getParent() );
   }
 
-  public void setEmbeddedMetastoreProviderKey( String embeddedMetastoreProviderKey ) {
-    this.embeddedMetastoreProviderKey = embeddedMetastoreProviderKey;
+  private boolean embeddedMetastoreUsedByAParent( EmbeddedMetaStore embeddedMetaStore, LoggingObjectInterface parent ) {
+    if ( parent instanceof AbstractMeta ) {
+      return ( (AbstractMeta) parent ).embeddedMetaStore == embeddedMetaStore
+        || embeddedMetastoreUsedByAParent( embeddedMetaStore, parent.getParent() );
+    }
+    return false;
+  }
+
+  public String getEmbeddedMetastoreProviderKey() {
+    return embeddedMetastoreProvKeySupplier.get();
   }
 
   @Override
@@ -2101,4 +2262,53 @@ public abstract class AbstractMeta implements ChangedFlagInterface, UndoInterfac
   public void setSafeModeEnabled( boolean safeModeEnabled ) {
     this.runOptions.safeModeEnabled = safeModeEnabled;
   }
+
+  public IMetaFileCache getMetaFileCache() {
+    return metaFileCache;
+  }
+
+  public void setMetaFileCache( IMetaFileCache metaFileCache ) {
+    this.metaFileCache = metaFileCache;
+  }
+
+  public DatabaseManagementInterface getDatabaseManagementInterface() {
+    return localDbMgr;
+  }
+
+  /**
+   * Returns the SharedObjectsManagementInterface that allows the CRUD operation of local sharedObjects
+   * @return SharedObjectsManagementInterface
+   */
+  public SlaveServerManagementInterface getSlaveServerManagementInterface() {
+    return localSlaveServerMgr;
+  }
+
+  public <T> T getSharedObjectManager( Class<T> clazz ) {
+    if ( clazz.isAssignableFrom( SlaveServerManagementInterface.class ) ) {
+      return clazz.cast( localSlaveServerMgr );
+    } else if ( clazz.isAssignableFrom( DatabaseManagementInterface.class ) ) {
+      return clazz.cast( localDbMgr );
+    }
+
+    return null;
+  }
+
+  /**
+   * Return the default save directory for a transformation/Job
+   * @return directory The full path to the default directory for saving transformation/Job
+   */
+  public String getDefaultSaveDirectory() {
+    return defaultSaveDirectory;
+  }
+
+  /**
+   * Set the default save directory for transformation/Job
+   * @param defaultDir The directory displayed as default directory in FileOpenSaveDialog when this transformation/Job is
+   *                   saved
+   */
+  public void setDefaultSaveDirectory( String defaultDir ) {
+    defaultSaveDirectory = defaultDir;
+  }
+
 }
+

@@ -1,32 +1,23 @@
-/*
- * ! ******************************************************************************
+/*! ******************************************************************************
  *
- *  Pentaho Data Integration
+ * Pentaho
  *
- *  Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * ******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with
- *  the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- * *****************************************************************************
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.engine.model;
 
 import com.google.common.collect.ImmutableList;
 import org.pentaho.di.engine.api.model.Hop;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -37,15 +28,22 @@ public class Operation extends Configurable implements org.pentaho.di.engine.api
 
   private static final long serialVersionUID = -1975677580227607466L;
   private final String id;
+  private final String key;
   private final Transformation transformation;
 
   public Operation( String id, Transformation transformation ) {
     this.id = id;
+    this.key = id + UUID.randomUUID();
     this.transformation = transformation;
   }
 
   @Override public String getId() {
     return id;
+  }
+
+  @Override
+  public String getKey() {
+    return key;
   }
 
   private Stream<Hop> getHopsWhere( Function<Hop, org.pentaho.di.engine.api.model.Operation> hopFn ) {

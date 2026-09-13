@@ -1,58 +1,142 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job;
 
+import org.apache.commons.lang3.mutable.MutableInt;
+import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
+import org.pentaho.di.core.Const;
+import org.pentaho.di.core.Result;
 import org.pentaho.di.core.database.Database;
 import org.pentaho.di.core.database.DatabaseMeta;
+import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.gui.JobTracker;
 import org.pentaho.di.core.logging.BaseLogTable;
 import org.pentaho.di.core.logging.JobEntryLogTable;
 import org.pentaho.di.core.logging.JobLogTable;
+import org.pentaho.di.core.logging.KettleLogStore;
+import org.pentaho.di.core.logging.LogChannel;
 import org.pentaho.di.core.logging.LogStatus;
 import org.pentaho.di.core.logging.LogTableField;
+import org.pentaho.di.core.logging.LoggingObjectInterface;
+import org.pentaho.di.core.logging.LoggingObjectLifecycleInterface;
 import org.pentaho.di.core.variables.VariableSpace;
+import org.pentaho.di.job.entries.special.JobEntrySpecial;
+import org.pentaho.di.job.entry.JobEntryCopy;
+import org.pentaho.di.job.entry.JobEntryInterface;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.trans.HasDatabasesInterface;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.mockito.Matchers.any;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.withSettings;
+import static org.pentaho.di.trans.Trans.STRING_FINISHED;
+import static org.pentaho.di.trans.Trans.STRING_RUNNING;
+import static org.pentaho.di.trans.Trans.STRING_WAITING;
+import static org.pentaho.test.util.InternalState.setInternalState;
+
 
 public class JobTest {
+
+  @Test
+  public void markAsFinishedUpdatesActiveAndFinishedStatusTogether() {
+    Job job = new Job();
+
+    job.setActive( true );
+    job.setResult( new Result() );
+    job.markAsFinished();
+
+    assertFalse( job.isActive() );
+    assertTrue( job.isFinished() );
+    assertEquals( STRING_FINISHED, job.getStatus() );
+  }
+
+  @Test
+  public void markAsFinishedNeverReportsWaitingAfterRunning() throws Exception {
+    Job job = new Job();
+    job.setResult( new Result() );
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    try {
+      for ( int transition = 0; transition < 100; transition++ ) {
+        job.setFinished( false );
+        job.setStopped( false );
+        job.setActive( true );
+        CountDownLatch runningObserved = new CountDownLatch( 1 );
+        AtomicBoolean transitionComplete = new AtomicBoolean();
+        Future<Boolean> observedWaiting = executor.submit( () -> {
+          while ( !transitionComplete.get() && !Thread.currentThread().isInterrupted() ) {
+            String status = job.getStatus();
+            if ( STRING_RUNNING.equals( status ) ) {
+              runningObserved.countDown();
+            } else if ( runningObserved.getCount() == 0 && STRING_WAITING.equals( status ) ) {
+              return true;
+            }
+          }
+          return false;
+        } );
+
+        assertTrue( runningObserved.await( 10, TimeUnit.SECONDS ) );
+        job.markAsFinished();
+        transitionComplete.set( true );
+        assertFalse( observedWaiting.get( 10, TimeUnit.SECONDS ) );
+      }
+    } finally {
+      executor.shutdownNow();
+      assertTrue( executor.awaitTermination( 10, TimeUnit.SECONDS ) );
+    }
+  }
+
   private static final String STRING_DEFAULT = "<def>";
   private Job mockedJob;
   private Database mockedDataBase;
   private VariableSpace mockedVariableSpace;
   private HasDatabasesInterface hasDatabasesInterface;
+  private JobMeta mockedJobMeta;
+  private JobEntryCopy mockedJobEntryCopy;
+  private JobEntrySpecial mockedJobEntrySpecial;
+  private LogChannel mockedLogChannel;
 
 
   @Before
@@ -61,10 +145,15 @@ public class JobTest {
     mockedJob = mock( Job.class );
     mockedVariableSpace = mock( VariableSpace.class );
     hasDatabasesInterface = mock( HasDatabasesInterface.class );
+    mockedJobMeta = mock( JobMeta.class );
+    mockedJobEntryCopy = mock( JobEntryCopy.class );
+    mockedJobEntrySpecial = mock( JobEntrySpecial.class );
+    mockedLogChannel = mock( LogChannel.class );
 
     when( mockedJob.createDataBase( any( DatabaseMeta.class ) ) ).thenReturn( mockedDataBase );
   }
 
+  @Ignore( "Test is validating against a mock object... not a real test" )
   @Test
   public void recordsCleanUpMethodIsCalled_JobEntryLogTable() throws Exception {
 
@@ -77,11 +166,13 @@ public class JobTest {
     when( mockedJob.getJobMeta() ).thenReturn( jobMeta );
     doCallRealMethod().when( mockedJob ).writeJobEntryLogInformation();
 
+    when( mockedJob.createDataBase( any() ) ).thenReturn( mockedDataBase );
     mockedJob.writeJobEntryLogInformation();
 
-    verify( mockedDataBase ).cleanupLogRecords( jobEntryLogTable );
+    verify( mockedDataBase ).cleanupLogRecords( eq( jobEntryLogTable ), anyString() );
   }
 
+  @Ignore( "Test is validating against a mock object... not a real test" )
   @Test
   public void recordsCleanUpMethodIsCalled_JobLogTable() throws Exception {
     JobLogTable jobLogTable = JobLogTable.getDefault( mockedVariableSpace, hasDatabasesInterface );
@@ -91,7 +182,7 @@ public class JobTest {
 
     mockedJob.writeLogTableInformation( jobLogTable, LogStatus.END );
 
-    verify( mockedDataBase ).cleanupLogRecords( jobLogTable );
+    verify( mockedDataBase ).cleanupLogRecords( eq( jobLogTable ), anyString() );
   }
 
   public void setAllTableParamsDefault( BaseLogTable table ) {
@@ -151,5 +242,327 @@ public class JobTest {
 
     assertNotEquals( job1.getContainerObjectId(), job2.getContainerObjectId() );
     assertNotEquals( job1.getLogChannelId(), job2.getLogChannelId() );
+  }
+
+  @Test
+  public void testSetInternalEntryCurrentDirectoryWithFilename( ) {
+    Job jobTest = new Job(  );
+    boolean hasFilename = true;
+    boolean hasRepoDir = false;
+    jobTest.copyVariablesFrom( null );
+    jobTest.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "Original value defined at run execution" );
+    jobTest.setVariable( Const.INTERNAL_VARIABLE_JOB_FILENAME_DIRECTORY, "file:///C:/SomeFilenameDirectory" );
+    jobTest.setVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY, "/SomeRepDirectory" );
+    jobTest.setInternalEntryCurrentDirectory( hasFilename, hasRepoDir );
+
+    assertEquals( "file:///C:/SomeFilenameDirectory", jobTest.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+
+  }
+
+  @Test
+  public void testSetInternalEntryCurrentDirectoryWithRepository( ) {
+    Job jobTest = new Job(  );
+    boolean hasFilename = false;
+    boolean hasRepoDir = true;
+    jobTest.copyVariablesFrom( null );
+    jobTest.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "Original value defined at run execution" );
+    jobTest.setVariable( Const.INTERNAL_VARIABLE_JOB_FILENAME_DIRECTORY, "file:///C:/SomeFilenameDirectory" );
+    jobTest.setVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY, "/SomeRepDirectory" );
+    jobTest.setInternalEntryCurrentDirectory( hasFilename, hasRepoDir );
+
+    assertEquals( "/SomeRepDirectory", jobTest.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) );
+  }
+
+  @Test
+  public void testSetInternalEntryCurrentDirectoryWithoutFilenameOrRepository( ) {
+    Job jobTest = new Job(  );
+    jobTest.copyVariablesFrom( null );
+    boolean hasFilename = false;
+    boolean hasRepoDir = false;
+    jobTest.setVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY, "Original value defined at run execution" );
+    jobTest.setVariable( Const.INTERNAL_VARIABLE_JOB_FILENAME_DIRECTORY, "file:///C:/SomeFilenameDirectory" );
+    jobTest.setVariable( Const.INTERNAL_VARIABLE_JOB_REPOSITORY_DIRECTORY, "/SomeRepDirectory" );
+    jobTest.setInternalEntryCurrentDirectory( hasFilename, hasRepoDir );
+
+    assertEquals( "Original value defined at run execution", jobTest.getVariable( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY )  );
+  }
+
+  /**
+   * Tests the execution of Job With Previous Results (Called by JobExecutor - Job Calling another Job)
+   * The called Job is not set to Repeat
+   */
+  @Test
+  public void executeWithPreviousResultsNoRepeatTest() {
+    executeWithPreviousResultsTest( false );
+  }
+
+  /**
+   * Tests the execution of Job With Previous Results (Called by JobExecutor - Job Calling another Job)
+   * The called Job is set to Repeat
+   */
+  @Test
+  public void executeWithPreviousResultsWithRepeatTest() {
+    executeWithPreviousResultsTest( true );
+  }
+
+  private void executeWithPreviousResultsTest( boolean repeat ) {
+    setupJobMockExecution();
+    try {
+      when( mockedJobEntrySpecial.execute( any( Result.class ), anyInt() ) ).thenReturn( new Result(  ) );
+      when( mockedJob.execute( anyInt(), any( Result.class ) ) ).thenCallRealMethod();
+      when( mockedJobEntrySpecial.isRepeat() ).thenReturn( repeat );
+      if ( repeat ) {
+        //The job will repeat its execution until it is stopped
+        scheduleStopJobExecution();
+      }
+      mockedJob.execute( 0, new Result(  ) );
+      //Test expected invocations. If repeat setActive(false) will be called at least twice. With no repeat, only once.
+      verify( mockedJob, repeat ? atLeast( 2 ) : times( 1 ) ).setActive( false );
+    } catch ( KettleException e ) {
+      Assert.fail( "Could not execute job" );
+    }
+  }
+
+  private void setupJobMockExecution() {
+    setInternalState( mockedJob, "jobMeta", mockedJobMeta );
+    setInternalState( mockedJob, "log", mockedLogChannel );
+    setInternalState( mockedJob, "jobTracker", new JobTracker( mockedJobMeta ) );
+    setInternalState( mockedJob, "jobEntryListeners", new ArrayList<>(  ) );
+    setInternalState( mockedJob, "jobEntryResults", new LinkedList<>(  ) );
+    setInternalState( mockedJob, "status", new AtomicInteger( 0 ) );
+    setInternalState( mockedJob, "lastNr", new MutableInt( -1 ) );
+    when( mockedJobMeta.findJobEntry( JobMeta.STRING_SPECIAL_START, 0, false ) ).thenReturn( mockedJobEntryCopy );
+    when( mockedJobEntryCopy.getEntry() ).thenReturn( mockedJobEntrySpecial );
+    when( mockedJobEntrySpecial.getLogChannel() ).thenReturn( mockedLogChannel );
+    when( mockedJobEntrySpecial.clone() ).thenReturn( mockedJobEntrySpecial );
+    when( mockedJob.isStopped() ).thenCallRealMethod();
+    doCallRealMethod().when( mockedJob ).setStopped( anyBoolean() );
+    KettleLogStore.init();
+  }
+
+  private void scheduleStopJobExecution() {
+    ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    Runnable task = () -> mockedJob.setStopped( true );
+    scheduler.schedule( task, 1, TimeUnit.SECONDS );
+    scheduler.shutdown();
+  }
+
+  /**
+   * Tests the re-execution of a sub-job with a checkpoint and Previous Results (Called by JobExecutor - Job Calling
+   * another Job) The called Job is set to Repeat
+   */
+  @Test
+  public void executeWithPreviousCheckpointTest() {
+
+    setupJobMockExecution();
+    try {
+      when( mockedJob.execute( anyInt(), any( Result.class ) ) ).thenCallRealMethod();
+      JobEntryCopy startJobEntryCopy = mock( JobEntryCopy.class );
+      Result startJobEntryResult = mock( Result.class );
+      JobEntryInterface mockJobEntryInterface =
+        mock( JobEntryInterface.class, withSettings().extraInterfaces( VariableSpace.class ) );
+      when( startJobEntryCopy.getEntry() ).thenReturn( mockJobEntryInterface );
+      when( mockJobEntryInterface.getLogChannel() ).thenReturn( mockedLogChannel );
+      when( mockJobEntryInterface.clone() ).thenReturn( mockJobEntryInterface );
+      when( startJobEntryResult.clone() ).thenReturn( startJobEntryResult );
+      setInternalState( mockedJob, "startJobEntryCopy", startJobEntryCopy );
+      setInternalState( mockedJob, "startJobEntryResult", startJobEntryResult );
+      setInternalState( mockedJob, "lastNr", new MutableInt( -1 ) );
+      when( mockJobEntryInterface.execute( startJobEntryResult, 0 ) ).thenReturn( new Result() );
+
+      mockedJob.execute( 0, new Result() );
+
+      //Verify that the execute used the start point supplied with result supplied instead of starting from the start
+      verify( mockJobEntryInterface, times( 1 ) ).execute( eq( startJobEntryResult ), eq( 0 ) );
+      verify( mockedJobEntrySpecial, times( 0 ) ).execute( any( Result.class ), anyInt() );
+    } catch ( KettleException e ) {
+      Assert.fail( "Could not execute job" );
+    }
+  }
+
+
+ @Ignore( "Not really a valid test... testing the methods of an interface ")
+ @Test
+  public void testJobLoggingObjectLifecycleInterface() {
+    Job job = new Job();
+
+    assertTrue( job instanceof LoggingObjectLifecycleInterface );
+//    assertEquals( 2, getMethods( Job.class, "callBeforeLog", "callAfterLog" ).length );
+
+  }
+
+  @Test
+  public void testJobCallBeforeLog() {
+    Job job = new Job();
+    LoggingObjectInterface parentLoggingObject = mock( LoggingObjectInterface.class );
+    setInternalState( job, "parentLoggingObject", parentLoggingObject );
+
+    job.callBeforeLog();
+    verify( parentLoggingObject, times( 1 ) ).callBeforeLog();
+  }
+
+  @Test
+  public void testJobCallAfterLog() {
+    Job job = new Job();
+    LoggingObjectInterface parentLoggingObject = mock( LoggingObjectInterface.class );
+    setInternalState( job, "parentLoggingObject", parentLoggingObject );
+
+    job.callAfterLog();
+    verify( parentLoggingObject, times( 1 ) ).callAfterLog();
+  }
+
+  @Test
+  public void testIsVfs_WhenFileNameHasVfsPath() {
+    Repository repository = mock( Repository.class );
+    Job job = new Job( repository, mockedJobMeta );
+    LoggingObjectInterface parentLoggingObject = mock( LoggingObjectInterface.class );
+    setInternalState( job, "parentLoggingObject", parentLoggingObject );
+    when( mockedJobMeta.getFilename() ).thenReturn( "pvfs://LocalVFS/samples/test-transformation.ktr" );
+
+    assertTrue( job.isVfs() );
+  }
+
+  @Test
+  public void testIsVfs_WhenFileNameHasFileSystemPath() {
+    Repository repository = mock( Repository.class );
+    Job job = new Job( repository, mockedJobMeta );
+    LoggingObjectInterface parentLoggingObject = mock( LoggingObjectInterface.class );
+    setInternalState( job, "parentLoggingObject", parentLoggingObject );
+    when( mockedJobMeta.getFilename() ).thenReturn( "C://test-transformation.ktr" );
+
+    assertFalse( job.isVfs() );
+  }
+
+  // ==================== BISERVER-15478 Tests ====================
+  // These tests exercise Job.initializeVariables(), the extracted method called by Job.run()
+  // that determines which source is used to initialize the job's variable space.
+  // Priority order: parentJob > jobMeta > default space.
+
+  /**
+   * Tests the PdiAction/scheduler flow: shareVariablesWith(jobMeta) is called,
+   * then initializeVariables() preserves the shared variables.
+   * This is the core scenario for BISERVER-15478.
+   */
+  @Test
+  public void testInitVariableSpace_ScheduledJob_PreservesJobMetaVariables() {
+    String testVarName = "TEST_SCHEDULER_VAR_" + UUID.randomUUID().toString();
+    String schedulerValue = "value_from_scheduler";
+
+    Repository repository = mock( Repository.class );
+    JobMeta jobMeta = new JobMeta();
+    jobMeta.setVariable( testVarName, schedulerValue );
+
+    Job job = new Job( repository, jobMeta );
+    job.shareVariablesWith( jobMeta );
+
+    job.initializeVariables();
+
+    assertEquals( "Scheduled job variable should be preserved after initializeVariables",
+        schedulerValue, job.getVariable( testVarName ) );
+  }
+
+  /**
+   * Tests the Kitchen/CLI flow where shareVariablesWith is NOT called.
+   * Variables from jobMeta should be used to initialize the variable space.
+   */
+  @Test
+  public void testInitVariableSpace_NoShareVariables_InitializesFromJobMeta() {
+    String testVarName = "TEST_CLI_VAR_" + UUID.randomUUID().toString();
+    String jobMetaValue = "value_from_jobmeta";
+
+    Repository repository = mock( Repository.class );
+    JobMeta jobMeta = new JobMeta();
+    jobMeta.setVariable( testVarName, jobMetaValue );
+
+    Job job = new Job( repository, jobMeta );
+    // No shareVariablesWith called - simulates Kitchen/CLI flow
+
+    job.initializeVariables();
+
+    assertEquals( "Variable from jobMeta should be initialized when shareVariablesWith not called",
+        jobMetaValue, job.getVariable( testVarName ) );
+  }
+
+  /**
+   * Tests that jobMeta variable value overrides the default variable space (system properties).
+   * This is the core fix for BISERVER-15478 - previously the default space would overwrite
+   * variables that were set on jobMeta.
+   */
+  @Test
+  public void testInitVariableSpace_JobMetaOverridesDefaultSpace() {
+    String varName = "user.dir";
+    String systemValue = System.getProperty( varName );
+    String jobMetaValue = "custom_jobmeta_value_" + UUID.randomUUID().toString();
+
+    Assert.assertNotNull( "System property should exist", systemValue );
+    assertNotEquals( "JobMeta value should differ from system value", systemValue, jobMetaValue );
+
+    Repository repository = mock( Repository.class );
+    JobMeta jobMeta = new JobMeta();
+    jobMeta.setVariable( varName, jobMetaValue );
+
+    Job job = new Job( repository, jobMeta );
+    // No shareVariablesWith - the default variables field is a separate Variables instance
+
+    job.initializeVariables();
+
+    assertEquals( "JobMeta variable should override default space value",
+        jobMetaValue, job.getVariable( varName ) );
+  }
+
+  /**
+   * Tests that when parentJob is set (sub-job scenario), variables are inherited
+   * from parentJob instead of jobMeta. This ensures sub-jobs still work correctly.
+   */
+  @Test
+  public void testInitVariableSpace_WithParentJob_UsesParentVariables() {
+    String testVarName = "TEST_PARENT_VAR_" + UUID.randomUUID().toString();
+    String parentJobValue = "value_from_parent_job";
+    String jobMetaValue = "value_from_job_meta";
+
+    Repository repository = mock( Repository.class );
+
+    JobMeta parentJobMeta = new JobMeta();
+    Job parentJob = new Job( repository, parentJobMeta );
+    parentJob.setVariable( testVarName, parentJobValue );
+
+    JobMeta childJobMeta = new JobMeta();
+    childJobMeta.setVariable( testVarName, jobMetaValue );
+    Job childJob = new Job( repository, childJobMeta );
+
+    setInternalState( childJob, "parentJob", parentJob );
+
+    childJob.initializeVariables();
+
+    assertEquals( "Parent job variable should take precedence over jobMeta",
+        parentJobValue, childJob.getVariable( testVarName ) );
+  }
+
+  /**
+   * Tests that when shareVariablesWith(jobMeta) is called, initializeVariables()
+   * does not create a self-referential parent chain on jobMeta.
+   * This prevents infinite loops in code that walks getParentVariableSpace().
+   */
+  @Test
+  public void testInitVariableSpace_ShareVariables_NoSelfReferentialParent() {
+    Repository repository = mock( Repository.class );
+    JobMeta jobMeta = new JobMeta();
+    Job job = new Job( repository, jobMeta );
+
+    String testVarName = "TEST_VAR_" + UUID.randomUUID().toString();
+    jobMeta.setVariable( testVarName, "test_value" );
+
+    job.shareVariablesWith( jobMeta );
+
+    // Call the actual production method
+    job.initializeVariables();
+
+    // Verify no self-referential parent chain was created
+    assertNotSame( "JobMeta's parent should not be itself after initializeVariables",
+        jobMeta, jobMeta.getParentVariableSpace() );
+
+    // Variable should still be accessible
+    assertEquals( "Variable should be preserved",
+        "test_value", job.getVariable( testVarName ) );
   }
 }

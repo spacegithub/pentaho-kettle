@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.ping;
 
@@ -66,7 +58,8 @@ public class JobEntryPing extends JobEntryBase implements Cloneable, JobEntryInt
 
   private String hostname;
   private String timeout;
-  public String defaultTimeOut = "3000";
+  private static final String DEFAULT_TIMEOUT_MS = "3000";
+  private static final String DEFAULT_PACKETS = "2";
   private String nbrPackets;
   private String Windows_CHAR = "-n";
   private String NIX_CHAR = "-c";
@@ -85,8 +78,8 @@ public class JobEntryPing extends JobEntryBase implements Cloneable, JobEntryInt
     super( n, "" );
     pingtype = classicPing;
     hostname = null;
-    nbrPackets = "2";
-    timeout = defaultTimeOut;
+    nbrPackets = DEFAULT_PACKETS;
+    timeout = DEFAULT_TIMEOUT_MS;
   }
 
   public JobEntryPing() {
@@ -198,8 +191,36 @@ public class JobEntryPing extends JobEntryBase implements Cloneable, JobEntryInt
     }
   }
 
+  public static boolean isPositiveInteger( String strNum ) {
+    boolean result = true;
+    if ( strNum == null ) {
+      result = false;
+    } else {
+      try {
+        int value = Integer.parseInt( strNum.trim() );
+        if ( value <= 0 ) {
+          result = false;
+        }
+      } catch ( NumberFormatException nfe ) {
+        result = false;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Incase, if a kjb/ktr already has non-numeric value, 0 & negative integers ,
+   * value will be replaced with {@link #DEFAULT_PACKETS } during runtime and user
+   * will be notified about this replacement in logs
+   * @return nbrPackets
+   */
   public String getNbrPackets() {
-    return nbrPackets;
+    if ( !isPositiveInteger( nbrPackets ) ) {
+      logMinimal( BaseMessages.getString( PKG, "JobPing.WarningOnlyPositiveInteger",
+              BaseMessages.getString( PKG, "JobPing.NrPackets.Label" ), DEFAULT_PACKETS ) );
+      nbrPackets = DEFAULT_PACKETS;
+    }
+    return nbrPackets.trim();
   }
 
   public String getRealNbrPackets() {
@@ -222,8 +243,19 @@ public class JobEntryPing extends JobEntryBase implements Cloneable, JobEntryInt
     return environmentSubstitute( getHostname() );
   }
 
+  /**
+   * Incase, if a kjb/ktr already has non-numeric value, 0 & negative integers ,
+   * value will be replaced with {@link #DEFAULT_TIMEOUT_MS } during runtime and user
+   * will be notified about this replacement in logs
+   * @return timeout
+   */
   public String getTimeOut() {
-    return timeout;
+    if ( !isPositiveInteger( timeout ) ) {
+      logMinimal( BaseMessages.getString( PKG, "JobPing.WarningOnlyPositiveInteger",
+              BaseMessages.getString( PKG, "JobPing.TimeOut.Label" ), DEFAULT_TIMEOUT_MS ) );
+      timeout = DEFAULT_TIMEOUT_MS;
+    }
+    return timeout.trim();
   }
 
   public String getRealTimeOut() {
@@ -241,8 +273,8 @@ public class JobEntryPing extends JobEntryBase implements Cloneable, JobEntryInt
     result.setResult( false );
 
     String hostname = getRealHostname();
-    int timeoutInt = Const.toInt( getRealTimeOut(), 300 );
-    int packets = Const.toInt( getRealNbrPackets(), 2 );
+    int timeoutInt = Integer.parseInt( getRealTimeOut() );
+    int packets = Integer.parseInt( getRealNbrPackets() );
     boolean status = false;
 
     if ( Utils.isEmpty( hostname ) ) {
@@ -377,7 +409,7 @@ public class JobEntryPing extends JobEntryBase implements Cloneable, JobEntryInt
   @Override
   public void check( List<CheckResultInterface> remarks, JobMeta jobMeta, VariableSpace space,
     Repository repository, IMetaStore metaStore ) {
-    JobEntryValidatorUtils.andValidator().validate( this, "hostname", remarks,
+    JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "hostname", remarks,
         AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
   }
 

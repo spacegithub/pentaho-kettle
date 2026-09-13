@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.filesexist;
 
@@ -26,11 +18,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.job.Job;
@@ -56,6 +50,7 @@ public class JobEntryFilesExistTest {
     job.getJobMeta().addJobEntry( new JobEntryCopy( entry ) );
     entry.setParentJob( job );
     JobMeta mockJobMeta = mock( JobMeta.class );
+    when( mockJobMeta .getBowl() ).thenReturn( DefaultBowl.getInstance() );
     entry.setParentJobMeta( mockJobMeta );
 
     job.setStopped( false );
@@ -76,7 +71,7 @@ public class JobEntryFilesExistTest {
     Result res = entry.execute( new Result(), 0 );
 
     assertFalse( "Entry should fail", res.getResult() );
-    assertEquals( "Files not found. Result is false. But... No of errors should be zero", 0, res.getNrErrors() );
+    assertEquals( "Files not found. Result is false. Number of errors should be one", 1, res.getNrErrors() );
   }
 
   @Test

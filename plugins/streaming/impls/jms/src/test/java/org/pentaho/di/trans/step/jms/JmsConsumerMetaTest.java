@@ -1,28 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.trans.step.jms;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.KettleClientEnvironment;
 import org.pentaho.di.core.Props;
 import org.pentaho.di.core.exception.KettleMissingPluginsException;
@@ -31,11 +24,16 @@ import org.pentaho.di.core.plugins.PluginRegistry;
 import org.pentaho.di.core.plugins.StepPluginType;
 import org.pentaho.di.core.variables.Variables;
 import org.pentaho.di.trans.TransMeta;
+import org.pentaho.di.trans.step.StepHelperInterface;
 import org.pentaho.di.trans.step.StepMeta;
+import org.pentaho.di.trans.steps.simplemapping.SimpleMappingHelper;
+import org.pentaho.di.trans.steps.simplemapping.SimpleMappingMeta;
 
 import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 
 public class JmsConsumerMetaTest {
@@ -56,7 +54,7 @@ public class JmsConsumerMetaTest {
   @Test
   public void withVariablesGetsNewObjectFromRegistry() throws KettleXMLException, KettleMissingPluginsException {
     String path = getClass().getResource( "/jms-consumer.ktr" ).getPath();
-    TransMeta transMeta = new TransMeta( path, new Variables() );
+    TransMeta transMeta = new TransMeta( DefaultBowl.getInstance(), path, new Variables() );
     StepMeta step = transMeta.getStep( 0 );
     JmsConsumerMeta jmsMeta = (JmsConsumerMeta) step.getStepMetaInterface();
     assertEquals( "${testOne}", jmsMeta.jmsDelegate.amqUrl );
@@ -64,5 +62,15 @@ public class JmsConsumerMetaTest {
     variables.setVariable( "testOne", "changedValue" );
     JmsConsumerMeta jmsMetaWithVars = (JmsConsumerMeta) jmsMeta.withVariables( variables );
     assertEquals( "changedValue", jmsMetaWithVars.jmsDelegate.amqUrl );
+  }
+
+  @Test
+  public void testGetStepHelperInterface() {
+    JmsConsumerMeta jmsConsumerMeta = new JmsConsumerMeta();
+    StepHelperInterface stepHelperInterface = jmsConsumerMeta.getStepHelperInterface();
+
+    assertNotNull( "StepHelperInterface should not be null", stepHelperInterface );
+    assertTrue( "StepHelperInterface should be an instance of JmsConsumerHelper",
+        stepHelperInterface instanceof JmsConsumerHelper );
   }
 }

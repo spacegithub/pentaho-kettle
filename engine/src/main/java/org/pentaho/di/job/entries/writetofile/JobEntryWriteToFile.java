@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.writetofile;
 
@@ -95,7 +87,10 @@ public class JobEntryWriteToFile extends JobEntryBase implements Cloneable, JobE
     retval.append( "      " ).append( XMLHandler.addTagValue( "filename", filename ) );
     retval.append( "      " ).append( XMLHandler.addTagValue( "createParentFolder", createParentFolder ) );
     retval.append( "      " ).append( XMLHandler.addTagValue( "appendFile", appendFile ) );
-    retval.append( "      " ).append( XMLHandler.addTagValue( "content", content ) );
+    // XML parsers must, before parsing, translate CRLF and any CR not followed by a LF to a single LF. This behavior
+    // is defined in the End-of-Line handling section of the XML 1.0 specification. XMLHandler correctly does not do
+    // that by default.  We must therefore encode any CR in the content, or lose it.
+    retval.append( "      " ).append( encodeCR( XMLHandler.addTagValue( "content", content ) ) );
     retval.append( "      " ).append( XMLHandler.addTagValue( "encoding", encoding ) );
     if ( parentJobMeta != null ) {
       parentJobMeta.getNamedClusterEmbedManager().registerUrl( filename );
@@ -198,7 +193,7 @@ public class JobEntryWriteToFile extends JobEntryBase implements Cloneable, JobE
         createParentFolder( realFilename );
 
         // Create / open file for writing
-        os = KettleVFS.getOutputStream( realFilename, this, isAppendFile() );
+        os = KettleVFS.getInstance( parentJobMeta.getBowl() ).getOutputStream( realFilename, this, isAppendFile() );
 
         if ( Utils.isEmpty( encoding ) ) {
           if ( isDebug() ) {
@@ -245,7 +240,7 @@ public class JobEntryWriteToFile extends JobEntryBase implements Cloneable, JobE
   private void createParentFolder( String realFilename ) throws KettleException {
     FileObject parent = null;
     try {
-      parent = KettleVFS.getFileObject( realFilename, this ).getParent();
+      parent = KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( realFilename, this ).getParent();
       if ( !parent.exists() ) {
         if ( isCreateParentFolder() ) {
           if ( isDetailed() ) {
@@ -309,7 +304,11 @@ public class JobEntryWriteToFile extends JobEntryBase implements Cloneable, JobE
   @Override
   public void check( List<CheckResultInterface> remarks, JobMeta jobMeta, VariableSpace space,
     Repository repository, IMetaStore metaStore ) {
-    JobEntryValidatorUtils.andValidator().validate( this, "filename", remarks,
+    JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "filename", remarks,
         AndValidator.putValidators( JobEntryValidatorUtils.notBlankValidator() ) );
+  }
+
+  private String encodeCR( String s ){
+    return s.replaceAll( "\r", "&#xd;");
   }
 }

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.job.dialog;
 
@@ -47,6 +39,7 @@ import org.pentaho.di.ui.core.gui.GUIResource;
 import org.pentaho.di.ui.spoon.Spoon;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -71,6 +64,7 @@ public class JobExecutionConfigurationDialog extends ConfigurationDialog {
     fd_expandCheckButton.top = new FormAttachment( 0, 10 );
     fd_expandCheckButton.left = new FormAttachment( 0, 10 );
     wExpandRemote.setLayoutData( fd_expandCheckButton );
+    addRunConfigurationListenerForExpandRemoteOption();
 
     wClearLog = new Button( gDetails, SWT.CHECK );
     wClearLog.setText( BaseMessages.getString( PKG, "JobExecutionConfigurationDialog.ClearLog.Label" ) );
@@ -156,7 +150,7 @@ public class JobExecutionConfigurationDialog extends ConfigurationDialog {
     parametersSectionLayout( PKG, "JobExecutionConfigurationDialog" );
 
     String docUrl =
-        Const.getDocUrl( BaseMessages.getString( Spoon.class, "Spoon.JobExecutionConfigurationDialog.Help" ) );
+        Const.getDocUrl( "data-integration-perspective-in-the-pdi-client/work-with-jobs" );
     String docTitle = BaseMessages.getString( PKG, "JobExecutionConfigurationDialog.docTitle" );
     String docHeader = BaseMessages.getString( PKG, "JobExecutionConfigurationDialog.docHeader" );
     buttonsSectionLayout( PKG, "JobExecutionConfigurationDialog", docTitle, docUrl, docHeader );
@@ -221,6 +215,8 @@ public class JobExecutionConfigurationDialog extends ConfigurationDialog {
       wRunConfiguration.setText( getConfiguration().getRunConfiguration() );
     }
 
+    wExpandRemote.setEnabled( getConfiguration().isExecutingRemotely() );
+
     String startCopy = "";
     if ( !Utils.isEmpty( getConfiguration().getStartCopyName() ) ) {
       JobEntryCopy copy =
@@ -276,5 +272,23 @@ public class JobExecutionConfigurationDialog extends ConfigurationDialog {
    */
   public JobExecutionConfiguration getConfiguration() {
     return (JobExecutionConfiguration) configuration;
+  }
+
+  public void addRunConfigurationListenerForExpandRemoteOption() {
+    wRunConfiguration.addModifyListener( modifyEvent -> {
+      List<Object> items = Arrays.asList( wRunConfiguration.getText(), true );
+      try {
+        ExtensionPointHandler.callExtensionPoint( Spoon.getInstance().getLog(), KettleExtensionPoint
+          .RunConfigurationIsRemote.id, items );
+      } catch ( KettleException ignored ) {
+        // Ignore errors - keep old behavior - expand remote job always enabled
+      }
+      Boolean isRemote = (Boolean) items.get( 1 );
+      getConfiguration().setRunConfiguration( wRunConfiguration.getText() );
+      getConfiguration().setExecutingRemotely( isRemote );
+      getConfiguration().setExecutingLocally( !isRemote );
+      wExpandRemote.setEnabled( isRemote );
+      wExpandRemote.setSelection( wExpandRemote.isEnabled() && wExpandRemote.getSelection() );
+    } );
   }
 }

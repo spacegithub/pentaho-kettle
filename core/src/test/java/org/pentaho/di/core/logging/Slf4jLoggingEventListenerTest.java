@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.logging;
 
@@ -26,14 +18,15 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
-
+import org.mockito.junit.MockitoJUnitRunner;
+import org.pentaho.di.repository.RepositoryDirectory;
+import org.pentaho.di.repository.RepositoryObjectType;
 import org.slf4j.Logger;
 
 import java.util.function.Function;
 
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.pentaho.di.core.logging.LogLevel.BASIC;
 import static org.pentaho.di.core.logging.LogLevel.ERROR;
@@ -47,10 +40,12 @@ public class Slf4jLoggingEventListenerTest {
   @Mock private LoggingObjectInterface loggingObject;
   @Mock private LogMessage message;
   @Mock private Function<String, LoggingObjectInterface> logObjProvider;
+  @Mock private RepositoryDirectory repositoryDirectory;
 
   private String logChannelId = "logChannelId";
   private String msgText = "message";
   private String messageSub = "subject";
+  private String testPath = "/test/path";
   private LogLevel logLevel = BASIC;
 
 
@@ -77,14 +72,13 @@ public class Slf4jLoggingEventListenerTest {
     when( message.getLevel() ).thenReturn( ERROR );
     listener.eventAdded( logEvent );
     verify( diLogger ).error( messageSub + " " + msgText );
-    verifyZeroInteractions( transLogger );
-    verifyZeroInteractions( jobLogger );
+    verifyNoInteractions( transLogger );
+    verifyNoInteractions( jobLogger );
   }
 
   @Test
   public void testAddLogEventTrans() {
     when( logObjProvider.apply( logChannelId ) ).thenReturn( loggingObject );
-    when( loggingObject.getLogChannelId() ).thenReturn( logChannelId );
     when( loggingObject.getObjectType() ).thenReturn( LoggingObjectType.TRANS );
     when( loggingObject.getFilename() ).thenReturn( "filename" );
     when( message.getLevel() ).thenReturn( LogLevel.BASIC );
@@ -95,14 +89,13 @@ public class Slf4jLoggingEventListenerTest {
     when( message.getLevel() ).thenReturn( LogLevel.ERROR );
     listener.eventAdded( logEvent );
     verify( transLogger ).error( "[filename]  " + msgText );
-    verifyZeroInteractions( diLogger );
-    verifyZeroInteractions( jobLogger );
+    verifyNoInteractions( diLogger );
+    verifyNoInteractions( jobLogger );
   }
 
   @Test
   public void testAddLogEventJob() {
     when( logObjProvider.apply( logChannelId ) ).thenReturn( loggingObject );
-    when( loggingObject.getLogChannelId() ).thenReturn( logChannelId );
     when( loggingObject.getObjectType() ).thenReturn( LoggingObjectType.JOB );
     when( loggingObject.getFilename() ).thenReturn( "filename" );
     when( message.getLevel() ).thenReturn( LogLevel.BASIC );
@@ -114,8 +107,119 @@ public class Slf4jLoggingEventListenerTest {
     when( message.getLevel() ).thenReturn( LogLevel.ERROR );
     listener.eventAdded( logEvent );
     verify( jobLogger ).error( "[filename]  " + msgText );
-    verifyZeroInteractions( diLogger );
-    verifyZeroInteractions( transLogger );
+    verifyNoInteractions( diLogger );
+    verifyNoInteractions( transLogger );
   }
 
+  @Test
+  public void testJobWithAndWithoutFilename() {
+    when( logObjProvider.apply( logChannelId ) ).thenReturn( loggingObject );
+    when( loggingObject.getObjectType() ).thenReturn( LoggingObjectType.JOB );
+    when( loggingObject.getObjectName() ).thenReturn( "TestJob" );
+    when( loggingObject.getFilename() ).thenReturn( "filename" );
+    when( loggingObject.getRepositoryDirectory() ).thenReturn( repositoryDirectory );
+    when( repositoryDirectory.getPath() ).thenReturn( "/" );
+    when( message.getLevel() ).thenReturn( LogLevel.BASIC );
+    listener.eventAdded( logEvent );
+    verify( jobLogger ).info( "[filename]  " + msgText );
+
+    when( repositoryDirectory.getPath() ).thenReturn( testPath );
+    listener.eventAdded( logEvent );
+    verify( jobLogger ).info( "[" + testPath + "/filename]  " + msgText );
+
+    when( loggingObject.getFilename() ).thenReturn( null );
+    listener.eventAdded( logEvent );
+    verify( jobLogger ).info( "[" + testPath + "/TestJob"
+      + RepositoryObjectType.JOB.getExtension() + "]  " + msgText );
+  }
+
+  @Test
+  public void testTransWithAndWithoutFilename() {
+    when( logObjProvider.apply( logChannelId ) ).thenReturn( loggingObject );
+    when( loggingObject.getObjectType() ).thenReturn( LoggingObjectType.TRANS );
+    when( loggingObject.getObjectName() ).thenReturn( "TestTrans" );
+    when( loggingObject.getFilename() ).thenReturn( "filename" );
+    when( loggingObject.getRepositoryDirectory() ).thenReturn( repositoryDirectory );
+    when( repositoryDirectory.getPath() ).thenReturn( "/" );
+    when( message.getLevel() ).thenReturn( LogLevel.BASIC );
+    listener.eventAdded( logEvent );
+    verify( transLogger ).info( "[filename]  " + msgText );
+
+    when( repositoryDirectory.getPath() ).thenReturn( testPath );
+    listener.eventAdded( logEvent );
+    verify( transLogger ).info( "[" + testPath + "/filename]  " + msgText );
+
+    when( loggingObject.getFilename() ).thenReturn( null );
+    listener.eventAdded( logEvent );
+    verify( transLogger ).info( "[" + testPath + "/TestTrans"
+      + RepositoryObjectType.TRANSFORMATION.getExtension() + "]  " + msgText );
+  }
+
+  @Test
+  public void testTransDoesNotDuplicateRepositoryPathWhenFilenameAlreadyIncludesIt() {
+    when( logObjProvider.apply( logChannelId ) ).thenReturn( loggingObject );
+    when( loggingObject.getObjectType() ).thenReturn( LoggingObjectType.TRANS );
+    when( message.getLevel() ).thenReturn( LogLevel.BASIC );
+
+    when( loggingObject.getRepositoryDirectory() ).thenReturn( repositoryDirectory );
+    when( repositoryDirectory.getPath() ).thenReturn( "/public" );
+
+    // Filename coming from repository execution already includes the repository directory
+    when( loggingObject.getFilename() ).thenReturn( "/public/tr_writeToLog.ktr" );
+
+    listener.eventAdded( logEvent );
+
+    verify( transLogger ).info( "[/public/tr_writeToLog.ktr]  " + msgText );
+  }
+
+  @Test
+  public void testJobDoesNotDuplicateRepositoryPathWhenFilenameAlreadyIncludesIt() {
+    when( logObjProvider.apply( logChannelId ) ).thenReturn( loggingObject );
+    when( loggingObject.getObjectType() ).thenReturn( LoggingObjectType.JOB );
+    when( message.getLevel() ).thenReturn( LogLevel.BASIC );
+
+    when( loggingObject.getRepositoryDirectory() ).thenReturn( repositoryDirectory );
+    when( repositoryDirectory.getPath() ).thenReturn( "/public" );
+
+    // Filename coming from repository execution already includes the repository directory
+    when( loggingObject.getFilename() ).thenReturn( "/public/jb_internalPath.kjb" );
+
+    listener.eventAdded( logEvent );
+
+    verify( jobLogger ).info( "[/public/jb_internalPath.kjb]  " + msgText );
+  }
+
+  @Test
+  public void testTransPreservesRepositoryPathWhenFilenameIsNotAbsoluteRepoPath() {
+    when( logObjProvider.apply( logChannelId ) ).thenReturn( loggingObject );
+    when( loggingObject.getObjectType() ).thenReturn( LoggingObjectType.TRANS );
+    when( message.getLevel() ).thenReturn( LogLevel.BASIC );
+
+    when( loggingObject.getRepositoryDirectory() ).thenReturn( repositoryDirectory );
+    when( repositoryDirectory.getPath() ).thenReturn( "/public" );
+
+    // Filename without leading '/' should still get repository path prepended
+    when( loggingObject.getFilename() ).thenReturn( "jb_internalPath.ktr" );
+
+    listener.eventAdded( logEvent );
+
+    verify( transLogger ).info( "[/public/jb_internalPath.ktr]  " + msgText );
+  }
+
+  @Test
+  public void testJobPreservesRepositoryPathWhenFilenameIsNotAbsoluteRepoPath() {
+    when( logObjProvider.apply( logChannelId ) ).thenReturn( loggingObject );
+    when( loggingObject.getObjectType() ).thenReturn( LoggingObjectType.JOB );
+    when( message.getLevel() ).thenReturn( LogLevel.BASIC );
+
+    when( loggingObject.getRepositoryDirectory() ).thenReturn( repositoryDirectory );
+    when( repositoryDirectory.getPath() ).thenReturn( "/public" );
+
+    // Filename without leading '/' should still get repository path prepended
+    when( loggingObject.getFilename() ).thenReturn( "jb_internalPath.kjb" );
+
+    listener.eventAdded( logEvent );
+
+    verify( jobLogger ).info( "[/public/jb_internalPath.kjb]  " + msgText );
+  }
 }

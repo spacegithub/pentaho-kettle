@@ -1,46 +1,52 @@
-/*!
- * Copyright 2010 - 2018 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package com.pentaho.repository.importexport;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
-import org.apache.commons.lang.StringUtils;
+
+import org.apache.commons.io.input.BoundedInputStream;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.pentaho.di.cluster.ClusterSchema;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.exception.KettleMissingPluginsException;
 import org.pentaho.di.core.extension.ExtensionPointHandler;
 import org.pentaho.di.core.extension.KettleExtensionPoint;
 import org.pentaho.di.core.logging.LogChannel;
+import org.pentaho.di.core.xml.XMLHandler;
+import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.partition.PartitionSchema;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.repository.RepositoryElementInterface;
 import org.pentaho.di.repository.StringObjectId;
 import org.pentaho.di.repository.pur.TransDelegate;
+import org.pentaho.di.shared.SharedObjectUtil;
 import org.pentaho.di.trans.TransMeta;
+import org.pentaho.di.trans.steps.missing.MissingTrans;
+import org.pentaho.di.ui.trans.steps.missing.MissingTransDialog;
 import org.pentaho.platform.api.repository2.unified.Converter;
+import org.pentaho.platform.api.repository2.unified.ConverterException;
 import org.pentaho.platform.api.repository2.unified.IRepositoryFileData;
 import org.pentaho.platform.api.repository2.unified.IUnifiedRepository;
 import org.pentaho.platform.api.repository2.unified.RepositoryFile;
@@ -58,6 +64,9 @@ public class StreamToTransNodeConverter implements Converter {
 
   private static final Log logger = LogFactory.getLog( StreamToTransNodeConverter.class );
 
+  /** The package name, used for internationalization of messages. */
+  private static Class<?> PKG = MissingTransDialog.class; // for i18n purposes, needed by Translator2!!
+
   public StreamToTransNodeConverter( IUnifiedRepository unifiedRepository ) {
     this.unifiedRepository = unifiedRepository;
   }
@@ -72,44 +81,49 @@ public class StreamToTransNodeConverter implements Converter {
    * @return
    */
   public InputStream convert( final Serializable fileId ) {
-    try {
-      // this will change in the future if PDI no longer has its
-      // own repository. For now, get the reference
-      if ( fileId != null ) {
-        Repository repository = connectToRepository();
-        RepositoryFile file = unifiedRepository.getFileById( fileId );
-        if ( file != null ) {
-          try {
-            TransMeta transMeta = repository.loadTransformation( new StringObjectId( fileId.toString() ), null );
-            if ( transMeta != null ) {
-              Set<String> privateDatabases = transMeta.getPrivateDatabases();
-              if ( privateDatabases != null ) {
-                // keep only private transformation databases
-                for ( Iterator<DatabaseMeta> it = transMeta.getDatabases().iterator(); it.hasNext(); ) {
-                  String databaseName = it.next().getName();
-                  if ( !privateDatabases.contains( databaseName ) ) {
-                    it.remove();
-                  }
-                }
-              }
-              return new ByteArrayInputStream( transMeta.getXML().getBytes() );
-            }
-          } catch ( KettleException e ) {
-            logger.error( e );
-            // file is there and may be legacy, attempt simple export
-            SimpleRepositoryFileData fileData =
-                unifiedRepository.getDataForRead( fileId, SimpleRepositoryFileData.class );
-            if ( fileData != null ) {
-              logger.warn( "Reading as legacy CE tranformation " + file.getName() + "." );
-              return fileData.getInputStream();
-            }
-          }
-        }
-      }
-    } catch ( Exception e ) {
-      logger.error( e );
+    if ( fileId == null ) {
+      return null;
     }
-    return null;
+    try {
+      return loadTransformationAsStream( fileId );
+    } catch ( Exception e ) {
+      logger.error( e.getMessage(), e );
+      return null;
+    }
+  }
+
+  private InputStream loadTransformationAsStream( Serializable fileId ) throws KettleException {
+    Repository repository = connectToRepository();
+    RepositoryFile file = unifiedRepository.getFileById( fileId );
+    if ( file == null ) {
+      return null;
+    }
+    try {
+      return getTransformationStream( repository, fileId );
+    } catch ( KettleException e ) {
+      logger.error( e.getMessage(), e );
+      // file is there and may be legacy, attempt simple export
+      return getLegacyTransformationStream( fileId, file );
+    }
+  }
+
+  private InputStream getTransformationStream( Repository repository, Serializable fileId ) throws KettleException {
+    TransMeta transMeta = repository.loadTransformation( new StringObjectId( fileId.toString() ), null );
+    if ( transMeta == null ) {
+      return null;
+    }
+    SharedObjectUtil.copySharedObjects( repository.getBowl(), transMeta, true );
+    String xml = XMLHandler.getXMLHeader() + transMeta.getXML();
+    return new ByteArrayInputStream( xml.getBytes( StandardCharsets.UTF_8 ) );
+  }
+
+  private InputStream getLegacyTransformationStream( Serializable fileId, RepositoryFile file ) {
+    SimpleRepositoryFileData fileData = unifiedRepository.getDataForRead( fileId, SimpleRepositoryFileData.class );
+    if ( fileData == null ) {
+      return null;
+    }
+    logger.warn( "Reading as legacy CE transformation " + file.getName() + "." );
+    return fileData.getInputStream();
   }
 
   // package-local visibility for testing purposes
@@ -119,18 +133,41 @@ public class StreamToTransNodeConverter implements Converter {
 
   public IRepositoryFileData convert( final InputStream inputStream, final String charset, final String mimeType ) {
     try {
-      long size = inputStream.available();
+      BoundedInputStream bis = BoundedInputStream.builder().setInputStream( inputStream ).get();
+
       TransMeta transMeta = new TransMeta();
       Repository repository = connectToRepository();
-      Document doc = PDIImportUtil.loadXMLFrom( inputStream );
+      transMeta.setRepository( repository );
+      Document doc = PDIImportUtil.loadXMLFrom( bis );
       transMeta.loadXML( doc.getDocumentElement(), repository, false );
+
+      if ( transMeta.hasMissingPlugins() ) {
+        KettleMissingPluginsException
+          missingPluginsException =
+          new KettleMissingPluginsException( getErrorMessage( transMeta.getMissingTrans() ) );
+        throw new ConverterException( missingPluginsException );
+      }
+
       TransDelegate delegate = new TransDelegate( repository, this.unifiedRepository );
+      SharedObjectUtil.moveAllSharedObjects( transMeta, repository.getBowl() );
+      SharedObjectUtil.patchDatabaseConnections( repository.getBowl(), transMeta );
       saveSharedObjects( repository, transMeta );
-      return new NodeRepositoryFileData( delegate.elementToDataNode( transMeta ), size );
-    } catch ( Exception e ) {
+      return new NodeRepositoryFileData( delegate.elementToDataNode( transMeta ), bis.getCount() );
+    } catch ( IOException | KettleException e ) {
       logger.error( e );
       return null;
     }
+  }
+
+  private String getErrorMessage( List<MissingTrans> missingTrans ) {
+    StringBuilder entries = new StringBuilder();
+    for ( MissingTrans entry : missingTrans ) {
+      entries.append( "- " + entry.getStepName() + " - " + entry.getMissingPluginId() + "\n" );
+      if ( missingTrans.indexOf( entry ) == missingTrans.size() - 1 ) {
+        entries.append( '\n' );
+      }
+    }
+    return BaseMessages.getString( PKG, "MissingTransDialog.MissingTransSteps", entries.toString(), "." );
   }
 
   private void saveSharedObjects( final Repository repo, final RepositoryElementInterface element )

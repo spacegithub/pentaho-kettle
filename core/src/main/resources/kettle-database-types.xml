@@ -1,3 +1,14 @@
+<!-- ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************* -->
 <database-types>
 
    <database-type id="AS/400">                                                        
@@ -6,24 +17,14 @@
   </database-type>                                                                   
 
   <database-type id="CACHE">
-    <description>Intersystems Cache</description>
+    <description>Intersystems Cache (deprecated)</description>
     <classname>org.pentaho.di.core.database.CacheDatabaseMeta</classname>
   </database-type>                                                       
 
   <database-type id="DB2">
     <description>IBM DB2</description>
     <classname>org.pentaho.di.core.database.DB2DatabaseMeta</classname>
-  </database-type>                                                     
-
-  <database-type id="DBASE">
-    <description>dBase III, IV or 5</description>
-    <classname>org.pentaho.di.core.database.DbaseDatabaseMeta</classname>
-  </database-type>                                                       
-
-  <database-type id="DERBY">
-    <description>Apache Derby</description>
-    <classname>org.pentaho.di.core.database.DerbyDatabaseMeta</classname>
-  </database-type>                                                       
+  </database-type>
 
   <database-type id="EXASOL4">
     <description>Exasol 4</description>
@@ -31,7 +32,7 @@
   </database-type>                                                         
 
   <database-type id="EXTENDB">
-    <description>ExtenDB</description>
+    <description>ExtenDB (deprecated)</description>
     <classname>org.pentaho.di.core.database.ExtenDBDatabaseMeta</classname>
   </database-type>                                                         
 
@@ -51,7 +52,7 @@
   </database-type>                                                           
 
   <database-type id="INFINIDB">
-    <description>Calpont InfiniDB</description>
+    <description>Calpont InfiniDB (deprecated)</description>
     <classname>org.pentaho.di.core.database.InfiniDbDatabaseMeta</classname>
   </database-type>
  
@@ -71,7 +72,7 @@
   </database-type>                                                            
 
   <database-type id="INFOBRIGHT">
-    <description>Infobright</description>
+    <description>Infobright (deprecated)</description>
     <classname>org.pentaho.di.core.database.InfobrightDatabaseMeta</classname>
   </database-type>                                                            
 
@@ -81,17 +82,17 @@
   </database-type>                                                          
 
   <database-type id="INGRES">
-    <description>Ingres</description>
+    <description>Ingres (deprecated)</description>
     <classname>org.pentaho.di.core.database.IngresDatabaseMeta</classname>
   </database-type>                                                        
 
   <database-type id="VECTORWISE">
-    <description>Ingres VectorWise</description>
+    <description>Ingres VectorWise (deprecated)</description>
     <classname>org.pentaho.di.core.database.VectorWiseDatabaseMeta</classname>
   </database-type>                                                        
 
   <database-type id="INTERBASE">
-    <description>Borland Interbase</description>
+    <description>Borland Interbase (deprecated)</description>
     <classname>org.pentaho.di.core.database.InterbaseDatabaseMeta</classname>
   </database-type>                                                           
 
@@ -101,7 +102,7 @@
   </database-type>                                                            
 
   <database-type id="LucidDB">
-    <description>LucidDB</description>
+    <description>LucidDB (deprecated)</description>
     <classname>org.pentaho.di.core.database.LucidDBDatabaseMeta</classname>
   </database-type>                                                         
 
@@ -113,12 +114,7 @@
   <database-type id="MONETDB">
     <description>MonetDB</description>
     <classname>org.pentaho.di.core.database.MonetDBDatabaseMeta</classname>
-  </database-type>                                                         
-
-  <database-type id="MSACCESS">
-    <description>MS Access</description>
-    <classname>org.pentaho.di.core.database.MSAccessDatabaseMeta</classname>
-  </database-type>                                                          
+  </database-type>
 
   <database-type id="MSSQLNATIVE">
     <description>MS SQL Server (Native)</description>
@@ -141,7 +137,7 @@
   </database-type>                                                       
 
   <database-type id="NEOVIEW">
-    <description>Neoview</description>
+    <description>Neoview (deprecated)</description>
     <classname>org.pentaho.di.core.database.NeoviewDatabaseMeta</classname>
   </database-type>                                                         
 
@@ -186,12 +182,12 @@
   </database-type>
 
   <database-type id="SYBASE">
-    <description>Sybase</description>
+    <description>Sybase (deprecated)</description>
     <classname>org.pentaho.di.core.database.SybaseDatabaseMeta</classname>
   </database-type>
 
   <database-type id="SYBASEIQ">
-    <description>SybaseIQ</description>
+    <description>SybaseIQ (deprecated)</description>
     <classname>org.pentaho.di.core.database.SybaseIQDatabaseMeta</classname>
   </database-type>
 
@@ -206,7 +202,7 @@
   </database-type>
 
   <database-type id="VERTICA">
-    <description>Vertica</description>
+    <description>Vertica (deprecated)</description>
     <classname>org.pentaho.di.core.database.VerticaDatabaseMeta</classname>
   </database-type>
   
@@ -220,4 +216,23 @@
     <classname>org.pentaho.di.core.database.GoogleBigQueryDatabaseMeta</classname>
   </database-type>
 
- </database-types>
+  <database-type id="SNOWFLAKEHV">
+    <description>Snowflake</description>
+    <classname>org.pentaho.di.core.database.SnowflakeHVDatabaseMeta</classname>
+  </database-type>
+
+  <database-type id="AZURESQLDB">
+    <description>Azure SQL DB</description>
+    <classname>org.pentaho.di.core.database.AzureSqlDataBaseMeta</classname>
+  </database-type>
+
+  <database-type id="DATABRICKS">
+    <description>Databricks</description>
+    <classname>org.pentaho.di.core.database.DatabricksDatabaseMeta</classname>
+  </database-type>
+
+  <database-type id="ATHENA">
+    <description>Athena</description>
+    <classname>org.pentaho.di.core.database.AthenaDatabaseMeta</classname>
+  </database-type>
+</database-types>

@@ -1,29 +1,20 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.salesforceinput;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.CCombo;
@@ -64,18 +55,21 @@ import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.Props;
 import org.pentaho.di.core.exception.KettleException;
-import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaFactory;
-import org.pentaho.di.core.util.StringUtil;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.TransPreviewFactory;
 import org.pentaho.di.trans.steps.salesforce.SOQLValuesHighlight;
-import org.pentaho.di.trans.steps.salesforce.SalesforceConnection;
 import org.pentaho.di.trans.steps.salesforce.SalesforceConnectionUtils;
+import org.pentaho.di.trans.steps.salesforce.SalesforceStep;
+import org.pentaho.di.trans.steps.salesforce.SalesforceStepHelper;
 import org.pentaho.di.trans.steps.salesforce.SalesforceStepMeta;
+import org.pentaho.di.trans.steps.salesforceinput.FieldDTO;
+import org.pentaho.di.trans.steps.salesforceinput.FieldsResponse;
+import org.pentaho.di.trans.steps.salesforceinput.SalesforceInput;
 import org.pentaho.di.trans.steps.salesforceinput.SalesforceInputField;
+import org.pentaho.di.trans.steps.salesforceinput.SalesforceInputHelper;
 import org.pentaho.di.trans.steps.salesforceinput.SalesforceInputMeta;
 import org.pentaho.di.ui.core.dialog.EnterNumberDialog;
 import org.pentaho.di.ui.core.dialog.EnterTextDialog;
@@ -92,9 +86,7 @@ import org.pentaho.di.ui.trans.dialog.TransPreviewProgressDialog;
 import org.pentaho.di.ui.trans.step.ComponentSelectionListener;
 import org.pentaho.di.ui.trans.steps.salesforce.SalesforceStepDialog;
 
-import com.sforce.soap.partner.Field;
-import com.sforce.soap.partner.sobject.SObject;
-import com.sforce.ws.bind.XmlObject;
+
 
 public class SalesforceInputDialog extends SalesforceStepDialog {
 
@@ -688,7 +680,7 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
             wReadFrom.setText( calendar.getYear()
               + "-"
               + ( ( calendar.getMonth() + 1 ) < 10
-                ? "0" + ( calendar.getMonth() + 1 ) : ( calendar.getMonth() + 1 ) ) + "-"
+              ? "0" + ( calendar.getMonth() + 1 ) : ( calendar.getMonth() + 1 ) ) + "-"
               + ( calendar.getDay() < 10 ? "0" + calendar.getDay() : calendar.getDay() ) + " "
               + ( time.getHours() < 10 ? "0" + time.getHours() : time.getHours() ) + ":"
               + ( time.getMinutes() < 10 ? "0" + time.getMinutes() : time.getMinutes() ) + ":"
@@ -749,7 +741,7 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
             wReadTo.setText( calendarto.getYear()
               + "-"
               + ( ( calendarto.getMonth() + 1 ) < 10 ? "0" + ( calendarto.getMonth() + 1 ) : ( calendarto
-                .getMonth() + 1 ) ) + "-"
+              .getMonth() + 1 ) ) + "-"
               + ( calendarto.getDay() < 10 ? "0" + calendarto.getDay() : calendarto.getDay() ) + " "
               + ( timeto.getHours() < 10 ? "0" + timeto.getHours() : timeto.getHours() ) + ":"
               + ( timeto.getMinutes() < 10 ? "0" + timeto.getMinutes() : timeto.getMinutes() ) + ":"
@@ -1167,8 +1159,8 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
         new ColumnInfo(
           BaseMessages.getString( PKG, "SalesforceInputDialog.FieldsTable.IsIdLookup.Column" ),
           ColumnInfo.COLUMN_TYPE_CCOMBO, new String[] {
-            BaseMessages.getString( PKG, "System.Combo.Yes" ),
-            BaseMessages.getString( PKG, "System.Combo.No" ) }, true ),
+          BaseMessages.getString( PKG, "System.Combo.Yes" ),
+          BaseMessages.getString( PKG, "System.Combo.No" ) }, true ),
         new ColumnInfo(
           BaseMessages.getString( PKG, "SalesforceInputDialog.FieldsTable.Type.Column" ),
           ColumnInfo.COLUMN_TYPE_CCOMBO, ValueMetaFactory.getValueMetaNames(), true ),
@@ -1196,16 +1188,16 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
         new ColumnInfo(
           BaseMessages.getString( PKG, "SalesforceInputDialog.FieldsTable.Repeat.Column" ),
           ColumnInfo.COLUMN_TYPE_CCOMBO, new String[] {
-            BaseMessages.getString( PKG, "System.Combo.Yes" ),
-            BaseMessages.getString( PKG, "System.Combo.No" ) }, true ),
+          BaseMessages.getString( PKG, "System.Combo.Yes" ),
+          BaseMessages.getString( PKG, "System.Combo.No" ) }, true ),
 
       };
 
-    colinf[0].setUsingVariables( true );
-    colinf[0].setToolTip( BaseMessages.getString( PKG, "SalesforceInputDialog.FieldsTable.Name.Column.Tooltip" ) );
-    colinf[1].setUsingVariables( true );
-    colinf[1].setToolTip( BaseMessages.getString( PKG, "SalesforceInputDialog.FieldsTable.Field.Column.Tooltip" ) );
-    colinf[2].setReadOnly( true );
+    colinf[ 0 ].setUsingVariables( true );
+    colinf[ 0 ].setToolTip( BaseMessages.getString( PKG, "SalesforceInputDialog.FieldsTable.Name.Column.Tooltip" ) );
+    colinf[ 1 ].setUsingVariables( true );
+    colinf[ 1 ].setToolTip( BaseMessages.getString( PKG, "SalesforceInputDialog.FieldsTable.Field.Column.Tooltip" ) );
+    colinf[ 2 ].setReadOnly( true );
     wFields =
       new TableView( transMeta, wFieldsComp, SWT.FULL_SELECTION | SWT.MULTI, colinf, FieldsRows, lsMod, props );
 
@@ -1386,51 +1378,26 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
   }
 
   private void get() {
-    SalesforceConnection connection = null;
+
     try {
+      Trans trans = new Trans( transMeta, null );
+      trans.rowsets = new ArrayList<>();
 
-      SalesforceInputMeta meta = new SalesforceInputMeta();
       getInfo( meta );
-
       // Clear Fields Grid
       wFields.removeAll();
+      SalesforceInputHelper salesforceInputHelper = (SalesforceInputHelper) meta.getStepHelperInterface();
+      FieldsResponse fieldsResponse = salesforceInputHelper.getFields( transMeta );
 
-      // get real values
-      String realModule = transMeta.environmentSubstitute( meta.getModule() );
-      String realURL = transMeta.environmentSubstitute( meta.getTargetURL() );
-      String realUsername = transMeta.environmentSubstitute( meta.getUsername() );
-      String realPassword = Utils.resolvePassword( transMeta, meta.getPassword() );
-      int realTimeOut = Const.toInt( transMeta.environmentSubstitute( meta.getTimeout() ), 0 );
-
-      connection = new SalesforceConnection( log, realURL, realUsername, realPassword );
-      connection.setTimeOut( realTimeOut );
-      String[] fieldsName = null;
-      if ( meta.isSpecifyQuery() ) {
-        // Free hand SOQL
-        String realQuery = transMeta.environmentSubstitute( meta.getQuery() );
-        connection.setSQL( realQuery );
-        connection.connect();
-        // We are connected, so let's query
-        XmlObject[] fields = connection.getElements();
-        int nrFields = fields.length;
-        Set<String> fieldNames = new HashSet<>();
-        for ( int i = 0; i < nrFields; i++ ) {
-          addFields( "", fieldNames, fields[i] );
-        }
-        fieldsName = fieldNames.toArray( new String[fieldNames.size()] );
-      } else {
-        connection.connect();
-
-        Field[] fields = connection.getObjectFields( realModule );
-        fieldsName = new String[fields.length];
-        for ( int i = 0; i < fields.length; i++ ) {
-          Field field = fields[i];
-          fieldsName[i] = field.getName();
-          addField( field );
-        }
+      for ( FieldDTO field : fieldsResponse.fieldDTOList ) {
+        addFieldToTable(
+          field.getName(), field.getField(), field.isIdlookup(), field.getType(), field.getLength(),
+          field.getPrecision() );
       }
-      if ( fieldsName != null ) {
-        colinf[1].setComboValues( fieldsName );
+
+      if ( !fieldsResponse.fieldNames.isEmpty() ) {
+        String[] fieldsName = fieldsResponse.fieldNames.toArray( new String[ fieldsResponse.fieldNames.size() ] );
+        colinf[ 1 ].setComboValues( fieldsName );
       }
       wFields.removeEmptyRows();
       wFields.setRowNums();
@@ -1438,88 +1405,12 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
     } catch ( KettleException e ) {
       new ErrorDialog(
         shell, BaseMessages.getString( PKG, "SalesforceInputMeta.ErrorRetrieveData.DialogTitle" ), BaseMessages
-          .getString( PKG, "SalesforceInputMeta.ErrorRetrieveData.DialogMessage" ), e );
+        .getString( PKG, "SalesforceInputMeta.ErrorRetrieveData.DialogMessage" ), e );
     } catch ( Exception e ) {
       new ErrorDialog(
         shell, BaseMessages.getString( PKG, "SalesforceInputMeta.ErrorRetrieveData.DialogTitle" ), BaseMessages
-          .getString( PKG, "SalesforceInputMeta.ErrorRetrieveData.DialogMessage" ), e );
-    } finally {
-      if ( connection != null ) {
-        try {
-          connection.close();
-        } catch ( Exception e ) {
-          // Ignore errors
-        }
-      }
+        .getString( PKG, "SalesforceInputMeta.ErrorRetrieveData.DialogMessage" ), e );
     }
-  }
-
-  void addFields( String prefix, Set<String> fieldNames, XmlObject field ) {
-    //Salesforce SOAP Api sends IDs always in the response, even if we don't request it in SOQL query and
-    //the id's value is null in this case. So, do not add this Id to the fields list
-    if ( isNullIdField( field ) ) {
-      return;
-    }
-    String fieldname = prefix + field.getName().getLocalPart();
-    if ( field instanceof SObject ) {
-      SObject sobject = (SObject) field;
-      for ( XmlObject element : SalesforceConnection.getChildren( sobject ) ) {
-        addFields( fieldname + ".", fieldNames, element );
-      }
-    } else {
-      addField( fieldname, fieldNames, (String) field.getValue() );
-    }
-  }
-
-  private boolean isNullIdField( XmlObject field ) {
-    return field.getName().getLocalPart().equalsIgnoreCase( "ID" ) && field.getValue() == null;
-  }
-
-  private void addField( Field field ) {
-    String fieldType = field.getType().toString();
-
-    String fieldLength = null;
-    String fieldPrecision = null;
-    if ( !fieldType.equals( "boolean" ) && !fieldType.equals( "datetime" ) && !fieldType.equals( "date" ) ) {
-      fieldLength = Integer.toString( field.getLength() );
-      fieldPrecision = Integer.toString( field.getPrecision() );
-    }
-
-    addFieldToTable(
-      field.getLabel(), field.getName(), field.isIdLookup(), field.getType().toString(), fieldLength,
-      fieldPrecision );
-  }
-
-  private void addField( String fieldName, Set<String> fieldNames, String firstValue ) {
-    //no duplicates allowed
-    if ( !fieldNames.add( fieldName ) ) {
-      return;
-    }
-
-    // Try to guess field type
-    // I know it's not clean (see up)
-    final String fieldType;
-    String fieldLength = null;
-    String fieldPrecision = null;
-    if ( Const.NVL( firstValue, "null" ).equals( "null" ) ) {
-      fieldType = "string";
-    } else {
-      if ( StringUtil.IsDate( firstValue, DEFAULT_DATE_TIME_FORMAT ) ) {
-        fieldType = "datetime";
-      } else if ( StringUtil.IsDate( firstValue, DEFAULT_DATE_FORMAT ) ) {
-        fieldType = "date";
-      } else if ( StringUtil.IsInteger( firstValue ) ) {
-        fieldType = "int";
-        fieldLength = Integer.toString( ValueMetaInterface.DEFAULT_INTEGER_LENGTH );
-      } else if ( StringUtil.IsNumber( firstValue ) ) {
-        fieldType = "double";
-      } else if ( firstValue.equals( "true" ) || firstValue.equals( "false" ) ) {
-        fieldType = "boolean";
-      } else {
-        fieldType = "string";
-      }
-    }
-    addFieldToTable( fieldName, fieldName, false, fieldType, fieldLength, fieldPrecision );
   }
 
   void addFieldToTable( String fieldLabel, String fieldName, boolean fieldIdIsLookup, String fieldType,
@@ -1574,7 +1465,7 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
     enableCondition();
     boolean activateDeletionDate =
       SalesforceConnectionUtils.getRecordsFilterByDesc( wRecordsFilter.getText() )
-      == SalesforceConnectionUtils.RECORDS_FILTER_DELETED;
+        == SalesforceConnectionUtils.RECORDS_FILTER_DELETED;
     if ( !activateDeletionDate ) {
       wInclDeletionDate.setSelection( false );
     }
@@ -1587,8 +1478,7 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
   /**
    * Read the data from the TextFileInputMeta object and show it in this dialog.
    *
-   * @param in
-   *          The SalesforceInputMeta object to obtain the data from.
+   * @param in The SalesforceInputMeta object to obtain the data from.
    */
   public void getData( SalesforceInputMeta in ) {
     wURL.setText( Const.NVL( in.getTargetURL(), "" ) );
@@ -1629,7 +1519,7 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
       logDebug( BaseMessages.getString( PKG, "SalesforceInputDialog.Log.GettingFieldsInfo" ) );
     }
     for ( int i = 0; i < in.getInputFields().length; i++ ) {
-      SalesforceInputField field = in.getInputFields()[i];
+      SalesforceInputField field = in.getInputFields()[ i ];
 
       if ( field != null ) {
         TableItem item = wFields.table.getItem( i );
@@ -1776,7 +1666,7 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
       field.setRepeated( BaseMessages.getString( PKG, "System.Combo.Yes" ).equalsIgnoreCase( item.getText( 12 ) ) );
 
       //CHECKSTYLE:Indentation:OFF
-      meta.getInputFields()[i] = field;
+      meta.getInputFields()[ i ] = field;
     }
   }
 
@@ -1809,7 +1699,7 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
             EnterTextDialog etd =
               new EnterTextDialog(
                 shell, BaseMessages.getString( PKG, "System.Dialog.PreviewError.Title" ), BaseMessages
-                  .getString( PKG, "System.Dialog.PreviewError.Message" ), loggingText, true );
+                .getString( PKG, "System.Dialog.PreviewError.Message" ), loggingText, true );
             etd.setReadOnly();
             etd.open();
           }
@@ -1817,7 +1707,7 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
           PreviewRowsDialog prd =
             new PreviewRowsDialog(
               shell, transMeta, SWT.NONE, wStepname.getText(), progressDialog.getPreviewRowsMeta( wStepname
-                .getText() ), progressDialog.getPreviewRows( wStepname.getText() ), loggingText );
+              .getText() ), progressDialog.getPreviewRows( wStepname.getText() ), loggingText );
           prd.open();
         }
       }
@@ -1830,24 +1720,25 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
 
   private void getModulesList() {
     if ( !gotModule ) {
-      SalesforceConnection connection = null;
       String selectedField = wModule.getText();
       wModule.removeAll();
 
       try {
-        SalesforceInputMeta meta = new SalesforceInputMeta();
+        Trans trans = new Trans( transMeta, null );
+        trans.rowsets = new ArrayList<>();
+
         getInfo( meta );
-        String url = transMeta.environmentSubstitute( meta.getTargetURL() );
+        SalesforceStep step = (SalesforceStep) meta.getStep( stepMeta, meta.getStepData(), 0, transMeta, trans );
+        step.setStepMetaInterface( meta );
 
-        // Define a new Salesforce connection
-        connection =
-          new SalesforceConnection( log, url, transMeta.environmentSubstitute( meta.getUsername() ),
-            Utils.resolvePassword( transMeta, meta.getPassword() ) );
-        // connect to Salesforce
-        connection.connect();
+        if ( !Utils.isEmpty( selectedField ) ) {
+          wModule.setText( selectedField );
+        }
 
-        // retrieve modules list
-        String[] modules = connection.getAllAvailableObjects( true );
+        gotModule = true;
+        getModulesListError = false;
+        SalesforceStepHelper salesforceStepHelper = (SalesforceStepHelper) meta.getStepHelperInterface();
+        String[] modules = salesforceStepHelper.getModules( transMeta, "true" );
         if ( modules != null && modules.length > 0 ) {
           // populate Combo
           wModule.setItems( modules );
@@ -1863,12 +1754,6 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
       } finally {
         if ( !Utils.isEmpty( selectedField ) ) {
           wModule.setText( selectedField );
-        }
-        if ( connection != null ) {
-          try {
-            connection.close();
-          } catch ( Exception e ) { /* Ignore */
-          }
         }
       }
     }
@@ -1907,7 +1792,7 @@ public class SalesforceInputDialog extends SalesforceStepDialog {
     boolean enableCondition =
       !wspecifyQuery.getSelection()
         && SalesforceConnectionUtils.getRecordsFilterByDesc( wRecordsFilter.getText() )
-          == SalesforceConnectionUtils.RECORDS_FILTER_ALL;
+        == SalesforceConnectionUtils.RECORDS_FILTER_ALL;
     wlCondition.setVisible( enableCondition );
     wCondition.setVisible( enableCondition );
     wlPosition.setVisible( enableCondition );

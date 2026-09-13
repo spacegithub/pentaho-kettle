@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************* -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -7,7 +18,7 @@
     <parent>
         <artifactId>pentaho-googledrive-vfs</artifactId>
         <groupId>org.pentaho.di.plugins</groupId>
-        <version>9.0.0.0-SNAPSHOT</version>
+        <version>11.1.0.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>pentaho-googledrive-vfs-core</artifactId>
@@ -15,13 +26,11 @@
     <name>Pentaho Google Drive VFS Plugin Core</name>
 
     <properties>
-        <project.http.version>1.22.0</project.http.version>
+        <project.http.version>1.42.3</project.http.version>
         <project.oauth.version>1.22.0</project.oauth.version>
         <!--project.build.sourceEncoding>UTF-8</project.build.sourceEncoding-->
-        <project.commons-vfs2.version>2.2</project.commons-vfs2.version>
         <project.junit.version>4.4</project.junit.version>
-        <project.mockito.version>1.8.4</project.mockito.version>
-        <pdi.version>9.0.0.0-SNAPSHOT</pdi.version>
+        <pdi.version>11.1.0.0-SNAPSHOT</pdi.version>
     </properties>
 
     <build>
@@ -61,7 +70,16 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-vfs2</artifactId>
-            <version>${project.commons-vfs2.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>javax.servlet-api</artifactId>
+            <version>3.0.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>jetty</artifactId>
+            <version>6.1.26</version>
         </dependency>
         <dependency>
             <groupId>junit</groupId>
@@ -70,8 +88,9 @@
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
-            <artifactId>mockito-all</artifactId>
-            <version>${project.mockito.version}</version>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>pentaho-kettle</groupId>

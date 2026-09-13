@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.repo.menu;
 
@@ -30,6 +22,7 @@ import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Menu;
 import org.eclipse.swt.widgets.MenuItem;
+import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.ToolBar;
 import org.eclipse.swt.widgets.ToolItem;
 import org.pentaho.di.core.exception.KettleException;
@@ -39,29 +32,48 @@ import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.repository.RepositoriesMeta;
 import org.pentaho.di.repository.RepositoryMeta;
 import org.pentaho.di.ui.repo.controller.RepositoryConnectController;
-import org.pentaho.di.ui.repo.dialog.RepositoryDialog;
+import org.pentaho.di.ui.repo.dialog.RepositoryConnectionDialog;
+import org.pentaho.di.ui.repo.dialog.RepositoryManagerDialog;
+import org.pentaho.di.ui.repo.service.BrowserAuthenticationService;
+import org.pentaho.di.ui.repo.service.BrowserAuthenticationService.SessionInfo;
+import org.pentaho.di.ui.repo.util.BrowserAuthDialogHelper;
+import org.pentaho.di.ui.repo.util.PurRepositoryUtils;
 import org.pentaho.di.ui.spoon.Spoon;
+import org.pentaho.di.ui.spoon.session.AuthenticationContext;
+import org.pentaho.di.ui.spoon.session.SpoonSessionManager;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeoutException;
 
 public class RepositoryConnectMenu {
 
   private static Class<?> PKG = RepositoryConnectMenu.class;
-  private static LogChannelInterface log = KettleLogStore.getLogChannelInterfaceFactory().create(
+  private static LogChannelInterface log =
+    KettleLogStore.getLogChannelInterfaceFactory().create(
       RepositoryConnectMenu.class );
   private static final int MAX_REPO_NAME_PIXEL_LENGTH = 230;
 
-  private Spoon spoon;
-  private ToolBar toolBar;
+  private final Spoon spoon;
+  private final ToolBar toolBar;
   private ToolItem connectButton;
   private ToolItem connectDropdown;
   private RepositoriesMeta repositoriesMeta;
   private final RepositoryConnectController repoConnectController;
+  private static final int REPOMANAGERHEIGHT = 650;
+  private static final int REPOMANAGERWIDTH= 700;
+
+  static RepositoryConnectController getRepoControllerInstance() {
+    return RepositoryConnectController.getInstance();
+  }
 
   public RepositoryConnectMenu( Spoon spoon, ToolBar toolBar, RepositoryConnectController repoConnectController ) {
     this.toolBar = toolBar;
     this.spoon = spoon;
-    this.repoConnectController = repoConnectController;
+    this.repoConnectController = getRepoControllerInstance();
     repoConnectController.addListener( this::renderAndUpdate );
   }
+
 
   public void update() {
     Rectangle rect = toolBar.getBounds();
@@ -113,20 +125,30 @@ public class RepositoryConnectMenu {
     spoon.setShellText();
   }
 
+  /**
+   * @implNote prompts to create new repository connection if there doesn't exist
+   * any.
+   */
   private void renderConnectButton() {
-    connectButton = new ToolItem( toolBar, toolBar.getItems().length );
+    this.connectButton = new ToolItem( toolBar, toolBar.getItems().length );
     connectButton.setText( BaseMessages.getString( PKG, "RepositoryConnectMenu.Connect" ) );
     connectButton.addSelectionListener( new SelectionAdapter() {
       @Override
       public void widgetSelected( SelectionEvent selectionEvent ) {
-        new RepositoryDialog( spoon.getShell(), repoConnectController ).openCreation();
+        new RepositoryManagerDialog( spoon.getShell() ).open( REPOMANAGERWIDTH, REPOMANAGERHEIGHT,
+          spoon.getRepositoryName(), repositoriesMeta );
         renderAndUpdate();
       }
     } );
   }
 
+
+  /**
+   * @implNote prompts gui for connection to existing repository
+   */
+  @SuppressWarnings( "squid:S3776" )
   private void renderConnectDropdown() {
-    connectDropdown = new ToolItem( toolBar, SWT.DROP_DOWN, toolBar.getItems().length );
+    this.connectDropdown = new ToolItem( toolBar, SWT.DROP_DOWN, toolBar.getItems().length );
     connectDropdown.setText( BaseMessages.getString( PKG, "RepositoryConnectMenu.Connect" ) );
     connectDropdown.addSelectionListener( new SelectionAdapter() {
       @Override
@@ -138,7 +160,8 @@ public class RepositoryConnectMenu {
             String truncatedName = truncateName( repositoriesMeta.getRepository( i ).getName() );
             item.setText( truncatedName );
             item.setData( repositoriesMeta.getRepository( i ).getName() );
-            if ( spoon.rep != null && spoon.getRepositoryName().equals( repositoriesMeta.getRepository( i ).getName() ) ) {
+            if ( spoon.rep != null && spoon.getRepositoryName()
+              .equals( repositoriesMeta.getRepository( i ).getName() ) ) {
               item.setSelection( true );
               continue;
             }
@@ -153,16 +176,17 @@ public class RepositoryConnectMenu {
                       return;
                     }
                   } catch ( KettleException ke ) {
-                    log.logError( "Error prompting for save", ke );
+                    log.logError( BaseMessages.getString( PKG, "RepositoryConnectMenu.ErrorPromptingForSave" ), ke );
                   }
                   if ( repositoryMeta.getId().equals( "KettleFileRepository" ) ) {
                     try {
                       repoConnectController.connectToRepository( repositoryMeta );
                     } catch ( KettleException ke ) {
-                      log.logError( "Error connecting to repository", ke );
+                      log.logError( BaseMessages.getString( PKG, "RepositoryConnectMenu.ErrorConnectingToRepository" ), ke );
                     }
                   } else {
-                    new RepositoryDialog( spoon.getShell(), repoConnectController ).openLogin( repositoryMeta );
+                    // For enterprise repository, connect based on saved authMethod
+                    connectBasedOnAuthMethod( repoName, repositoryMeta );
                   }
                   renderAndUpdate();
                 }
@@ -171,13 +195,18 @@ public class RepositoryConnectMenu {
           }
         }
 
+        /**
+         * @implNote prompts repository manager gui for reps crud operations
+         *
+         */
         new MenuItem( connectionMenu, SWT.SEPARATOR );
         MenuItem managerItem = new MenuItem( connectionMenu, SWT.NONE );
         managerItem.setText( BaseMessages.getString( PKG, "RepositoryConnectMenu.RepositoryManager" ) );
         managerItem.addSelectionListener( new SelectionAdapter() {
           @Override
           public void widgetSelected( SelectionEvent selectionEvent ) {
-            new RepositoryDialog( spoon.getShell(), repoConnectController ).openManager();
+            new RepositoryManagerDialog( spoon.getShell() ).open( REPOMANAGERWIDTH, REPOMANAGERHEIGHT,
+              spoon.getRepositoryName(), repositoriesMeta );
             renderAndUpdate();
           }
         } );
@@ -193,7 +222,7 @@ public class RepositoryConnectMenu {
             try {
               cancelled = !spoon.promptForSave();
             } catch ( KettleException e ) {
-              log.logError( "Error saving Job or Transformation", e );
+              log.logError( BaseMessages.getString( PKG, "RepositoryConnectMenu.ErrorSavingJobOrTransformation" ), e );
             }
             if ( !cancelled ) {
               spoon.closeRepository();
@@ -205,13 +234,11 @@ public class RepositoryConnectMenu {
 
         ToolItem item = (ToolItem) event.widget;
         Rectangle rect = item.getBounds();
-        org.eclipse.swt.graphics.Point pt =
-            item.getParent().toDisplay( new org.eclipse.swt.graphics.Point( rect.x, rect.y + rect.height ) );
-
+        Point pt =
+          item.getParent().toDisplay( new org.eclipse.swt.graphics.Point( rect.x, rect.y + rect.height ) );
         connectionMenu.setLocation( pt.x, pt.y );
         connectionMenu.setVisible( true );
       }
-
     } );
   }
 
@@ -222,12 +249,139 @@ public class RepositoryConnectMenu {
       gc.dispose();
       return name;
     }
-    String originalName = name;
     while ( gc.textExtent( name + "..." ).x > MAX_REPO_NAME_PIXEL_LENGTH ) {
       name = name.substring( 0, name.length() - 1 );
     }
     gc.dispose();
     name = name + "...";
     return name;
+  }
+
+  /**
+   * Connect to repository based on saved authentication method
+   */
+  private void connectBasedOnAuthMethod( String repoName, RepositoryMeta repositoryMeta ) {
+    // Get authMethod from repository metadata
+    String authMethod = PurRepositoryUtils.getAuthMethod( repositoryMeta );
+
+    if ( "SSO".equals( authMethod ) ) {
+      // Connect using SSO
+      String serverUrl = PurRepositoryUtils.getServerUrl( repositoryMeta );
+      String authorizationUri = PurRepositoryUtils.getSsoAuthorizationUri( repositoryMeta );
+      if ( authorizationUri == null || authorizationUri.trim().isEmpty() ) {
+        log.logDebug( "No provider-specific authorization URI found in repository metadata; using generic browser auth" );
+      }
+      if ( serverUrl != null && !serverUrl.trim().isEmpty() ) {
+        try {
+          openBrowserLogin( repoName, serverUrl, authorizationUri );
+        } catch ( Exception ex ) {
+          log.logError( BaseMessages.getString( PKG, "RepositoryConnectMenu.ErrorOpeningBrowserLogin" ), ex );
+        }
+      } else {
+        log.logError( BaseMessages.getString( PKG, "RepositoryConnectMenu.ErrorSsoUrlNotConfigured" ) );
+      }
+    } else {
+      // Connect with Username/Password (default)
+      new RepositoryConnectionDialog( spoon.getShell() ).createDialog( repoName );
+    }
+  }
+
+
+  /**
+   * Open browser login for HTTP callback authentication
+   */
+  private void openBrowserLogin( String repoName, String serverUrl, String authorizationUri ) {
+    try {
+      BrowserAuthenticationService authService = getBrowserAuthService();
+
+      if ( !BrowserAuthDialogHelper.confirmCancelExistingLoginIfNeeded( spoon.getShell(), authService ) ) {
+        return;
+      }
+
+      CompletableFuture<SessionInfo> future = authService.authenticate( serverUrl, authorizationUri );
+
+      future.thenAccept( sessionInfo ->
+        spoon.getDisplay().asyncExec( () -> {
+          try {
+            AuthenticationContext authContext =
+              SpoonSessionManager.getInstance().getAuthenticationContext( serverUrl );
+            if ( authContext == null ) {
+              log.logError( "Failed to create authentication context for server URL: " + serverUrl );
+              showErrorDialog(
+                BaseMessages.getString( PKG, "RepositoryConnectMenu.Dialog.ConnectionErrorTitle" ),
+                BaseMessages.getString( PKG, "RepositoryConnectMenu.Dialog.InvalidServerUrl", serverUrl )
+              );
+              return;
+            }
+            authContext.storeJSessionId( sessionInfo.getJsessionId(), sessionInfo.getUsername() );
+
+            repoConnectController.connectToRepository(
+              repoName,
+              sessionInfo.getUsername(),
+              AuthenticationContext.SESSION_AUTH_TOKEN
+            );
+            renderAndUpdate();
+          } catch ( Exception e ) {
+            log.logError( BaseMessages.getString( PKG, "RepositoryConnectMenu.ErrorConnectingAfterBrowserAuth" ), e );
+            showErrorDialog(
+              BaseMessages.getString( PKG, "RepositoryConnectMenu.Dialog.ConnectionErrorTitle" ),
+              BaseMessages.getString( PKG, "RepositoryConnectMenu.Dialog.ConnectionFailedMessage", e.getMessage() )
+            );
+          }
+        } )
+      ).exceptionally( ex -> {
+        if ( BrowserAuthenticationService.isUserInitiatedCancellation( ex ) ) {
+          log.logBasic( "Previous browser login was cancelled to start a new login; skipping error dialog." );
+          return null;
+        }
+        log.logError( BaseMessages.getString( PKG, "RepositoryConnectMenu.ErrorBrowserAuthFailed" ), ex );
+        spoon.getDisplay().asyncExec( () ->
+          showErrorDialog(
+            BaseMessages.getString( PKG, "RepositoryConnectMenu.Dialog.AuthenticationFailedTitle" ),
+            formatBrowserAuthErrorMessage( ex ) ) );
+        return null;
+      } );
+    } catch ( Exception e ) {
+      log.logError( BaseMessages.getString( PKG, "RepositoryConnectMenu.ErrorInitiatingBrowserLogin" ), e );
+      showErrorDialog(
+        BaseMessages.getString( PKG, "RepositoryConnectMenu.Dialog.ErrorTitle" ),
+        BaseMessages.getString( PKG, "RepositoryConnectMenu.Dialog.BrowserLoginInitError", e.getMessage() ) );
+    }
+  }
+
+  private void showErrorDialog( String title, String message ) {
+    MessageBox mb = new MessageBox( spoon.getShell(), SWT.OK | SWT.ICON_ERROR );
+    mb.setText( title );
+    mb.setMessage( message );
+    mb.open();
+  }
+
+  private String formatBrowserAuthErrorMessage( Throwable error ) {
+    Throwable rootCause = unwrapRootCause( error );
+    if ( rootCause instanceof TimeoutException ) {
+      return BaseMessages.getString( PKG, "RepositoryConnectMenu.Dialog.BrowserAuthTimeoutMessage" );
+    }
+
+    String details = rootCause != null && rootCause.getMessage() != null
+      ? rootCause.getMessage().trim()
+      : null;
+
+    if ( details == null || details.isEmpty() ) {
+      return BaseMessages.getString( PKG, "RepositoryConnectMenu.Dialog.BrowserAuthGenericError" );
+    }
+
+    return BaseMessages.getString( PKG, "RepositoryConnectMenu.Dialog.BrowserAuthErrorWithDetails", details );
+  }
+
+  private Throwable unwrapRootCause( Throwable throwable ) {
+    Throwable current = throwable;
+    while ( current instanceof CompletionException && current.getCause() != null ) {
+      current = current.getCause();
+    }
+    return current;
+  }
+
+  BrowserAuthenticationService getBrowserAuthService() {
+    return BrowserAuthenticationService.getInstance();
   }
 }

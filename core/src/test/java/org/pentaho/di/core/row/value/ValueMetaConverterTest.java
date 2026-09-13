@@ -1,41 +1,31 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2017-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.core.row.value;
 
-import org.junit.ClassRule;
 import org.junit.Test;
 import org.pentaho.di.core.row.ValueMetaInterface;
-import org.pentaho.di.junit.rules.RestorePDIEnvironment;
 
 import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
@@ -44,7 +34,6 @@ import static org.junit.Assert.fail;
  * Created by tkafalas on 12/6/2017.
  */
 public class ValueMetaConverterTest {
-  @ClassRule public static RestorePDIEnvironment env = new RestorePDIEnvironment();
 
   private static final int startSource = 1;
   private static final int endSource = 10;
@@ -144,7 +133,7 @@ public class ValueMetaConverterTest {
               "type " + sourceType + "/" + targetType + ":" + testSpec[ 3 ].toString() + "=" + targetValue.toString() );
           }
           if ( targetType == ValueMetaInterface.TYPE_BINARY ) {
-            Arrays.equals( (byte[]) testSpec[ 3 ], (byte[]) targetValue );
+            assertArrayEquals( (byte[]) testSpec[ 3 ], (byte[]) targetValue );
           } else {
             assertEquals( testSpec[ 3 ], targetValue );
           }
@@ -180,12 +169,10 @@ public class ValueMetaConverterTest {
           }
         }
       }
-
     }
   }
 
   private String getKey( int sourceType, int targetType ) {
     return "" + sourceType + "," + targetType;
   }
-
 }

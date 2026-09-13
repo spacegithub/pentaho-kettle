@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.xsdvalidator;
 
@@ -35,6 +27,7 @@ import javax.xml.validation.Validator;
 
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.provider.AbstractFileObject;
+import org.apache.xerces.xni.parser.XMLEntityResolver;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.core.row.RowDataUtil;
@@ -87,7 +80,8 @@ public class XsdValidator extends BaseStep implements StepInterface {
     if ( first ) {
       first = false;
       data.outputRowMeta = getInputRowMeta().clone();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+                      metaStore );
 
       // Check if XML stream is given
       if ( meta.getXMLStream() != null ) {
@@ -118,7 +112,7 @@ public class XsdValidator extends BaseStep implements StepInterface {
             // Is XSD file exists ?
             FileObject xsdfile = null;
             try {
-              xsdfile = KettleVFS.getFileObject( environmentSubstitute( meta.getXSDFilename() ), getTransMeta() );
+              xsdfile = KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( environmentSubstitute( meta.getXSDFilename() ), getTransMeta() );
               if ( !xsdfile.exists() ) {
                 logError( BaseMessages.getString( PKG, "XsdValidator.Log.Error.XSDFileNotExists" ) );
                 throw new KettleStepException( BaseMessages.getString( PKG, "XsdValidator.Exception.XSDFileNotExists" ) );
@@ -189,8 +183,11 @@ public class XsdValidator extends BaseStep implements StepInterface {
       try {
 
         SchemaFactory factoryXSDValidator = SchemaFactory.newInstance( XMLConstants.W3C_XML_SCHEMA_NS_URI );
+        factoryXSDValidator.setFeature(
+          XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        factoryXSDValidator.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
 
-        xsdfile = KettleVFS.getFileObject( xsdfilename, getTransMeta() );
+        xsdfile = KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( xsdfilename, getTransMeta() );
 
         // Get XML stream
         Source sourceXML = new StreamSource( new StringReader( XMLFieldvalue ) );
@@ -199,7 +196,7 @@ public class XsdValidator extends BaseStep implements StepInterface {
 
           // We deal with XML file
           // Get XML File
-          FileObject xmlfileValidator = KettleVFS.getFileObject( XMLFieldvalue );
+          FileObject xmlfileValidator = KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( XMLFieldvalue );
           if ( xmlfileValidator == null || !xmlfileValidator.exists() ) {
             logError( BaseMessages.getString( PKG, "XsdValidator.Log.Error.XMLfileMissing", XMLFieldvalue ) );
             throw new KettleStepException( BaseMessages.getString( PKG, "XsdValidator.Exception.XMLfileMissing",
@@ -231,9 +228,23 @@ public class XsdValidator extends BaseStep implements StepInterface {
         }
 
         // Create XSDValidator
-        Validator XSDValidator = SchematXSD.newValidator();
+        Validator xsdValidator = SchematXSD.newValidator();
+
+        // Prevent against XML Entity Expansion (XEE) attacks.
+        // https://www.owasp.org/index.php/XML_Security_Cheat_Sheet#XML_Entity_Expansion
+        if ( !meta.isAllowExternalEntities() ) {
+          xsdValidator.setFeature( "http://apache.org/xml/features/disallow-doctype-decl", true );
+          xsdValidator.setFeature( "http://xml.org/sax/features/external-general-entities", false );
+          xsdValidator.setFeature( "http://xml.org/sax/features/external-parameter-entities", false );
+          xsdValidator.setProperty( "http://apache.org/xml/properties/internal/entity-resolver",
+            (XMLEntityResolver) xmlResourceIdentifier -> {
+              String message = BaseMessages.getString( PKG, "XsdValidator.Exception.DisallowedDocType" );
+              throw new IOException( message );
+            } );
+        }
+
         // Validate XML / XSD
-        XSDValidator.validate( sourceXML );
+        xsdValidator.validate( sourceXML );
 
         isvalid = true;
 

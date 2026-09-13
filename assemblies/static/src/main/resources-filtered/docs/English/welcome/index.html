@@ -1,3 +1,14 @@
+<!-- ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************* -->
 <html lang="en">
 
 <head>
@@ -56,8 +67,7 @@
             font-family: 'OpenSansRegular', sans-serif;
             margin: 0;
             padding: 34px 0;
-            border-top: 4px solid #005DA6;
-            /* min-width: 992px; */
+            background-color: #f5f5f5;
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             -khtml-user-select: none;
@@ -70,19 +80,20 @@
         body a.external.arrow:hover,
         body a:hover,
         body a:hover:after {
-            color: #0F2B5B;
+            color: #555555;
             text-transform: none;
         }
 
+		p.row-content {
+         	font-size: 13px;
+        }
+
         h2 {
-            font-family: 'OpenSansLight', sans-serif;
+            font-family: 'OpenSansRegular', sans-serif;
             text-align: center;
-            font-size: 28px;
-            margin-top: 20px;
-            margin-bottom: 1em;
-            color: #000;
+            font-size: 35px;
+            color: #414141;
             margin: 2rem 0 .5rem;
-            padding: 0;
             -webkit-margin-before: 0;
             -webkit-margin-after: 0;
             -webkit-margin-start: 0;
@@ -95,16 +106,18 @@
         a:visited,
         a:focus,
         a:active {
-            color: #005DA6;
+            color: #555555;
             text-decoration: none;
         }
         /* CARDS  */
 
         a.card-link {
-            color: #005DA6;
+            font-family: 'OpenSansSemiBold', sans-serif;
+            color: #414141;
             text-decoration: none;
             display: block;
             line-height: 30px;
+            font-weight: 600;
         }
 
         .cards-container {
@@ -120,16 +133,18 @@
 
         .card-title {
             display: block;
-            font-family: 'OpenSansLight', sans-serif;
+            font-family: 'OpenSansRegular', sans-serif;
             color: #414141;
             font-size: 1.75em;
-            font-weight: 300;
+            font-weight: 400;
             text-transform: uppercase;
             margin: 0 0 15px;
+            line-height: 40px;
         }
 
         .card-description {
-            background: #F5F6F7;
+            border-top: 2px solid #cc0000;
+            background-color: #ffffff;
             -webkit-transition: background-color .1s ease-out;
             -moz-transition: background-color .1s ease-out;
             -o-transition: background-color .1s ease-out;
@@ -143,8 +158,8 @@
         }
 
         .card-description img {
-            margin: 1em 0 2em;
-            height: 60px;
+            margin: 1em 0 1em;
+            height: 80px;
         }
         /* EXTRAS BAR */
 
@@ -157,9 +172,11 @@
         }
 
         .h-extras-bar .extras-container span {
+            font-family: 'OpenSansSemiBold', sans-serif;
             display: block;
-            font-size: 1.175em;
-            font-weight: 500;
+            font-size: 1em;
+            font-weight: 600;
+            letter-spacing: 0.02em;
         }
 
         .h-extras-bar,
@@ -168,7 +185,11 @@
         }
 
         .h-extras-bar .extras-container a {
-            font-size: 1em;
+            font-size: 0.9em;
+            font-family: 'OpenSansRegular', sans-serif;
+            font-weight: 600;
+            color: #146BD2;
+            letter-spacing: 0.02em;
         }
 
         .h-extras-bar .extras-container a:hover {
@@ -179,7 +200,7 @@
             float: left;
             width: auto;
             height: 40px;
-            margin: 0 20px 10px 0 !important;
+            margin: 0 10px 10px 0 !important;
         }
 
         .h-extras-bar .extras-container {
@@ -192,23 +213,30 @@
             white-space: nowrap;
             max-width: 215px;
         }
+
+        hr {
+            border-top: 1px solid #dedede;
+        }
     </style>
 </head>
 
 <body>
 
-    <div class="container">
-        <div class="row">
-            <h2>Welcome to Pentaho Data Integration</h2>
-        </div>
+<div class="container">
+    <div class="row">
+        <h2>Welcome to Pentaho Data Integration</h2>
+        <p class="row-content">Thank you for downloading the <b>Pentaho Community Edition</b>.
+            For the full <b>Pentaho Enterprise Edition</b> including Hitachi Vantara’s world-class support and get all the product updates, please go to: <u><a href="#" onclick="javascript:openURL('https://www.hitachivantara.com/en-us/products/lumada-dataops/data-integration-analytics/download-pentaho.html'); return false;">Lumada Data Integration and Analytics - Powered by Pentaho | Hitachi Vantara</a></u> or reach out to us at
+            <u><a href="#" onclick="javascript:openURL('https://www.hitachivantara.com/en-us/products/lumada-dataops/data-integration-analytics/request-demo.html'); return false;">Experience the Power of Lumada DataOps - Customized Demo | Hitachi Vantara</a></u> for us to help you get started today!</p>
     </div>
-    <div class="container cards-container">
-        <div class="row">
+</div>
+<div class="container cards-container">
+    <div class="row">
 
 
             <div class="col-xs-3 card-content">
                 <div class="card-description">
-                    <img alt="Work" class="internal" src="assets/open.svg">
+                    <img alt="Work" class="internal" src="assets/Archive.L_D.svg">
                     <div class="card-title">Work</div>
                     <hr/>
                     <a href="#" onclick="javascript:openFileFunction(); return false;" class="card-link">Open files</a>
@@ -218,29 +246,29 @@
             </div>
             <div class="col-xs-3 card-content">
                 <div class="card-description">
-                    <img alt="Learn" class="internal" src="assets/learn.svg">
+                    <img alt="Learn" class="internal" src="assets/LightOn.L_D.svg">
                     <div class="card-title">Learn</div>
                     <hr/>
-                    <a href="#" onclick="javascript:openURL('https://help.pentaho.com/Documentation/8.2/Products/Data_Integration'); return false;" class="card-link">Documentation</a>
-                    <a href="#" onclick="javascript:openURL('http://www.pentaho.com/evaluation-path#data-integration'); return false;" class="card-link">Watch tutorials</a>
-                    <a href="#" onclick="javascript:openURL('https://help.pentaho.com/Documentation/8.1/Whats_New'); return false;" class="card-link">Release notes</a>
+                    <a href="#" onclick="javascript:openURL('https://docs.pentaho.com/pdia/11.0-data-integration'); return false;" class="card-link">Documentation</a>
+                    <a href="#" onclick="javascript:openURL('https://www.hitachivantara.com/en-us/products/data-management-analytics/pentaho-platform/pentaho-data-integration/evaluation-support.html?ecid=ms_glo_bd_en_sscepen02'); return false;" class="card-link">Watch tutorials</a>
+                    <a href="#" onclick="javascript:openURL('https://docs.pentaho.com/whats-new/pdia-11.0'); return false;" class="card-link">Release notes</a>
                 </div>
             </div>
             <div class="col-xs-3 card-content">
                 <div class="card-description">
-                    <img alt="Extend" class="internal" src="assets/extend.svg">
+                    <img alt="Extend" class="internal" src="assets/Components.L_D.svg">
                     <div class="card-title">Extend</div>
                     <hr/>
-                    <a href="#" onclick="javascript:genericFunction('openMarketplace'); return false;" class="card-link">Marketplace</a>
-                    <a href="#" onclick="javascript:openURL('https://help.pentaho.com/Documentation/8.1/Developer_Center/PDI/Extend'); return false;" class="card-link">Build plugins</a>
+                    <a href="#" onclick="javascript:openURL('https://docs.pentaho.com/pdia-admin/embed-and-extend-pentaho-functionality-cp/embed-and-extend-pdi-functionality/extend-pentaho-data-integration'); return false;" class="card-link">Build plugins</a>
                 </div>
             </div>
             <div class="col-xs-3 card-content">
                 <div class="card-description">
-                    <img alt="Upgrade" class="internal" src="assets/upgrade.svg">
-                    <div class="card-title">Upgrade</div>
+                    <img alt="Upgrade" class="internal" src="assets/Binoculars.L_D.svg">
+                    <div class="card-title">Discover</div>
                     <hr/>
-                    <a href="#" onclick="javascript:openURL('https://www.hitachivantara.com/en-us/products/big-data-integration-analytics/pentaho-data-integration.html'); return false;" class="card-link">Enterprise Edition</a>
+                    <a href="#" onclick="javascript:openURL('http://events.pentaho.com/cp-lp-community-edition-whats-new.html?ecid=ms_glo_bd_en_sscepen04'); return false;" class="card-link">Pentaho News</a>
+                    <a href="#" onclick="javascript:openURL('https://community.hitachivantara.com/communities/community-home/recent-community-events?communitykey=e0eaa1d8-5ecc-4721-a6a7-75d4e890ee0d'); return false;" class="card-link">Events & Webcasts</a>
                 </div>
             </div>
         </div>
@@ -250,23 +278,23 @@
         <div class="row h-extras-bar">
             <div class="col-xs-4 extras-container">
                 <div class="extras">
-                    <img class="internal" alt="Community" src="assets/community_small.svg">
+                    <img class="internal" alt="Community" src="assets/People.M_D-1.3.0.svg">
                     <span>Community</span>
-                    <a href="#" onclick="javascript:openURL('https://community.hds.com/community/products-and-solutions/pentaho/pages/home'); return false;" class="arrow">Join the discussion<i class="icon-arrow-right"></i></a>
+                    <a href="#" onclick="javascript:openURL('https://community.hitachivantara.com/communities/community-pentaho-home?CommunityKey=e0eaa1d8-5ecc-4721-a6a7-75d4e890ee0d'); return false;" class="arrow">Join the community<i class="icon-arrow-right"></i></a>
                 </div>
             </div>
             <div class="col-xs-4 extras-container">
                 <div class="extras">
-                    <img class="internal" alt="Pentaho Forums" src="assets/forums_small.svg">
+                    <img class="internal" alt="Pentaho Forums" src="assets/Chat.M_D-1.3.0.svg">
                     <span>Pentaho Forums</span>
-                    <a href="#" onclick="javascript:openURL('https://community.hds.com/community/products-and-solutions/pentaho/content'); return false;" class="arrow">Join the discussion<i class="icon-arrow-right"></i></a>
+                    <a href="#" onclick="javascript:openURL('https://community.hitachivantara.com/start-a-discussion'); return false;" class="arrow">Join the discussion<i class="icon-arrow-right"></i></a>
                 </div>
             </div>
             <div class="col-xs-4 extras-container">
                 <div class="extras">
-                    <img class="internal" alt="hitachivantara.com" src="assets/pentahosite_small.svg">
+                    <img class="internal" alt="hitachivantara.com" src="assets/WorldGlobe.M_D-1.3.0.svg">
                     <span>hitachivantara.com</span>
-                    <a href="#" onclick="javascript:openURL('https://www.hitachivantara.com/go/pentaho.html?source=pentaho-pdi'); return false;" class="arrow">Visit us<i class="icon-arrow-right"></i></a>
+                    <a href="#" onclick="javascript:openURL('https://www.hitachivantara.com/en-us/products/lumada-dataops/data-integration-analytics.html'); return false;" class="arrow">Visit us<i class="icon-arrow-right"></i></a>
                 </div>
             </div>
         </div>

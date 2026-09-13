@@ -1,35 +1,30 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.propertyinput;
 
+import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.Charset;
 import java.util.Date;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 
+import org.apache.commons.configuration2.INIConfiguration;
+import org.apache.commons.configuration2.ex.ConfigurationException;
+import org.apache.commons.configuration2.io.FileHandler;
 import org.apache.commons.vfs2.FileObject;
-import org.ini4j.Wini;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.ResultFile;
@@ -66,9 +61,10 @@ public class PropertyInput extends BaseStep implements StepInterface {
     super( stepMeta, stepDataInterface, copyNr, transMeta, trans );
   }
 
+  @Override
   public boolean processRow( StepMetaInterface smi, StepDataInterface sdi ) throws KettleException {
     if ( first && !meta.isFileField() ) {
-      data.files = meta.getFiles( this );
+      data.files = meta.getFiles( getTransMeta().getBowl(), this );
       if ( data.files == null || data.files.nrOfFiles() == 0 ) {
         throw new KettleException( BaseMessages.getString( PKG, "PropertyInput.Log.NoFiles" ) );
       }
@@ -77,17 +73,14 @@ public class PropertyInput extends BaseStep implements StepInterface {
 
       // Create the output row meta-data
       data.outputRowMeta = new RowMeta();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore ); // get the metadata
-                                                                                                    // populated
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore ); // get the metadata populated
 
       // Create convert meta-data objects that will contain Date & Number formatters
       //
       data.convertRowMeta = data.outputRowMeta.cloneToType( ValueMetaInterface.TYPE_STRING );
     }
     Object[] r = null;
-
-    boolean sendToErrorRow = false;
-    String errorMessage = null;
 
     try {
       // Grab one row
@@ -105,8 +98,8 @@ public class PropertyInput extends BaseStep implements StepInterface {
       }
     } catch ( KettleException e ) {
       if ( getStepMeta().isDoingErrorHandling() ) {
-        sendToErrorRow = true;
-        errorMessage = e.toString();
+        // Simply add this row to the error row
+        putError( getInputRowMeta(), r, 1, e.toString(), null, "PropertyInput001" );
       } else {
         logError( BaseMessages.getString( PKG, "PropertyInput.ErrorInStepRunning", e.getMessage() ) );
         setErrors( 1 );
@@ -114,17 +107,13 @@ public class PropertyInput extends BaseStep implements StepInterface {
         setOutputDone(); // signal end to receiver(s)
         return false;
       }
-      if ( sendToErrorRow ) {
-        // Simply add this row to the error row
-        putError( getInputRowMeta(), r, 1, errorMessage, null, "PropertyInput001" );
-      }
     }
     return true;
   }
 
   private void handleMissingFiles() throws KettleException {
     List<FileObject> nonExistantFiles = data.files.getNonExistantFiles();
-    if ( nonExistantFiles.size() != 0 ) {
+    if ( !nonExistantFiles.isEmpty() ) {
       String message = FileInputList.getRequiredFilesDescription( nonExistantFiles );
       logError( BaseMessages.getString( PKG, "PropertyInput.Log.RequiredFilesTitle" ), BaseMessages.getString(
         PKG, "PropertyInput.Log.RequiredFiles", message ) );
@@ -133,7 +122,7 @@ public class PropertyInput extends BaseStep implements StepInterface {
     }
 
     List<FileObject> nonAccessibleFiles = data.files.getNonAccessibleFiles();
-    if ( nonAccessibleFiles.size() != 0 ) {
+    if ( !nonAccessibleFiles.isEmpty() ) {
       String message = FileInputList.getRequiredFilesDescription( nonAccessibleFiles );
       logError( BaseMessages.getString( PKG, "PropertyInput.Log.RequiredFilesTitle" ), BaseMessages.getString(
         PKG, "PropertyInput.Log.RequiredNotAccessibleFiles", message ) );
@@ -147,29 +136,29 @@ public class PropertyInput extends BaseStep implements StepInterface {
     try {
       if ( meta.isFileField() ) {
         while ( ( data.readrow == null )
-          || ( ( data.propfiles && !data.it.hasNext() ) || ( !data.propfiles && !data.iniIt.hasNext() ) ) ) {
-          // if (!openNextFile()) return null;
+          || ( ( data.propfiles && !data.propIt.hasNext() ) || ( !data.propfiles && !data.iniIt.hasNext() ) ) ) {
 
           // In case we read all sections
           // maybe we have to change section for ini files...
-          if ( !data.propfiles && data.realSection == null && data.readrow != null && data.itSection.hasNext() ) {
-            data.iniSection = data.wini.get( data.itSection.next().toString() );
-            data.iniIt = data.iniSection.keySet().iterator();
+          if ( !data.propfiles && data.realSection == null && data.readrow != null && data.iniSectionIt.hasNext() ) {
+            data.currentSection = data.iniSectionIt.next();
+            data.iniSection = data.iniConf.getSection( data.currentSection );
+            data.iniIt = data.iniSection.getKeys();
           } else {
             if ( !openNextFile() ) {
               return null;
             }
           }
-
         }
       } else {
         while ( ( data.file == null )
-          || ( ( data.propfiles && !data.it.hasNext() ) || ( !data.propfiles && !data.iniIt.hasNext() ) ) ) {
+          || ( ( data.propfiles && !data.propIt.hasNext() ) || ( !data.propfiles && !data.iniIt.hasNext() ) ) ) {
           // In case we read all sections
           // maybe we have to change section for ini files...
-          if ( !data.propfiles && data.realSection == null && data.file != null && data.itSection.hasNext() ) {
-            data.iniSection = data.wini.get( data.itSection.next().toString() );
-            data.iniIt = data.iniSection.keySet().iterator();
+          if ( !data.propfiles && data.realSection == null && data.file != null && data.iniSectionIt.hasNext() ) {
+            data.currentSection = data.iniSectionIt.next();
+            data.iniSection = data.iniConf.getSection( data.currentSection );
+            data.iniIt = data.iniSection.getKeys();
           } else {
             if ( !openNextFile() ) {
               return null;
@@ -177,8 +166,8 @@ public class PropertyInput extends BaseStep implements StepInterface {
           }
         }
       }
-    } catch ( Exception IO ) {
-      logError( "Unable to read row from file : " + IO.getMessage() );
+    } catch ( Exception ex ) {
+      logError( "Unable to read row from file : " + ex.getMessage() );
       return null;
     }
     // Build an empty row based on the meta-data
@@ -192,9 +181,9 @@ public class PropertyInput extends BaseStep implements StepInterface {
     try {
       String key = null;
       if ( data.propfiles ) {
-        key = data.it.next().toString();
+        key = data.propIt.next().toString();
       } else {
-        key = data.iniIt.next().toString();
+        key = data.iniIt.next();
       }
 
       // Execute for each Input field...
@@ -210,13 +199,13 @@ public class PropertyInput extends BaseStep implements StepInterface {
             if ( data.propfiles ) {
               value = environmentSubstitute( data.pro.getProperty( key ) );
             } else {
-              value = environmentSubstitute( data.iniSection.fetch( key ) ); // for INI files
+              value = environmentSubstitute( data.iniSection.getString( key ) ); // for INI files
             }
           } else {
             if ( data.propfiles ) {
               value = data.pro.getProperty( key );
             } else {
-              value = data.iniSection.fetch( key ); // for INI files
+              value = data.iniSection.getString( key ); // for INI files
             }
           }
         }
@@ -248,12 +237,9 @@ public class PropertyInput extends BaseStep implements StepInterface {
         r[data.totalpreviousfields + i] = targetValueMeta.convertData( sourceValueMeta, value );
 
         // Do we need to repeat this field if it is null?
-        if ( meta.getInputFields()[i].isRepeated() ) {
-          if ( data.previousRow != null && Utils.isEmpty( value ) ) {
-            r[data.totalpreviousfields + i] = data.previousRow[data.totalpreviousfields + i];
-          }
+        if ( meta.getInputFields()[ i ].isRepeated() && data.previousRow != null && Utils.isEmpty( value ) ) {
+          r[ data.totalpreviousfields + i ] = data.previousRow[ data.totalpreviousfields + i ];
         }
-
       } // End of loop over fields...
 
       int rowIndex = meta.getInputFields().length;
@@ -265,48 +251,49 @@ public class PropertyInput extends BaseStep implements StepInterface {
 
       // See if we need to add the row number to the row...
       if ( meta.includeRowNumber() && !Utils.isEmpty( meta.getRowNumberField() ) ) {
-        r[data.totalpreviousfields + rowIndex++] = new Long( data.rownr );
+        r[data.totalpreviousfields + rowIndex++] = data.rownr;
       }
 
       // See if we need to add the section for INI files ...
       if ( meta.includeIniSection() && !Utils.isEmpty( meta.getINISectionField() ) ) {
-        r[data.totalpreviousfields + rowIndex++] = environmentSubstitute( data.iniSection.getName() );
+        r[data.totalpreviousfields + rowIndex++] = environmentSubstitute( data.currentSection );
       }
       // Possibly add short filename...
-      if ( meta.getShortFileNameField() != null && meta.getShortFileNameField().length() > 0 ) {
+      if ( !Utils.isEmpty( meta.getShortFileNameField() ) ) {
         r[data.totalpreviousfields + rowIndex++] = data.shortFilename;
       }
       // Add Extension
-      if ( meta.getExtensionField() != null && meta.getExtensionField().length() > 0 ) {
+      if ( !Utils.isEmpty( meta.getExtensionField() ) ) {
         r[data.totalpreviousfields + rowIndex++] = data.extension;
       }
       // add path
-      if ( meta.getPathField() != null && meta.getPathField().length() > 0 ) {
+      if ( !Utils.isEmpty( meta.getPathField() ) ) {
         r[data.totalpreviousfields + rowIndex++] = data.path;
       }
       // Add Size
-      if ( meta.getSizeField() != null && meta.getSizeField().length() > 0 ) {
-        r[data.totalpreviousfields + rowIndex++] = new Long( data.size );
+      if ( !Utils.isEmpty( meta.getSizeField() ) ) {
+        r[data.totalpreviousfields + rowIndex++] = data.size;
       }
       // add Hidden
-      if ( meta.isHiddenField() != null && meta.isHiddenField().length() > 0 ) {
-        r[data.totalpreviousfields + rowIndex++] = new Boolean( data.hidden );
+      if ( !Utils.isEmpty( meta.isHiddenField() ) ) {
+        r[data.totalpreviousfields + rowIndex++] = data.hidden;
       }
       // Add modification date
-      if ( meta.getLastModificationDateField() != null && meta.getLastModificationDateField().length() > 0 ) {
+      if ( !Utils.isEmpty( meta.getLastModificationDateField() ) ) {
         r[data.totalpreviousfields + rowIndex++] = data.lastModificationDateTime;
       }
       // Add Uri
-      if ( meta.getUriField() != null && meta.getUriField().length() > 0 ) {
+      if ( !Utils.isEmpty( meta.getUriField() ) ) {
         r[data.totalpreviousfields + rowIndex++] = data.uriName;
       }
       // Add RootUri
-      if ( meta.getRootUriField() != null && meta.getRootUriField().length() > 0 ) {
+      if ( !Utils.isEmpty( meta.getRootUriField() ) ) {
         r[data.totalpreviousfields + rowIndex++] = data.rootUriName;
       }
-      RowMetaInterface irow = getInputRowMeta();
 
-      data.previousRow = irow == null ? r : irow.cloneRow( r ); // copy it to make
+      RowMetaInterface iRow = getInputRowMeta();
+
+      data.previousRow = iRow == null ? r : iRow.cloneRow( r ); // copy it to make
       // surely the next step doesn't change it in between...
 
       incrementLinesInput();
@@ -320,7 +307,6 @@ public class PropertyInput extends BaseStep implements StepInterface {
   }
 
   private boolean openNextFile() {
-    InputStream fis = null;
     try {
       if ( !meta.isFileField() ) {
         if ( data.filenr >= data.files.nrOfFiles() ) { // finished processing!
@@ -351,7 +337,8 @@ public class PropertyInput extends BaseStep implements StepInterface {
 
           data.inputRowMeta = getInputRowMeta();
           data.outputRowMeta = data.inputRowMeta.clone();
-          meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+          meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+            metaStore );
 
           // Get total previous fields
           data.totalpreviousfields = data.inputRowMeta.size();
@@ -371,7 +358,7 @@ public class PropertyInput extends BaseStep implements StepInterface {
             if ( data.indexOfFilenameField < 0 ) {
               // The field is unreachable !
               logError( BaseMessages.getString( PKG, "PropertyInput.Log.ErrorFindingField" )
-                + "[" + meta.getDynamicFilenameField() + "]" );
+                + '[' + meta.getDynamicFilenameField() + ']' );
               throw new KettleException( BaseMessages.getString(
                 PKG, "PropertyInput.Exception.CouldnotFindField", meta.getDynamicFilenameField() ) );
             }
@@ -384,37 +371,36 @@ public class PropertyInput extends BaseStep implements StepInterface {
             .getDynamicFilenameField(), filename ) );
         }
 
-        data.file = KettleVFS.getFileObject( filename, getTransMeta() );
+        data.file = KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( filename, getTransMeta() );
         // Check if file exists!
       }
 
-      // Check if file is empty
-      // long fileSize= data.file.getContent().getSize();
       data.filename = KettleVFS.getFilename( data.file );
+
       // Add additional fields?
-      if ( meta.getShortFileNameField() != null && meta.getShortFileNameField().length() > 0 ) {
+      if ( !Utils.isEmpty( meta.getShortFileNameField() ) ) {
         data.shortFilename = data.file.getName().getBaseName();
       }
-      if ( meta.getPathField() != null && meta.getPathField().length() > 0 ) {
+      if ( !Utils.isEmpty( meta.getPathField() ) ) {
         data.path = KettleVFS.getFilename( data.file.getParent() );
       }
-      if ( meta.isHiddenField() != null && meta.isHiddenField().length() > 0 ) {
+      if ( !Utils.isEmpty( meta.isHiddenField() ) ) {
         data.hidden = data.file.isHidden();
       }
-      if ( meta.getExtensionField() != null && meta.getExtensionField().length() > 0 ) {
+      if ( !Utils.isEmpty( meta.getExtensionField() ) ) {
         data.extension = data.file.getName().getExtension();
       }
-      if ( meta.getLastModificationDateField() != null && meta.getLastModificationDateField().length() > 0 ) {
+      if ( !Utils.isEmpty( meta.getLastModificationDateField() ) ) {
         data.lastModificationDateTime = new Date( data.file.getContent().getLastModifiedTime() );
       }
-      if ( meta.getUriField() != null && meta.getUriField().length() > 0 ) {
-        data.uriName = data.file.getName().getURI();
+      if ( !Utils.isEmpty( meta.getUriField() ) ) {
+        data.uriName = Const.optionallyDecodeUriString( data.file.getName().getURI() );
       }
-      if ( meta.getRootUriField() != null && meta.getRootUriField().length() > 0 ) {
+      if ( !Utils.isEmpty( meta.getRootUriField() ) ) {
         data.rootUriName = data.file.getName().getRootURI();
       }
-      if ( meta.getSizeField() != null && meta.getSizeField().length() > 0 ) {
-        data.size = new Long( data.file.getContent().getSize() );
+      if ( !Utils.isEmpty( meta.getSizeField() ) ) {
+        data.size = data.file.getContent().getSize();
       }
 
       if ( meta.resetRowNumber() ) {
@@ -433,36 +419,10 @@ public class PropertyInput extends BaseStep implements StepInterface {
         addResultFile( resultFile );
       }
 
-      fis = data.file.getContent().getInputStream();
       if ( data.propfiles ) {
-        // load properties file
-        data.pro = new Properties();
-        data.pro.load( fis );
-        data.it = data.pro.keySet().iterator();
+        loadPropertiesFile();
       } else {
-
-        // create wini object
-        data.wini = new Wini();
-        if ( !Utils.isEmpty( data.realEncoding ) ) {
-          data.wini.getConfig().setFileEncoding( Charset.forName( data.realEncoding ) );
-        }
-
-        // load INI file
-        data.wini.load( fis );
-
-        if ( data.realSection != null ) {
-          // just one section
-          data.iniSection = data.wini.get( data.realSection );
-          if ( data.iniSection == null ) {
-            throw new KettleException( BaseMessages.getString(
-              PKG, "PropertyInput.Error.CanNotFindSection", data.realSection, "" + data.file.getName() ) );
-          }
-        } else {
-          // We need to fetch all sections
-          data.itSection = data.wini.keySet().iterator();
-          data.iniSection = data.wini.get( data.itSection.next().toString() );
-        }
-        data.iniIt = data.iniSection.keySet().iterator();
+        loadIniFile();
       }
 
       if ( log.isDetailed() ) {
@@ -476,24 +436,64 @@ public class PropertyInput extends BaseStep implements StepInterface {
       stopAll();
       setErrors( 1 );
       return false;
-    } finally {
-      BaseStep.closeQuietly( fis );
     }
     return true;
+  }
+
+  private void loadPropertiesFile() throws IOException {
+    try ( InputStream fis = data.file.getContent().getInputStream() ) {
+      // load properties file
+      data.pro = new Properties();
+      data.pro.load( fis );
+      data.propIt = data.pro.keySet().iterator();
+    }
+  }
+
+  /**
+   * Load an INI file using Apache Commons Configuration
+   *
+   * @throws ConfigurationException
+   * @throws IOException
+   */
+  private void loadIniFile() throws ConfigurationException, IOException, KettleException {
+    data.iniConf = new INIConfiguration();
+    FileHandler handler = new FileHandler( data.iniConf );
+
+    try ( InputStream inputStream = KettleVFS.getInputStream( data.file ) ) {
+      if ( !Utils.isEmpty( data.realEncoding ) ) {
+        handler.setEncoding( data.realEncoding );
+      }
+      handler.load( inputStream );
+      Set<String> sections = data.iniConf.getSections();
+
+      if ( data.realSection != null ) {
+        // just one section
+        data.iniSection = data.iniConf.getSection( data.realSection );
+        if ( data.iniSection == null ) {
+          throw new KettleException(
+            BaseMessages.getString( PKG, "PropertyInput.Error.CanNotFindSection", data.realSection,
+              "" + data.file.getName() ) );
+        }
+      } else {
+        // We need to fetch all sections
+        data.iniSectionIt = sections.iterator();
+        data.currentSection = data.iniSectionIt.next();
+        data.iniSection = data.iniConf.getSection( data.currentSection );
+      }
+      data.iniIt = data.iniSection.getKeys();
+    }
   }
 
   /**
    * Build an empty row based on the meta-data...
    *
-   * @return
+   * @return an empty row with the correct size
    */
-
   private Object[] buildEmptyRow() {
-    Object[] rowData = RowDataUtil.allocateRowData( data.outputRowMeta.size() );
-
-    return rowData;
+    return RowDataUtil.allocateRowData( data.outputRowMeta.size() );
   }
 
+  @Override
   public boolean init( StepMetaInterface smi, StepDataInterface sdi ) {
     meta = (PropertyInputMeta) smi;
     data = (PropertyInputData) sdi;
@@ -523,6 +523,7 @@ public class PropertyInput extends BaseStep implements StepInterface {
     return false;
   }
 
+  @Override
   public void dispose( StepMetaInterface smi, StepDataInterface sdi ) {
     meta = (PropertyInputMeta) smi;
     data = (PropertyInputData) sdi;
@@ -534,8 +535,8 @@ public class PropertyInput extends BaseStep implements StepInterface {
       data.iniSection.clear();
     }
     data.iniSection = null;
-    if ( data.itSection != null ) {
-      data.itSection = null;
+    if ( data.iniSectionIt != null ) {
+      data.iniSectionIt = null;
     }
     if ( data.file != null ) {
       try {
@@ -548,5 +549,4 @@ public class PropertyInput extends BaseStep implements StepInterface {
 
     super.dispose( smi, sdi );
   }
-
 }

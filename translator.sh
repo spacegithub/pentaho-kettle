@@ -1,26 +1,17 @@
 #!/bin/sh
+# ******************************************************************************
+#
+# Pentaho
+#
+# Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+#
+# Use of this software is governed by the Business Source License included
+# in the LICENSE.TXT file.
+#
+# Change Date: 2030-06-15
+# ******************************************************************************
 
-# *****************************************************************************
-#
-# Pentaho Data Integration
-#
-# Copyright (C) 2007-2018 by Hitachi Vantara : http://www.pentaho.com
-#
-# *****************************************************************************
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-# *****************************************************************************
+
 
 # **************************************************
 # ** Set these to the location of your mozilla
@@ -28,40 +19,40 @@
 # ** Gtk2 and Fte enabled.
 # **************************************************
 
-# export MOZILLA_FIVE_HOME=/usr/local/mozilla
-# export LD_LIBRARY_PATH=/usr/local/mozilla
+# export MOZILLA_FIVE_HOME="/usr/local/mozilla"
+# export LD_LIBRARY_PATH="/usr/local/mozilla"
 
-export MOZILLA_FIVE_HOME=/usr/lib/xulrunner-1.8.1/
-export LD_LIBRARY_PATH=${MOZILLA_FIVE_HOME}:${LD_LIBRARY_PATH}
+export MOZILLA_FIVE_HOME="/usr/lib/xulrunner-1.8.1/"
+export LD_LIBRARY_PATH="${MOZILLA_FIVE_HOME}:${LD_LIBRARY_PATH}"
 
 # **************************************************
 # ** Libraries used by Kettle:                    **
 # **************************************************
 
-BASEDIR=${KETTLE_HOME}
+BASEDIR="${KETTLE_HOME}"
 if [ -z "$KETTLE_HOME" ]; then
-  BASEDIR=$(dirname $0)/dist/
+  BASEDIR="$(dirname $0)/dist/"
 fi
-CLASSPATH=$BASEDIR
-CLASSPATH=$CLASSPATH:$BASEDIR/lib/kettle-core-TRUNK-SNAPSHOT.jar
-CLASSPATH=$CLASSPATH:$BASEDIR/lib/kettle-engine-TRUNK-SNAPSHOT.jar
-CLASSPATH=$CLASSPATH:$BASEDIR/lib/kettle-ui-swt-TRUNK-SNAPSHOT.jar
-CLASSPATH=$CLASSPATH:lib/saxon-dom-9.1.0.8.jar
+CLASSPATH="$BASEDIR"
+CLASSPATH="$CLASSPATH:$BASEDIR/lib/kettle-core-TRUNK-SNAPSHOT.jar"
+CLASSPATH="$CLASSPATH:$BASEDIR/lib/kettle-engine-TRUNK-SNAPSHOT.jar"
+CLASSPATH="$CLASSPATH:$BASEDIR/lib/kettle-ui-swt-TRUNK-SNAPSHOT.jar"
+CLASSPATH="$CLASSPATH:lib/saxon-dom-9.1.0.8.jar"
 
 # echo $CLASSPATH
 
-CLASSPATH=$CLASSPATH:$BASEDIR/libswt/jface.jar
-CLASSPATH=$CLASSPATH:$BASEDIR/libswt/runtime.jar
-CLASSPATH=$CLASSPATH:$BASEDIR/libswt/common.jar
-CLASSPATH=$CLASSPATH:$BASEDIR/libswt/commands.jar
+CLASSPATH="$CLASSPATH:$BASEDIR/libswt/jface.jar"
+CLASSPATH="$CLASSPATH:$BASEDIR/libswt/runtime.jar"
+CLASSPATH="$CLASSPATH:$BASEDIR/libswt/common.jar"
+CLASSPATH="$CLASSPATH:$BASEDIR/libswt/commands.jar"
 
 # **************************************************
 # ** JDBC & other libraries used by Kettle:       **
 # **************************************************
 
-for f in `find $BASEDIR/lib -type f -name "*.jar"` `find $BASEDIR/lib -type f -name "*.zip"`
+for f in `find "$BASEDIR/lib" -type f -name "*.jar"` `find "$BASEDIR/lib" -type f -name "*.zip"`
 do
-  CLASSPATH=$CLASSPATH:$f
+  CLASSPATH="$CLASSPATH:$f"
 done
 
 
@@ -69,37 +60,37 @@ done
 # ** Platform specific libraries ...              **
 # **************************************************
 
-JAVA_BIN=java
+JAVA_BIN="java"
 LIBPATH="NONE"
 
 case `uname -s` in 
 	AIX)
-		LIBPATH=$BASEDIR/libswt/aix/
+		LIBPATH="$BASEDIR/libswt/aix/"
 		;;
 
 	SunOS) 
-		LIBPATH=$BASEDIR/libswt/solaris/
+		LIBPATH="$BASEDIR/libswt/solaris/"
 		;;
 
 	Darwin)
-		LIBPATH=$BASEDIR/libswt/osx/
-		JAVA_BIN=$BASEDIR/libswt/osx/java_swt
-		chmod +x $JAVA_BIN
+		LIBPATH="$BASEDIR/libswt/osx/"
+		JAVA_BIN="$BASEDIR/libswt/osx/java_swt"
+		chmod +x "$JAVA_BIN"
 		;;
 
 	Linux)
 	    ARCH=`uname -m`
 		case $ARCH in
 			x86_64)
-				LIBPATH=$BASEDIR/libswt/linux/x86_64/
+				LIBPATH="$BASEDIR/libswt/linux/x86_64/"
 				;;
 
 			i[3-6]86)
-				LIBPATH=$BASEDIR/libswt/linux/x86/
+				LIBPATH="$BASEDIR/libswt/linux/x86/"
 				;;
 
 			ppc)
-				LIBPATH=$BASEDIR/libswt/linux/ppc/
+				LIBPATH="$BASEDIR/libswt/linux/ppc/"
 				;;
 
 			*)	
@@ -113,17 +104,17 @@ case `uname -s` in
 	    ARCH=`uname -m`
 		case $ARCH in
 			x86_64)
-				LIBPATH=$BASEDIR/libswt/freebsd/x86_64/
+				LIBPATH="$BASEDIR/libswt/freebsd/x86_64/"
 				echo "I'm sorry, this Linux platform [$ARCH] is not yet supported!"
 				exit
 				;;
 
 			i[3-6]86)
-				LIBPATH=$BASEDIR/libswt/freebsd/x86/
+				LIBPATH="$BASEDIR/libswt/freebsd/x86/"
 				;;
 
 			ppc)
-				LIBPATH=$BASEDIR/libswt/freebsd/ppc/
+				LIBPATH="$BASEDIR/libswt/freebsd/ppc/"
 				echo "I'm sorry, this Linux platform [$ARCH] is not yet supported!"
 				exit
 				;;
@@ -136,7 +127,7 @@ case `uname -s` in
 		;;
 
 	HP-UX) 
-		LIBPATH=$BASEDIR/libswt/hpux/
+		LIBPATH="$BASEDIR/libswt/hpux/"
 		;;
 	CYGWIN*)
 		./Spoon.bat
@@ -153,9 +144,9 @@ export LIBPATH
 
 if [ "$LIBPATH" != "NONE" ]
 then
-  for f in `find $LIBPATH -name '*.jar'`
+  for f in `find "$LIBPATH" -name '*.jar'`
   do
-    CLASSPATH=$CLASSPATH:$f
+    CLASSPATH="$CLASSPATH:$f"
   done
 fi
 
@@ -165,7 +156,7 @@ fi
 # ** Change 256m to higher values in case you run out of memory.  **
 # ******************************************************************
 
-OPT="-Xmx512m -cp $CLASSPATH -Djava.library.path=$LIBPATH -DKETTLE_HOME=$KETTLE_HOME -DKETTLE_REPOSITORY=$KETTLE_REPOSITORY -DKETTLE_USER=$KETTLE_USER -DKETTLE_PASSWORD=$KETTLE_PASSWORD"
+OPT="-Xmx512m -cp $CLASSPATH -Djava.library.path=\"$LIBPATH\" -DKETTLE_HOME=\"$KETTLE_HOME\" -DKETTLE_REPOSITORY=\"$KETTLE_REPOSITORY\" -DKETTLE_USER=\"$KETTLE_USER\" -DKETTLE_PASSWORD=\"$KETTLE_PASSWORD\""
 
 # ***************
 # ** Run...    **

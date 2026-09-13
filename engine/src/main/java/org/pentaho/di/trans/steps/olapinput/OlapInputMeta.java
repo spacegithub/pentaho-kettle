@@ -1,29 +1,22 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.olapinput;
 
 import java.util.List;
 
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
@@ -40,7 +33,6 @@ import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.Repository;
-import org.pentaho.di.shared.SharedObjectInterface;
 import org.pentaho.di.trans.DatabaseImpact;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
@@ -97,7 +89,7 @@ public class OlapInputMeta extends BaseStepMeta implements StepMetaInterface {
     return retval;
   }
 
-  private void readData( Node stepnode, List<? extends SharedObjectInterface> databases ) throws KettleXMLException {
+  private void readData( Node stepnode, List<DatabaseMeta> databases ) throws KettleXMLException {
     try {
       olap4jUrl = XMLHandler.getTagValue( stepnode, "url" );
       username = XMLHandler.getTagValue( stepnode, "username" );
@@ -111,7 +103,7 @@ public class OlapInputMeta extends BaseStepMeta implements StepMetaInterface {
     }
   }
 
-  @Override
+  @Override @SuppressWarnings( "squid:S2068" )
   public void setDefault() {
 
     olap4jUrl = "http://localhost:8080/pentaho/Xmla";
@@ -133,7 +125,7 @@ public class OlapInputMeta extends BaseStepMeta implements StepMetaInterface {
   }
 
   @Override
-  public void getFields( RowMetaInterface row, String origin, RowMetaInterface[] info, StepMeta nextStep,
+  public void getFields( Bowl bowl, RowMetaInterface row, String origin, RowMetaInterface[] info, StepMeta nextStep,
     VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
 
     RowMetaInterface add = null;
@@ -319,17 +311,6 @@ public class OlapInputMeta extends BaseStepMeta implements StepMetaInterface {
     }
     String catalog = space.environmentSubstitute( this.getCatalog() );
 
-    // mdx =
-    // "select NON EMPTY Hierarchize(Union(Crossjoin({[Measures].[Actual]},
-    // Union(Crossjoin({[Region].[All Regions]}, {[Department].[All Departments]}),
-    // Crossjoin({[Region].[All Regions]}, [Department].[All Departments].Children))),
-    // Crossjoin({[Measures].[Actual]}, Union(Crossjoin([Region].[All Regions].Children,
-    // {[Department].[All Departments]}),
-    // Crossjoin([Region].[All Regions].Children, [Department].[All Departments].Children))))) ON COLUMNS,NON EMPTY
-    // Hierarchize(Union({[Positions].[All Positions]}, [Positions].[All Positions].Children)) ON ROWS from [Quadrant
-    // Analysis]";
-    // data.olapHelper = new OlapHelper(driver,"http://localhost:8080/pentaho/Xmla", "joe", "password","SampleData",mdx,
-    // this);
     data.olapHelper = new OlapHelper( driver, url, username, password, catalog, mdx );
     data.olapHelper.openQuery();
     data.olapHelper.createRectangularOutput();

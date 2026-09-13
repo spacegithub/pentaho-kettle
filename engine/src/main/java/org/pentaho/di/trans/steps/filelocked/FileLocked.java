@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.filelocked;
 
@@ -75,7 +67,8 @@ public class FileLocked extends BaseStep implements StepInterface {
       data.previousRowMeta = getInputRowMeta().clone();
       data.NrPrevFields = data.previousRowMeta.size();
       data.outputRowMeta = data.previousRowMeta;
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
       // Check is filename field is provided
       if ( Utils.isEmpty( meta.getDynamicFilenameField() ) ) {
@@ -101,15 +94,15 @@ public class FileLocked extends BaseStep implements StepInterface {
       String filename = data.previousRowMeta.getString( r, data.indexOfFileename );
       if ( !Utils.isEmpty( filename ) ) {
         // Check if file
-        LockFile locked = new LockFile( filename );
+        LockFile locked = new LockFile( getTransMeta().getBowl(), filename );
         FileLocked = locked.isLocked();
 
         // add filename to result filenames?
         if ( meta.addResultFilenames() ) {
           // Add this to the result file names...
           ResultFile resultFile =
-            new ResultFile( ResultFile.FILE_TYPE_GENERAL, KettleVFS.getFileObject( filename ), getTransMeta()
-              .getName(), getStepname() );
+            new ResultFile( ResultFile.FILE_TYPE_GENERAL, KettleVFS.getInstance( getTransMeta().getBowl() )
+              .getFileObject( filename ), getTransMeta().getName(), getStepname() );
           resultFile.setComment( BaseMessages.getString( PKG, "FileLocked.Log.FileAddedResult" ) );
           addResultFile( resultFile );
 

@@ -1,28 +1,19 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.mapping;
 
-import org.apache.commons.vfs2.FileObject;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.CTabFolder;
 import org.eclipse.swt.custom.CTabItem;
@@ -57,7 +48,6 @@ import org.pentaho.di.core.SourceToTargetMapping;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.core.util.Utils;
-import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
@@ -67,6 +57,7 @@ import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.BaseStepMeta;
 import org.pentaho.di.trans.step.StepDialogInterface;
 import org.pentaho.di.trans.step.StepMeta;
+import org.pentaho.di.trans.steps.mapping.MappingHelper;
 import org.pentaho.di.trans.steps.mapping.MappingIODefinition;
 import org.pentaho.di.trans.steps.mapping.MappingMeta;
 import org.pentaho.di.trans.steps.mapping.MappingParameters;
@@ -76,20 +67,21 @@ import org.pentaho.di.ui.core.dialog.EnterMappingDialog;
 import org.pentaho.di.ui.core.dialog.EnterSelectionDialog;
 import org.pentaho.di.ui.core.dialog.ErrorDialog;
 import org.pentaho.di.ui.core.dialog.WarningDialog;
+import org.pentaho.di.ui.core.events.dialog.FilterType;
+import org.pentaho.di.ui.core.events.dialog.SelectionOperation;
 import org.pentaho.di.ui.core.gui.GUIResource;
 import org.pentaho.di.ui.core.widget.ColumnInfo;
 import org.pentaho.di.ui.core.widget.ColumnsResizer;
 import org.pentaho.di.ui.core.widget.TableView;
 import org.pentaho.di.ui.core.widget.TextVar;
-import org.pentaho.di.ui.spoon.Spoon;
 import org.pentaho.di.ui.trans.step.BaseStepDialog;
 import org.pentaho.di.ui.util.DialogHelper;
 import org.pentaho.di.ui.util.DialogUtils;
+import org.pentaho.di.ui.util.MappingUtil;
 import org.pentaho.di.ui.util.SwtSvgImageUtil;
-import org.pentaho.vfs.ui.VfsFileChooserDialog;
 
-import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -310,17 +302,8 @@ public class MappingDialog extends BaseStepDialog implements StepDialogInterface
     fdBrowse.left = new FormAttachment( wPath, 5 );
     fdBrowse.top = new FormAttachment( wlPath, Const.isOSX() ? 0 : 5 );
     wbBrowse.setLayoutData( fdBrowse );
-
-    wbBrowse.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        if ( repository != null ) {
-          selectRepositoryTrans();
-        } else {
-          selectFileTrans();
-        }
-      }
-    } );
-
+    wbBrowse.addSelectionListener(DialogHelper.constructSelectionAdapterFileDialogTextVarForKettleFile(log, wPath, transMeta,
+        SelectionOperation.FILE_OR_FOLDER, FilterType.KETTLE_TRANS, repository ) );
     //
     // Add a tab folder for the parameters and various input and output
     // streams
@@ -410,24 +393,6 @@ public class MappingDialog extends BaseStepDialog implements StepDialogInterface
         ConstUI.LARGE_ICON_SIZE );
   }
 
-  private void selectRepositoryTrans() {
-    RepositoryObject repositoryObject = DialogHelper.selectRepositoryObject( "*.ktr", log );
-
-    try {
-      if ( repositoryObject != null ) {
-        loadRepositoryTrans( repositoryObject.getName(), repositoryObject.getRepositoryDirectory() );
-        String path = DialogUtils
-          .getPath( transMeta.getRepositoryDirectory().getPath(), mappingTransMeta.getRepositoryDirectory().getPath() );
-        String fullPath = ( path.equals( "/" ) ? "/" : path + "/" ) + mappingTransMeta.getName();
-        wPath.setText( fullPath );
-        specificationMethod = ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME;
-      }
-    } catch ( KettleException ke ) {
-      new ErrorDialog( shell,
-        BaseMessages.getString( PKG, "MappingDialog.ErrorSelectingObject.DialogTitle" ),
-        BaseMessages.getString( PKG, "MappingDialog.ErrorSelectingObject.DialogMessage" ), ke );
-    }
-  }
 
   private void loadRepositoryTrans( String transName, RepositoryDirectoryInterface repdir ) throws KettleException {
     // Read the transformation...
@@ -437,48 +402,8 @@ public class MappingDialog extends BaseStepDialog implements StepDialogInterface
     mappingTransMeta.clearChanged();
   }
 
-  private void selectFileTrans() {
-    String curFile = transMeta.environmentSubstitute( wPath.getText() );
-
-    FileObject root = null;
-
-    String parentFolder = null;
-    try {
-      parentFolder =
-        KettleVFS.getFileObject( transMeta.environmentSubstitute( transMeta.getFilename() ) ).getParent().toString();
-    } catch ( Exception e ) {
-      // Take no action
-    }
-
-    try {
-      root = KettleVFS.getFileObject( curFile != null ? curFile : Const.getUserHomeDirectory() );
-
-      VfsFileChooserDialog vfsFileChooser = Spoon.getInstance().getVfsFileChooserDialog( root.getParent(), root );
-      FileObject file =
-        vfsFileChooser.open(
-          shell, null, Const.STRING_TRANS_FILTER_EXT, Const.getTransformationFilterNames(),
-          VfsFileChooserDialog.VFS_DIALOG_OPEN_FILE );
-      if ( file == null ) {
-        return;
-      }
-      String fileName = file.getName().toString();
-      if ( fileName != null ) {
-        loadFileTrans( fileName );
-        if ( parentFolder != null && fileName.startsWith( parentFolder ) ) {
-          fileName = fileName.replace( parentFolder, "${" + Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY + "}" );
-        }
-        wPath.setText( fileName );
-        specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
-      }
-    } catch ( IOException | KettleException e ) {
-      new ErrorDialog( shell,
-        BaseMessages.getString( PKG, "MappingDialog.ErrorLoadingTransformation.DialogTitle" ),
-        BaseMessages.getString( PKG, "MappingDialog.ErrorLoadingTransformation.DialogMessage" ), e );
-    }
-  }
-
   private void loadFileTrans( String fname ) throws KettleException {
-    mappingTransMeta = new TransMeta( transMeta.environmentSubstitute( fname ) );
+    mappingTransMeta = new TransMeta( transMeta.getBowl(), transMeta.environmentSubstitute( fname ) );
     mappingTransMeta.clearChanged();
   }
 
@@ -712,78 +637,9 @@ public class MappingDialog extends BaseStepDialog implements StepDialogInterface
       dialogTitle = BaseMessages.getString( PKG, "MappingDialog.SelectMappingStep.Title" );
       dialogMessage = BaseMessages.getString( PKG, "MappingDialog.SelectMappingStep.Message" );
 
-      String[] stepnames = getMappingSteps( mappingTransMeta, mappingInput );
-      EnterSelectionDialog dialog = new EnterSelectionDialog( shell, stepnames, dialogTitle, dialogMessage );
+      String[] stepNames = MappingHelper.getMappingSteps( mappingTransMeta, mappingInput );
+      EnterSelectionDialog dialog = new EnterSelectionDialog( shell, stepNames, dialogTitle, dialogMessage );
       return dialog.open();
-    }
-  }
-
-  public static String[] getMappingSteps( TransMeta mappingTransMeta, boolean mappingInput ) {
-    List<StepMeta> steps = new ArrayList<StepMeta>();
-    for ( StepMeta stepMeta : mappingTransMeta.getSteps() ) {
-      if ( mappingInput && stepMeta.getStepID().equals( "MappingInput" ) ) {
-        steps.add( stepMeta );
-      }
-      if ( !mappingInput && stepMeta.getStepID().equals( "MappingOutput" ) ) {
-        steps.add( stepMeta );
-      }
-    }
-    String[] stepnames = new String[ steps.size() ];
-    for ( int i = 0; i < stepnames.length; i++ ) {
-      stepnames[ i ] = steps.get( i ).getName();
-    }
-
-    return stepnames;
-
-  }
-
-  public RowMetaInterface getFieldsFromStep( String stepname, boolean getTransformationStep, boolean mappingInput ) throws KettleException {
-    if ( !( mappingInput ^ getTransformationStep ) ) {
-      if ( Utils.isEmpty( stepname ) ) {
-        // If we don't have a specified stepname we return the input row
-        // metadata
-        //
-        return transMeta.getPrevStepFields( this.stepname );
-      } else {
-        // OK, a fieldname is specified...
-        // See if we can find it...
-        StepMeta stepMeta = transMeta.findStep( stepname );
-        if ( stepMeta == null ) {
-          throw new KettleException( BaseMessages.getString(
-            PKG, "MappingDialog.Exception.SpecifiedStepWasNotFound", stepname ) );
-        }
-        return transMeta.getStepFields( stepMeta );
-      }
-
-    } else {
-      if ( mappingTransMeta == null ) {
-        throw new KettleException( BaseMessages.getString( PKG, "MappingDialog.Exception.NoMappingSpecified" ) );
-      }
-
-      if ( Utils.isEmpty( stepname ) ) {
-        // If we don't have a specified stepname we select the one and
-        // only "mapping input" step.
-        //
-        String[] stepnames = getMappingSteps( mappingTransMeta, mappingInput );
-        if ( stepnames.length > 1 ) {
-          throw new KettleException( BaseMessages.getString(
-            PKG, "MappingDialog.Exception.OnlyOneMappingInputStepAllowed", "" + stepnames.length ) );
-        }
-        if ( stepnames.length == 0 ) {
-          throw new KettleException( BaseMessages.getString(
-            PKG, "MappingDialog.Exception.OneMappingInputStepRequired", "" + stepnames.length ) );
-        }
-        return mappingTransMeta.getStepFields( stepnames[ 0 ] );
-      } else {
-        // OK, a fieldname is specified...
-        // See if we can find it...
-        StepMeta stepMeta = mappingTransMeta.findStep( stepname );
-        if ( stepMeta == null ) {
-          throw new KettleException( BaseMessages.getString(
-            PKG, "MappingDialog.Exception.SpecifiedStepWasNotFound", stepname ) );
-        }
-        return mappingTransMeta.getStepFields( stepMeta );
-      }
     }
   }
 
@@ -1004,25 +860,37 @@ public class MappingDialog extends BaseStepDialog implements StepDialogInterface
     fdMappings.right = new FormAttachment( 100 );
     wFieldMappings.setLayoutData( fdMappings );
     wFieldMappings.getTable().addListener( SWT.Resize, new ColumnsResizer( 0, 50, 50 ) );
+    String stepName = this.stepname;
 
     wbEnterMapping.addSelectionListener( new SelectionAdapter() {
 
       @Override
       public void widgetSelected( SelectionEvent arg0 ) {
         try {
-          RowMetaInterface sourceRowMeta = getFieldsFromStep( wInputStep.getText(), true, input );
-          RowMetaInterface targetRowMeta = getFieldsFromStep( wOutputStep.getText(), false, input );
+          MappingHelper mappingHelper = (MappingHelper) mappingMeta.getStepHelperInterface();
+          RowMetaInterface sourceRowMeta = mappingHelper.getFieldsFromStep( transMeta, mappingTransMeta, stepName, wInputStep.getText(), true, input );
+          RowMetaInterface targetRowMeta = mappingHelper.getFieldsFromStep( transMeta, mappingTransMeta, stepName, wOutputStep.getText(), false, input );
           String[] sourceFields = sourceRowMeta.getFieldNames();
           String[] targetFields = targetRowMeta.getFieldNames();
 
-          EnterMappingDialog dialog = new EnterMappingDialog( shell, sourceFields, targetFields );
+          //Refresh mappings
+          int nrLines = wFieldMappings.nrNonEmpty();
+          definitions.get( wInputList.getSelectionIndex() ).getValueRenames().clear();
+          for ( int i = 0; i < nrLines; i++ ) {
+            TableItem item = wFieldMappings.getNonEmpty( i );
+            definitions.get( wInputList.getSelectionIndex() ).getValueRenames().add( new MappingValueRename( item.getText( 1 ), item.getText( 2 ) ) );
+          }
+
+          List<MappingValueRename> mappingValue = definitions.get( wInputList.getSelectionIndex() ).getValueRenames();
+          List<SourceToTargetMapping> currentMappings = MappingUtil.getCurrentMappings( Arrays.asList( sourceFields ), Arrays.asList( targetFields ), mappingValue );
+          EnterMappingDialog dialog = new EnterMappingDialog( shell, sourceFields, targetFields, currentMappings );
           List<SourceToTargetMapping> mappings = dialog.open();
           if ( mappings != null ) {
             // first clear the dialog...
             wFieldMappings.clearAll( false );
 
             //
-            definitions.get( wInputList.getSelectionIndex() ).getValueRenames().clear();
+            mappingValue.clear();
 
             // Now add the new values...
             for ( SourceToTargetMapping mapping : mappings ) {
@@ -1032,7 +900,7 @@ public class MappingDialog extends BaseStepDialog implements StepDialogInterface
 
               String source = input ? item.getText( 1 ) : item.getText( 2 );
               String target = input ? item.getText( 2 ) : item.getText( 1 );
-              definitions.get( wInputList.getSelectionIndex() ).getValueRenames().add( new MappingValueRename( source, target ) );
+              mappingValue.add( new MappingValueRename( source, target ) );
             }
             wFieldMappings.removeEmptyRows();
             wFieldMappings.setRowNums();

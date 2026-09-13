@@ -1,25 +1,17 @@
 //CHECKSTYLE:EmptyBlock:OFF
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.repository;
 
@@ -33,6 +25,7 @@ import java.util.List;
 
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.ObjectLocationSpecificationMethod;
 import org.pentaho.di.core.ProgressMonitorListener;
@@ -51,6 +44,7 @@ import org.pentaho.di.job.entries.job.JobEntryJob;
 import org.pentaho.di.job.entries.trans.JobEntryTrans;
 import org.pentaho.di.job.entry.JobEntryCopy;
 import org.pentaho.di.job.entry.JobEntryInterface;
+import org.pentaho.di.metastore.MetaStoreConst;
 import org.pentaho.di.repository.filerep.KettleFileRepository;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.StepMeta;
@@ -152,7 +146,7 @@ public class RepositoryExporter implements IRepositoryExporterFeedback {
 
     monitor.beginTask( BaseMessages.getString( PKG, "Repository.Exporter.Monitor.BeginTask" ), 104 );
 
-    FileObject output = KettleVFS.getFileObject( xmlFilename );
+    FileObject output = KettleVFS.getInstance( DefaultBowl.getInstance() ).getFileObject( xmlFilename );
 
     ExportFeedback feed = new ExportFeedback();
     feed.setItemName( BaseMessages.getString( PKG, "Repository.Exporter.Feedback.CreateExportFile", xmlFilename ) );
@@ -327,8 +321,9 @@ public class RepositoryExporter implements IRepositoryExporterFeedback {
           JobEntryTrans trans = (JobEntryTrans) entry;
           if ( trans.getSpecificationMethod() == ObjectLocationSpecificationMethod.FILENAME ) {
             try {
-              TransMeta meta = trans.getTransMeta( repository, repository.getMetaStore(), jobMeta );
-              FileObject fileObject = KettleVFS.getFileObject( meta.getFilename() );
+              TransMeta meta = trans.getTransMeta( repository, MetaStoreConst.getDefaultMetastore(), jobMeta );
+              FileObject fileObject = KettleVFS.getInstance( DefaultBowl.getInstance() )
+                .getFileObject( meta.getFilename() );
               trans.setSpecificationMethod( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME );
               trans.setFileName( null );
               trans.setTransname( meta.getName() );
@@ -346,8 +341,9 @@ public class RepositoryExporter implements IRepositoryExporterFeedback {
           JobEntryJob jobEntryJob = (JobEntryJob) entry;
           if ( jobEntryJob.getSpecificationMethod() == ObjectLocationSpecificationMethod.FILENAME ) {
             try {
-              JobMeta meta = jobEntryJob.getJobMeta( repository, repository.getMetaStore(), jobMeta );
-              FileObject fileObject = KettleVFS.getFileObject( meta.getFilename() );
+              JobMeta meta = jobEntryJob.getJobMeta( repository, MetaStoreConst.getDefaultMetastore(), jobMeta );
+              FileObject fileObject = KettleVFS.getInstance( DefaultBowl.getInstance() )
+                .getFileObject( meta.getFilename() );
               jobEntryJob.setSpecificationMethod( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME );
               jobEntryJob.setFileName( null );
               jobEntryJob.setJobName( meta.getName() );
@@ -388,8 +384,10 @@ public class RepositoryExporter implements IRepositoryExporterFeedback {
           //
           if ( mappingMeta.getSpecificationMethod() == ObjectLocationSpecificationMethod.FILENAME ) {
             try {
-              TransMeta meta = MappingMeta.loadMappingMeta( mappingMeta, fileRep, fileRep.metaStore, transMeta );
-              FileObject fileObject = KettleVFS.getFileObject( meta.getFilename() );
+              TransMeta meta = MappingMeta.loadMappingMeta( transMeta.getBowl(), mappingMeta, fileRep,
+                fileRep.metaStore, transMeta );
+              FileObject fileObject = KettleVFS.getInstance( transMeta.getBowl() )
+                .getFileObject( meta.getFilename() );
               mappingMeta.setSpecificationMethod( ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME );
               mappingMeta.setFileName( null );
               mappingMeta.setTransName( meta.getName() );

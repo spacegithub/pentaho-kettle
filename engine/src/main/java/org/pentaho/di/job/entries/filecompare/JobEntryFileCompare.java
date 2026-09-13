@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entries.filecompare;
 
@@ -167,10 +159,10 @@ public class JobEntryFileCompare extends JobEntryBase implements Cloneable, JobE
     DataInputStream in2 = null;
     try {
       in1 =
-        new DataInputStream( new BufferedInputStream( KettleVFS.getInputStream(
+        new DataInputStream( new BufferedInputStream( KettleVFS.getInstance( parentJobMeta.getBowl() ).getInputStream(
           KettleVFS.getFilename( file1 ), this ) ) );
       in2 =
-        new DataInputStream( new BufferedInputStream( KettleVFS.getInputStream(
+        new DataInputStream( new BufferedInputStream( KettleVFS.getInstance( parentJobMeta.getBowl() ).getInputStream(
           KettleVFS.getFilename( file2 ), this ) ) );
 
       char ch1, ch2;
@@ -223,14 +215,15 @@ public class JobEntryFileCompare extends JobEntryBase implements Cloneable, JobE
             .passEmbeddedMetastoreKey( this, parentJobMeta.getEmbeddedMetastoreProviderKey() );
         }
 
-        file1 = KettleVFS.getFileObject( realFilename1, this );
-        file2 = KettleVFS.getFileObject( realFilename2, this );
+        file1 = KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( realFilename1, this );
+        file2 = KettleVFS.getInstance( parentJobMeta.getBowl() ).getFileObject( realFilename2, this );
 
         if ( file1.exists() && file2.exists() ) {
           if ( equalFileContents( file1, file2 ) ) {
             result.setResult( true );
           } else {
             result.setResult( false );
+            result.setNrErrors( 1 );
           }
 
           // add filename to result filenames
@@ -256,6 +249,8 @@ public class JobEntryFileCompare extends JobEntryBase implements Cloneable, JobE
           result.setNrErrors( 1 );
         }
       } else {
+        result.setResult( false );
+        result.setNrErrors( 1 );
         logError( BaseMessages.getString( PKG, "JobEntryFileCompare.ERROR_0006_Need_Two_Filenames" ) );
       }
     } catch ( Exception e ) {
@@ -329,8 +324,8 @@ public class JobEntryFileCompare extends JobEntryBase implements Cloneable, JobE
     AbstractFileValidator.putVariableSpace( ctx, getVariables() );
     AndValidator.putValidators( ctx, JobEntryValidatorUtils.notNullValidator(),
         JobEntryValidatorUtils.fileExistsValidator() );
-    JobEntryValidatorUtils.andValidator().validate( this, "filename1", remarks, ctx );
-    JobEntryValidatorUtils.andValidator().validate( this, "filename2", remarks, ctx );
+    JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "filename1", remarks, ctx );
+    JobEntryValidatorUtils.andValidator().validate( jobMeta.getBowl(), this, "filename2", remarks, ctx );
   }
 
   @Override public JobMeta getParentJobMeta() {

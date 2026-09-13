@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.plugins;
 
@@ -52,11 +44,12 @@ import org.w3c.dom.Node;
     "JobCategory.Category.BigData", "JobCategory.Category.Modeling", "JobCategory.Category.DataQuality",
     "JobCategory.Category.XML", "JobCategory.Category.Utility", "JobCategory.Category.Repository",
     "JobCategory.Category.FileTransfer", "JobCategory.Category.FileEncryption", "JobCategory.Category.Palo",
-    "JobCategory.Category.Experimental", "JobCategory.Category.Deprecated" }, i18nPackageClass = JobMeta.class )
+    "JobCategory.Category.ServiceManagement", "JobCategory.Category.Experimental", "JobCategory.Category.Deprecated" },
+  i18nPackageClass = JobMeta.class )
 @PluginMainClassType( JobEntryInterface.class )
 @PluginAnnotationType( JobEntry.class )
 public class JobEntryPluginType extends BasePluginType implements PluginTypeInterface {
-  private static Class<?> PKG = JobMeta.class; // for i18n purposes, needed by Translator2!!
+  private static final Class<?> PKG = JobMeta.class; // for i18n purposes, needed by Translator2!!
 
   public static final String GENERAL_CATEGORY = BaseMessages.getString( PKG, "JobCategory.Category.General" );
 
@@ -159,6 +152,7 @@ public class JobEntryPluginType extends BasePluginType implements PluginTypeInte
 
   @Override
   protected void addExtraClasses( Map<Class<?>, String> classMap, Class<?> clazz, Annotation annotation ) {
+    //there are no extra classes to add to the map
   }
 
   @Override
@@ -184,5 +178,10 @@ public class JobEntryPluginType extends BasePluginType implements PluginTypeInte
   @Override
   protected String extractClassLoaderGroup( Annotation annotation ) {
     return ( (JobEntry) annotation ).classLoaderGroup();
+  }
+  
+  @Override
+  protected boolean extractDeprecated( Annotation annotation ) {
+    return ( (JobEntry) annotation ).deprecated();
   }
 }

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.row;
 
@@ -37,14 +29,17 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import org.pentaho.di.core.bowl.DefaultBowl;
+import org.pentaho.di.core.Const;
 import org.pentaho.di.core.exception.KettleFileNotFoundException;
 import org.pentaho.di.core.row.value.ValueMetaBigNumber;
+import org.pentaho.di.core.row.value.ValueMetaNumber;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.KettleEnvironment;
 import org.pentaho.di.core.exception.KettleException;
@@ -54,17 +49,21 @@ import org.pentaho.di.core.row.value.ValueMetaBinary;
 import org.pentaho.di.core.row.value.ValueMetaFactory;
 import org.pentaho.di.core.row.value.ValueMetaInteger;
 import org.pentaho.di.core.row.value.ValueMetaString;
+import org.pentaho.di.core.variables.VariableSpace;
+import org.pentaho.di.core.variables.Variables;
 import org.pentaho.di.junit.rules.RestorePDIEngineEnvironment;
 import org.pentaho.di.trans.steps.calculator.CalculatorMetaFunction;
 
 public class ValueDataUtilTest {
   @ClassRule public static RestorePDIEngineEnvironment env = new RestorePDIEngineEnvironment();
   private static String yyyy_MM_dd = "yyyy-MM-dd";
+  private static VariableSpace space = Variables.getADefaultVariableSpace();
 
   @BeforeClass
   public static void setUpBeforeClass() throws KettleException {
     KettleEnvironment.init( false );
   }
+
 
   // private enum DateCalc {WORKING_DAYS, DATE_DIFF};
 
@@ -204,324 +203,343 @@ public class ValueDataUtilTest {
   @Test
   public void checksumTest() {
     String path = getClass().getResource( "txt-sample.txt" ).getPath();
-    String checksum = ValueDataUtil.createChecksum( new ValueMetaString(), path, "MD5" );
+    String checksum = ValueDataUtil.createChecksum( DefaultBowl.getInstance(), new ValueMetaString(), path, "MD5" );
     assertEquals( "098f6bcd4621d373cade4e832627b4f6", checksum );
   }
 
   @Test
   public void checksumMissingFileTest() {
     String nonExistingFile = "nonExistingFile";
-    String checksum = ValueDataUtil.createChecksum( new ValueMetaString(), nonExistingFile, "MD5" );
+    String checksum = ValueDataUtil.createChecksum( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingFile,
+      "MD5" );
     assertNull( checksum );
   }
 
   @Test
   public void checksumNullPathTest() {
     String nonExistingFile = "nonExistingFile";
-    String checksum = ValueDataUtil.createChecksum( new ValueMetaString(), nonExistingFile, "MD5" );
+    String checksum = ValueDataUtil.createChecksum( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingFile,
+      "MD5" );
     assertNull( checksum );
   }
 
   @Test
   public void checksumWithFailIfNoFileTest() throws Exception {
     String path = getClass().getResource( "txt-sample.txt" ).getPath();
-    String checksum = ValueDataUtil.createChecksum( new ValueMetaString(), path, "MD5", true );
+    String checksum = ValueDataUtil.createChecksum( DefaultBowl.getInstance(), new ValueMetaString(), path, "MD5",
+      true );
     assertEquals( "098f6bcd4621d373cade4e832627b4f6", checksum );
   }
 
   @Test
   public void checksumWithoutFailIfNoFileTest() throws Exception {
     String path = getClass().getResource( "txt-sample.txt" ).getPath();
-    String checksum = ValueDataUtil.createChecksum( new ValueMetaString(), path, "MD5", false );
+    String checksum = ValueDataUtil.createChecksum( DefaultBowl.getInstance(), new ValueMetaString(), path, "MD5",
+      false );
     assertEquals( "098f6bcd4621d373cade4e832627b4f6", checksum );
   }
 
   @Test
   public void checksumNoFailIfNoFileTest() throws KettleFileNotFoundException {
     String nonExistingFile = "nonExistingFile";
-    String checksum = ValueDataUtil.createChecksum( new ValueMetaString(), nonExistingFile, "MD5", false );
+    String checksum = ValueDataUtil.createChecksum( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingFile,
+      "MD5", false );
     assertNull( checksum );
   }
 
   @Test( expected = KettleFileNotFoundException.class )
   public void checksumFailIfNoFileTest() throws KettleFileNotFoundException {
     String nonExistingPath = "nonExistingPath";
-    ValueDataUtil.createChecksum( new ValueMetaString(), nonExistingPath, "MD5", true );
+    ValueDataUtil.createChecksum( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingPath, "MD5", true );
   }
 
   @Test
   public void checksumNullPathNoFailTest() throws KettleFileNotFoundException {
-    assertNull( ValueDataUtil.createChecksum( new ValueMetaString(), null, "MD5", false ) );
+    assertNull( ValueDataUtil.createChecksum( DefaultBowl.getInstance(), new ValueMetaString(), null, "MD5", false ) );
   }
 
   @Test
   public void checksumNullPathFailTest() throws KettleFileNotFoundException {
-    assertNull( ValueDataUtil.createChecksum( new ValueMetaString(), null, "MD5", true ) );
+    assertNull( ValueDataUtil.createChecksum( DefaultBowl.getInstance(), new ValueMetaString(), null, "MD5", true ) );
   }
 
   @Test
   public void checksumCRC32Test() {
     String path = getClass().getResource( "txt-sample.txt" ).getPath();
-    long checksum = ValueDataUtil.ChecksumCRC32( new ValueMetaString(), path );
+    long checksum = ValueDataUtil.ChecksumCRC32( DefaultBowl.getInstance(), new ValueMetaString(), path );
     assertEquals( 3632233996l, checksum );
   }
 
   @Test
   public void checksumCRC32MissingFileTest() {
     String nonExistingFile = "nonExistingFile";
-    long checksum = ValueDataUtil.ChecksumCRC32( new ValueMetaString(), nonExistingFile );
+    long checksum = ValueDataUtil.ChecksumCRC32( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingFile );
     assertEquals( 0, checksum );
   }
 
   @Test
   public void checksumCRC32NullPathTest() throws Exception {
     String nonExistingFile = "nonExistingFile";
-    long checksum = ValueDataUtil.ChecksumCRC32( new ValueMetaString(), nonExistingFile );
+    long checksum = ValueDataUtil.ChecksumCRC32( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingFile );
     assertEquals( 0, checksum );
   }
 
   @Test
   public void checksumCRC32WithoutFailIfNoFileTest() throws Exception {
     String path = getClass().getResource( "txt-sample.txt" ).getPath();
-    long checksum = ValueDataUtil.checksumCRC32( new ValueMetaString(), path, false );
+    long checksum = ValueDataUtil.checksumCRC32( DefaultBowl.getInstance(), new ValueMetaString(), path, false );
     assertEquals( 3632233996l, checksum );
   }
 
   @Test
   public void checksumCRC32NoFailIfNoFileTest() throws KettleFileNotFoundException {
     String nonExistingPath = "nonExistingPath";
-    long checksum = ValueDataUtil.checksumCRC32( new ValueMetaString(), nonExistingPath, false );
+    long checksum = ValueDataUtil.checksumCRC32( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingPath,
+      false );
     assertEquals( 0, checksum );
   }
 
   @Test( expected = KettleFileNotFoundException.class )
   public void checksumCRC32FailIfNoFileTest() throws KettleFileNotFoundException {
     String nonExistingPath = "nonExistingPath";
-    ValueDataUtil.checksumCRC32( new ValueMetaString(), nonExistingPath, true );
+    ValueDataUtil.checksumCRC32( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingPath, true );
   }
 
   @Test
   public void checksumCRC32NullPathNoFailTest() throws KettleFileNotFoundException {
-    long checksum = ValueDataUtil.checksumCRC32( new ValueMetaString(), null, false );
+    long checksum = ValueDataUtil.checksumCRC32( DefaultBowl.getInstance(), new ValueMetaString(), null, false );
     assertEquals( 0, checksum );
   }
 
   @Test
   public void checksumCRC32NullPathFailTest() throws KettleFileNotFoundException {
-    long checksum = ValueDataUtil.checksumCRC32( new ValueMetaString(), null, true );
+    long checksum = ValueDataUtil.checksumCRC32( DefaultBowl.getInstance(), new ValueMetaString(), null, true );
     assertEquals( 0, checksum );
   }
 
   @Test
   public void checksumAdlerTest() {
     String path = getClass().getResource( "txt-sample.txt" ).getPath();
-    long checksum = ValueDataUtil.ChecksumAdler32( new ValueMetaString(), path );
+    long checksum = ValueDataUtil.ChecksumAdler32( DefaultBowl.getInstance(), new ValueMetaString(), path );
     assertEquals( 73204161L, checksum );
   }
 
   @Test
   public void checksumAdlerMissingFileTest() {
     String nonExistingFile = "nonExistingFile";
-    long checksum = ValueDataUtil.ChecksumAdler32( new ValueMetaString(), nonExistingFile );
+    long checksum = ValueDataUtil.ChecksumAdler32( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingFile );
     assertEquals( 0, checksum );
   }
 
   @Test
   public void checksumAdlerNullPathTest() {
     String nonExistingFile = "nonExistingFile";
-    long checksum = ValueDataUtil.ChecksumAdler32( new ValueMetaString(), nonExistingFile );
+    long checksum = ValueDataUtil.ChecksumAdler32( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingFile );
     assertEquals( 0, checksum );
   }
 
   @Test
   public void checksumAdlerWithFailIfNoFileTest() throws Exception {
     String path = getClass().getResource( "txt-sample.txt" ).getPath();
-    long checksum = ValueDataUtil.checksumAdler32( new ValueMetaString(), path, true );
+    long checksum = ValueDataUtil.checksumAdler32( DefaultBowl.getInstance(), new ValueMetaString(), path, true );
     assertEquals( 73204161L, checksum );
   }
 
   @Test
   public void checksumAdlerWithoutFailIfNoFileTest() throws Exception {
     String path = getClass().getResource( "txt-sample.txt" ).getPath();
-    long checksum = ValueDataUtil.checksumAdler32( new ValueMetaString(), path, false );
+    long checksum = ValueDataUtil.checksumAdler32( DefaultBowl.getInstance(), new ValueMetaString(), path, false );
     assertEquals( 73204161L, checksum );
   }
 
   @Test
   public void checksumAdlerNoFailIfNoFileTest() throws KettleFileNotFoundException {
     String nonExistingPath = "nonExistingPath";
-    long checksum = ValueDataUtil.checksumAdler32( new ValueMetaString(), nonExistingPath, false );
+    long checksum = ValueDataUtil.checksumAdler32( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingPath,
+      false );
     assertEquals( 0, checksum );
   }
 
   @Test( expected = KettleFileNotFoundException.class )
   public void checksumAdlerFailIfNoFileTest() throws KettleFileNotFoundException {
     String nonExistingPath = "nonExistingPath";
-    ValueDataUtil.checksumAdler32( new ValueMetaString(), nonExistingPath, true );
+    ValueDataUtil.checksumAdler32( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingPath, true );
   }
 
   @Test
   public void checksumAdlerNullPathNoFailTest() throws KettleFileNotFoundException {
-    long checksum = ValueDataUtil.checksumAdler32( new ValueMetaString(), null, false );
+    long checksum = ValueDataUtil.checksumAdler32( DefaultBowl.getInstance(), new ValueMetaString(), null, false );
     assertEquals( 0, checksum );
   }
 
   @Test
   public void checksumAdlerNullPathFailTest() throws KettleFileNotFoundException {
-    long checksum = ValueDataUtil.checksumAdler32( new ValueMetaString(), null, true );
+    long checksum = ValueDataUtil.checksumAdler32( DefaultBowl.getInstance(), new ValueMetaString(), null, true );
     assertEquals( 0, checksum );
   }
 
   @Test
   public void xmlFileWellFormedTest() {
     String xmlFilePath = getClass().getResource( "xml-sample.xml" ).getPath();
-    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( new ValueMetaString(), xmlFilePath );
+    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( DefaultBowl.getInstance(), new ValueMetaString(),
+      xmlFilePath );
     assertTrue( wellFormed );
   }
 
   @Test
   public void xmlFileBadlyFormedTest() {
     String invalidXmlFilePath = getClass().getResource( "invalid-xml-sample.xml" ).getPath();
-    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( new ValueMetaString(), invalidXmlFilePath );
+    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( DefaultBowl.getInstance(), new ValueMetaString(),
+      invalidXmlFilePath );
     assertFalse( wellFormed );
   }
 
   @Test
   public void xmlFileWellFormedWithFailIfNoFileTest() throws KettleFileNotFoundException {
     String xmlFilePath = getClass().getResource( "xml-sample.xml" ).getPath();
-    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( new ValueMetaString(), xmlFilePath, true );
+    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( DefaultBowl.getInstance(), new ValueMetaString(),
+      xmlFilePath, true );
     assertTrue( wellFormed );
   }
 
   @Test
   public void xmlFileWellFormedWithoutFailIfNoFileTest() throws KettleFileNotFoundException {
     String xmlFilePath = getClass().getResource( "xml-sample.xml" ).getPath();
-    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( new ValueMetaString(), xmlFilePath, false );
+    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( DefaultBowl.getInstance(), new ValueMetaString(),
+      xmlFilePath, false );
     assertTrue( wellFormed );
   }
 
   @Test
   public void xmlFileBadlyFormedWithFailIfNoFileTest() throws KettleFileNotFoundException {
     String invalidXmlFilePath = getClass().getResource( "invalid-xml-sample.xml" ).getPath();
-    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( new ValueMetaString(), invalidXmlFilePath, true );
+    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( DefaultBowl.getInstance(), new ValueMetaString(),
+      invalidXmlFilePath, true );
     assertFalse( wellFormed );
   }
 
   @Test
   public void xmlFileBadlyFormedWithNoFailIfNoFileTest() throws KettleFileNotFoundException {
     String invalidXmlFilePath = getClass().getResource( "invalid-xml-sample.xml" ).getPath();
-    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( new ValueMetaString(), invalidXmlFilePath, false );
+    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( DefaultBowl.getInstance(), new ValueMetaString(),
+      invalidXmlFilePath, false );
     assertFalse( wellFormed );
   }
 
   @Test
   public void xmlFileWellFormedNoFailIfNoFileTest() throws KettleFileNotFoundException {
     String nonExistingPath = "nonExistingPath";
-    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( new ValueMetaString(), nonExistingPath, false );
+    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( DefaultBowl.getInstance(), new ValueMetaString(),
+      nonExistingPath, false );
     assertFalse( wellFormed );
   }
 
   @Test( expected = KettleFileNotFoundException.class )
   public void xmlFileWellFormedFailIfNoFileTest() throws KettleFileNotFoundException {
     String nonExistingPath = "nonExistingPath";
-    ValueDataUtil.isXMLFileWellFormed( new ValueMetaString(), nonExistingPath, true );
+    ValueDataUtil.isXMLFileWellFormed( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingPath, true );
   }
 
   @Test
   public void xmlFileWellFormedNullPathNoFailTest() throws KettleFileNotFoundException {
-    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( new ValueMetaString(), null, false );
+    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( DefaultBowl.getInstance(), new ValueMetaString(), null,
+      false );
     assertFalse( wellFormed );
   }
 
   @Test
   public void xmlFileWellFormedNullPathFailTest() throws KettleFileNotFoundException {
-    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( new ValueMetaString(), null, true );
+    boolean wellFormed = ValueDataUtil.isXMLFileWellFormed( DefaultBowl.getInstance(), new ValueMetaString(), null,
+      true );
     assertFalse( wellFormed );
   }
 
   @Test
   public void loadFileContentInBinary() throws Exception {
     String path = getClass().getResource( "txt-sample.txt" ).getPath();
-    byte[] content = ValueDataUtil.loadFileContentInBinary( new ValueMetaString(), path, true );
+    byte[] content = ValueDataUtil.loadFileContentInBinary( DefaultBowl.getInstance(), new ValueMetaString(), path,
+      true );
     assertTrue( Arrays.equals( "test".getBytes(), content ) );
   }
 
   @Test
   public void loadFileContentInBinaryNoFailIfNoFileTest() throws Exception {
     String nonExistingPath = "nonExistingPath";
-    assertNull( ValueDataUtil.loadFileContentInBinary( new ValueMetaString(), nonExistingPath, false ) );
+    assertNull( ValueDataUtil.loadFileContentInBinary( DefaultBowl.getInstance(), new ValueMetaString(),
+      nonExistingPath, false ) );
   }
 
   @Test( expected = KettleFileNotFoundException.class )
   public void loadFileContentInBinaryFailIfNoFileTest() throws KettleFileNotFoundException, KettleValueException {
     String nonExistingPath = "nonExistingPath";
-    ValueDataUtil.loadFileContentInBinary( new ValueMetaString(), nonExistingPath, true );
+    ValueDataUtil.loadFileContentInBinary( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingPath, true );
   }
 
   @Test
   public void loadFileContentInBinaryNullPathNoFailTest() throws Exception {
-    assertNull( ValueDataUtil.loadFileContentInBinary( new ValueMetaString(), null, false ) );
+    assertNull( ValueDataUtil.loadFileContentInBinary( DefaultBowl.getInstance(), new ValueMetaString(), null, false ) );
   }
 
   @Test
   public void loadFileContentInBinaryNullPathFailTest() throws KettleFileNotFoundException, KettleValueException {
-    assertNull( ValueDataUtil.loadFileContentInBinary( new ValueMetaString(), null, true ) );
+    assertNull( ValueDataUtil.loadFileContentInBinary( DefaultBowl.getInstance(), new ValueMetaString(), null, true ) );
   }
 
   @Test
   public void getFileEncodingTest() throws Exception {
     String path = getClass().getResource( "txt-sample.txt" ).getPath();
-    String encoding = ValueDataUtil.getFileEncoding( new ValueMetaString(), path );
+    String encoding = ValueDataUtil.getFileEncoding( DefaultBowl.getInstance(), new ValueMetaString(), path );
     assertEquals( "US-ASCII", encoding );
   }
 
   @Test( expected = KettleValueException.class )
   public void getFileEncodingMissingFileTest() throws KettleValueException {
     String nonExistingPath = "nonExistingPath";
-    ValueDataUtil.getFileEncoding( new ValueMetaString(), nonExistingPath );
+    ValueDataUtil.getFileEncoding( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingPath );
   }
 
   @Test
   public void getFileEncodingNullPathTest() throws Exception {
-    assertNull( ValueDataUtil.getFileEncoding( new ValueMetaString(), null ) );
+    assertNull( ValueDataUtil.getFileEncoding( DefaultBowl.getInstance(), new ValueMetaString(), null ) );
   }
 
   @Test
   public void getFileEncodingWithFailIfNoFileTest() throws Exception {
     String path = getClass().getResource( "txt-sample.txt" ).getPath();
-    String encoding = ValueDataUtil.getFileEncoding( new ValueMetaString(), path, true );
+    String encoding = ValueDataUtil.getFileEncoding( DefaultBowl.getInstance(), new ValueMetaString(), path, true );
     assertEquals( "US-ASCII", encoding );
   }
 
   @Test
   public void getFileEncodingWithoutFailIfNoFileTest() throws Exception {
     String path = getClass().getResource( "txt-sample.txt" ).getPath();
-    String encoding = ValueDataUtil.getFileEncoding( new ValueMetaString(), path, false );
+    String encoding = ValueDataUtil.getFileEncoding( DefaultBowl.getInstance(), new ValueMetaString(), path, false );
     assertEquals( "US-ASCII", encoding );
   }
 
   @Test
   public void getFileEncodingNoFailIfNoFileTest() throws Exception {
     String nonExistingPath = "nonExistingPath";
-    String encoding = ValueDataUtil.getFileEncoding( new ValueMetaString(), nonExistingPath, false );
+    String encoding = ValueDataUtil.getFileEncoding( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingPath,
+      false );
     assertNull( encoding );
   }
 
   @Test( expected = KettleFileNotFoundException.class )
   public void getFileEncodingFailIfNoFileTest() throws KettleFileNotFoundException, KettleValueException {
     String nonExistingPath = "nonExistingPath";
-    ValueDataUtil.getFileEncoding( new ValueMetaString(), nonExistingPath, true );
+    ValueDataUtil.getFileEncoding( DefaultBowl.getInstance(), new ValueMetaString(), nonExistingPath, true );
   }
 
   @Test
   public void getFileEncodingNullPathNoFailTest() throws Exception {
-    String encoding = ValueDataUtil.getFileEncoding( new ValueMetaString(), null, false );
+    String encoding = ValueDataUtil.getFileEncoding( DefaultBowl.getInstance(), new ValueMetaString(), null, false );
     assertNull( encoding );
   }
 
   @Test
   public void getFileEncodingNullPathFailTest() throws KettleFileNotFoundException, KettleValueException {
-    String encoding = ValueDataUtil.getFileEncoding( new ValueMetaString(), null, true );
+    String encoding = ValueDataUtil.getFileEncoding( DefaultBowl.getInstance(), new ValueMetaString(), null, true );
     assertNull( encoding );
   }
 
@@ -650,15 +668,78 @@ public class ValueDataUtilTest {
   }
 
   @Test
+  public void testSqRt() throws Exception {
+    ValueMetaInterface vmn = createValueMeta( "num", ValueMetaInterface.TYPE_NUMBER );
+    ValueMetaInterface vmi = createValueMeta( "integer", ValueMetaInterface.TYPE_INTEGER );
+    ValueMetaInterface vmbn = createValueMeta( "bigNum", ValueMetaInterface.TYPE_BIGNUMBER );
+    // Test Kettle number types
+    assertEquals( Double.valueOf( "2.0" ), calculate( "4", ValueMetaInterface.TYPE_NUMBER,
+      CalculatorMetaFunction.CALC_SQUARE_ROOT ) );
+    try {
+      ValueDataUtil.sqrt( vmn, "-0.1" );
+      fail();
+    } catch ( KettleValueException kve ) {
+      assertTrue( true );
+    }
+    try {
+      vmn = new ValueMetaNumber();
+      ValueDataUtil.sqrt( vmn, "hello" );
+      fail();
+    } catch ( KettleValueException kve ) {
+      assertTrue( true );
+    }
+
+    // Test Kettle Integer (Java Long) types
+    assertEquals( Long.valueOf( "2" ), calculate( "4", ValueMetaInterface.TYPE_INTEGER,
+      CalculatorMetaFunction.CALC_SQUARE_ROOT ) );
+    try {
+      ValueDataUtil.sqrt( vmi, "-1" );
+      fail();
+    } catch ( KettleValueException kve ) {
+      assertTrue( true );
+    }
+    try {
+      ValueDataUtil.sqrt( vmi, "hello" );
+      fail();
+    } catch ( KettleValueException kve ) {
+      assertTrue( true );
+    }
+
+    // Test Kettle big Number types
+    assertEquals( BigDecimal.valueOf( Double.valueOf( "2.0" ) ), calculate( "4", ValueMetaInterface.TYPE_BIGNUMBER,
+      CalculatorMetaFunction.CALC_SQUARE_ROOT ) );
+    try {
+      ValueDataUtil.sqrt( vmbn, "-1" );
+      fail();
+    } catch ( KettleValueException kve ) {
+      assertTrue( true );
+    }
+    try {
+      ValueDataUtil.sqrt( vmbn, "hello" );
+      fail();
+    } catch ( KettleValueException kve ) {
+      assertTrue( true );
+    }
+  }
+
+  @Test
   public void testMulitplyBigNumbers() throws  Exception {
     BigDecimal field1 = new BigDecimal( "123456789012345678901.1234567890123456789" );
     BigDecimal field2 = new BigDecimal( "1.0" );
     BigDecimal field3 = new BigDecimal( "2.0" );
 
-    BigDecimal expResult1 = new BigDecimal( "123456789012345678901.1234567890123456789" );
-    BigDecimal expResult2 = new BigDecimal( "246913578024691357802.2469135780246913578" );
+    // PDI-18318 Change - Now that the precision is specified as unlimited, then it's no longer
+    // bound by the arbitrary scale that causes PDI-18318. The correct answer here does include
+    // the trailing zero based on how the scale and precision are set. See the Javadoc on
+    // BigDecimal.
+    BigDecimal expResult1 = new BigDecimal( "123456789012345678901.12345678901234567890" );
+    BigDecimal expResult2 = new BigDecimal( "246913578024691357802.24691357802469135780" );
 
-    BigDecimal expResult3 = new BigDecimal( "123456789012345678901.1200000000000000000" );
+    // PDI-18318 change - note that the precision is specifically set to 21. As a result, the trailing
+    // zeros indicates that it has overridden the scale value and made the number go out further than it
+    // should.
+    // BigDecimal expResult3 = new BigDecimal( "123456789012345678901.1200000000000000000" );
+    BigDecimal expResult3 = new BigDecimal( "123456789012345678901.12" );
     BigDecimal expResult4 = new BigDecimal( "246913578024691357802" );
 
     assertEquals( expResult1, ValueDataUtil.multiplyBigDecimals( field1, field2, null ) );
@@ -666,10 +747,19 @@ public class ValueDataUtilTest {
 
     assertEquals( expResult3, ValueDataUtil.multiplyBigDecimals( field1, field2, new MathContext( 23 ) ) );
     assertEquals( expResult4, ValueDataUtil.multiplyBigDecimals( field1, field3, new MathContext( 21 ) ) );
+
+    // Test PDI-18318 findings
+    assertEquals( new BigDecimal( "132" ), ValueDataUtil.multiplyBigDecimals( new BigDecimal( "3" ), new BigDecimal(  "44" ), null ) );
+    assertEquals( new BigDecimal( "1332" ), ValueDataUtil.multiplyBigDecimals( new BigDecimal( "3" ), new BigDecimal(  "444" ), null ) );
+    assertEquals( new BigDecimal( "495" ), ValueDataUtil.multiplyBigDecimals( new BigDecimal( "99" ), new BigDecimal(  "5" ), null ) );
+    assertEquals( new BigDecimal( "657372927282717615" ), ValueDataUtil.multiplyBigDecimals( new BigDecimal( "657372927282717615" ), new BigDecimal(  "1" ), null ) );
+    assertEquals( new BigDecimal( "495" ), ValueDataUtil.multiplyBigDecimals( new BigDecimal( "99.0000000000000" ), new BigDecimal(  "5.00" ), null ) );
+    assertEquals( new BigDecimal( "99" ), ValueDataUtil.multiplyBigDecimals( new BigDecimal( "99.0000000000000" ), new BigDecimal(  "1" ), null ) );
   }
 
   @Test
-  public void testDivisionBigNumbers() throws  Exception {
+  public void testDivisionBigNumbers() {
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_PRECISION, "-1" );
     BigDecimal field1 = new BigDecimal( "123456789012345678901.1234567890123456789" );
     BigDecimal field2 = new BigDecimal( "1.0" );
     BigDecimal field3 = new BigDecimal( "2.0" );
@@ -677,14 +767,153 @@ public class ValueDataUtilTest {
     BigDecimal expResult1 = new BigDecimal( "123456789012345678901.1234567890123456789" );
     BigDecimal expResult2 = new BigDecimal( "61728394506172839450.56172839450617283945" );
 
-    BigDecimal expResult3 = new BigDecimal( "123456789012345678901.12" );
-    BigDecimal expResult4 = new BigDecimal( "61728394506172839450.6" );
+    assertEquals( expResult1, ValueDataUtil.divideBigDecimals( field1, field2, space ) );
+    assertEquals( expResult2, ValueDataUtil.divideBigDecimals( field1, field3, space ) );
 
-    assertEquals( expResult1, ValueDataUtil.divideBigDecimals( field1, field2, null ) );
-    assertEquals( expResult2, ValueDataUtil.divideBigDecimals( field1, field3, null ) );
+    // Test PDI-18318 findings
+    assertEquals( new BigDecimal( "2.75" ), ValueDataUtil.divideBigDecimals( new BigDecimal( "11" ), new BigDecimal(  "4" ), space ) );
+    assertEquals( new BigDecimal( "2.538461538461538461538461538461538" ), ValueDataUtil.divideBigDecimals( new BigDecimal( "33" ), new BigDecimal(  "13" ), space ) );
+    assertEquals( new BigDecimal( "3.75" ), ValueDataUtil.divideBigDecimals( new BigDecimal( "15" ), new BigDecimal( "4" ), space ) );
+    assertEquals( new BigDecimal( "29.16666666666666666666666666666667" ), ValueDataUtil.divideBigDecimals( new BigDecimal( "875" ), new BigDecimal( "30" ), space ) );
+    assertEquals( new BigDecimal( "3.399690162664601084430673896204493" ), ValueDataUtil.divideBigDecimals( new BigDecimal( "4389" ), new BigDecimal( "1291" ), space ) );
+    assertEquals( new BigDecimal( "484315.25" ), ValueDataUtil.divideBigDecimals( new BigDecimal( "1937261" ), new BigDecimal(  "4" ), space ) );
+  }
 
-    assertEquals( expResult3, ValueDataUtil.divideBigDecimals( field1, field2, new MathContext( 23 ) ) );
-    assertEquals( expResult4, ValueDataUtil.divideBigDecimals( field1, field3, new MathContext( 21 ) ) );
+  @Test
+  public void testDivisionBigNumbersWithDefaultPrecision() {
+    BigDecimal field1 = new BigDecimal( "123456789012345678901.1234567890123456789" );
+    BigDecimal field2 = new BigDecimal( "1.0" );
+    BigDecimal field3 = new BigDecimal( "2.0" );
+
+    BigDecimal expResult1 = new BigDecimal( "123456789012345678901.12" );
+    BigDecimal expResult2 = new BigDecimal( "61728394506172839450.6" );
+
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_PRECISION, "23" );
+    assertEquals( expResult1, ValueDataUtil.divideBigDecimals( field1, field2, space ) );
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_PRECISION, "21" );
+    assertEquals( expResult2, ValueDataUtil.divideBigDecimals( field1, field3, space ) );
+  }
+
+  @Test
+  public void testDivisionBigNumbersWithPrecision1AndRoundingModeHalfDown() {
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_PRECISION, "1" );
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_ROUNDING_MODE, "HALF_DOWN" );
+
+    BigDecimal field1 = new BigDecimal( "4.8" );
+    BigDecimal field2 = new BigDecimal( "2.0" );
+    BigDecimal field3 = new BigDecimal( "5.0" );
+    BigDecimal field4 = new BigDecimal( "5.2" );
+
+    BigDecimal expResult1 = new BigDecimal( "2" );
+    BigDecimal expResult2 = new BigDecimal( "3" );
+
+    assertEquals( expResult1, ValueDataUtil.divideBigDecimals( field1, field2, space ) );
+    assertEquals( expResult1, ValueDataUtil.divideBigDecimals( field3, field2, space ) );
+    assertEquals( expResult2, ValueDataUtil.divideBigDecimals( field4, field2, space ) );
+  }
+
+  @Test
+  public void testDivisionBigNumbersWithPrecision1AndRoundingModeHalfUp() {
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_PRECISION, "1" );
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_ROUNDING_MODE, "HALF_UP" );
+
+    BigDecimal field1 = new BigDecimal( "4.8" );
+    BigDecimal field2 = new BigDecimal( "2.0" );
+    BigDecimal field3 = new BigDecimal( "5.0" );
+    BigDecimal field4 = new BigDecimal( "5.2" );
+
+    BigDecimal expResult1 = new BigDecimal( "2" );
+    BigDecimal expResult2 = new BigDecimal( "3" );
+
+    assertEquals( expResult1, ValueDataUtil.divideBigDecimals( field1, field2, space ) );
+    assertEquals( expResult2, ValueDataUtil.divideBigDecimals( field3, field2, space ) );
+    assertEquals( expResult2, ValueDataUtil.divideBigDecimals( field4, field2, space ) );
+  }
+
+  @Test
+  public void testDivisionBigNumbersWithPrecision1AndRoundingModeHalfEven() {
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_PRECISION, "1" );
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_ROUNDING_MODE, "HALF_EVEN" );
+
+    BigDecimal field1 = new BigDecimal( "4.8" );
+    BigDecimal field2 = new BigDecimal( "2.0" );
+    BigDecimal field3 = new BigDecimal( "5.2" );
+    BigDecimal field4 = new BigDecimal( "15.0" );
+    BigDecimal field5 = new BigDecimal( "13.0" );
+
+    BigDecimal expResult1 = new BigDecimal( "2" );
+    BigDecimal expResult2 = new BigDecimal( "3" );
+    BigDecimal expResult3 = new BigDecimal( "8" );
+    BigDecimal expResult4 = new BigDecimal( "6" );
+
+    assertEquals( expResult1, ValueDataUtil.divideBigDecimals( field1, field2, space ) );
+    assertEquals( expResult2, ValueDataUtil.divideBigDecimals( field3, field2, space ) );
+    assertEquals( expResult3, ValueDataUtil.divideBigDecimals( field4, field2, space ) );
+    assertEquals( expResult4, ValueDataUtil.divideBigDecimals( field5, field2, space ) );
+  }
+
+  @Test
+  public void testDivisionBigNumbersWithPrecision1AndRoundingModeCeiling() {
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_PRECISION, "1" );
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_ROUNDING_MODE, "CEILING" );
+
+    BigDecimal field1 = new BigDecimal( "4.6" );
+    BigDecimal field2 = new BigDecimal( "2.0" );
+    BigDecimal field3 = new BigDecimal( "-4.6" );
+
+    BigDecimal expResult1 = new BigDecimal( "3" );
+    BigDecimal expResult2 = new BigDecimal( "-2" );
+
+    assertEquals( expResult1, ValueDataUtil.divideBigDecimals( field1, field2, space ) );
+    assertEquals( expResult2, ValueDataUtil.divideBigDecimals( field3, field2, space ) );
+  }
+
+  @Test
+  public void testDivisionBigNumbersWithPrecision1AndRoundingModeDown() {
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_PRECISION, "1" );
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_ROUNDING_MODE, "DOWN" );
+
+    BigDecimal field1 = new BigDecimal( "4.6" );
+    BigDecimal field2 = new BigDecimal( "2.0" );
+    BigDecimal field3 = new BigDecimal( "-4.6" );
+
+    BigDecimal expResult1 = new BigDecimal( "2" );
+    BigDecimal expResult2 = new BigDecimal( "-2" );
+
+    assertEquals( expResult1, ValueDataUtil.divideBigDecimals( field1, field2, space ) );
+    assertEquals( expResult2, ValueDataUtil.divideBigDecimals( field3, field2, space ) );
+  }
+
+  @Test
+  public void testDivisionBigNumbersWithPrecision1AndRoundingModeFloor() {
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_PRECISION, "1" );
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_ROUNDING_MODE, "FLOOR" );
+
+    BigDecimal field1 = new BigDecimal( "4.6" );
+    BigDecimal field2 = new BigDecimal( "2.0" );
+    BigDecimal field3 = new BigDecimal( "-4.6" );
+
+    BigDecimal expResult1 = new BigDecimal( "2" );
+    BigDecimal expResult2 = new BigDecimal( "-3" );
+
+    assertEquals( expResult1, ValueDataUtil.divideBigDecimals( field1, field2, space ) );
+    assertEquals( expResult2, ValueDataUtil.divideBigDecimals( field3, field2, space ) );
+  }
+
+  @Test
+  public void testDivisionBigNumbersWithPrecision1AndRoundingModeUp() {
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_PRECISION, "1" );
+    space.setVariable( Const.KETTLE_BIGDECIMAL_DIVISION_ROUNDING_MODE, "UP" );
+
+    BigDecimal field1 = new BigDecimal( "4.6" );
+    BigDecimal field2 = new BigDecimal( "2.0" );
+    BigDecimal field3 = new BigDecimal( "-4.6" );
+
+    BigDecimal expResult1 = new BigDecimal( "3" );
+    BigDecimal expResult2 = new BigDecimal( "-3" );
+
+    assertEquals( expResult1, ValueDataUtil.divideBigDecimals( field1, field2, space ) );
+    assertEquals( expResult2, ValueDataUtil.divideBigDecimals( field3, field2, space ) );
   }
 
   @Test
@@ -698,6 +927,9 @@ public class ValueDataUtilTest {
 
     assertEquals( expResult1, ValueDataUtil.remainder( new ValueMetaBigNumber( ), field1, new ValueMetaBigNumber( ), field2 ) );
     assertEquals( expResult2, ValueDataUtil.remainder( new ValueMetaBigNumber( ), field1, new ValueMetaBigNumber( ), field3 ) );
+    // Test PDI-18318 findings
+    assertEquals( new BigDecimal(  "1.90" ), ValueDataUtil.remainder( new ValueMetaBigNumber( ), new BigDecimal(  "23" ), new ValueMetaBigNumber( ), new BigDecimal(  "2.110" ) ) );
+    assertEquals( new BigDecimal(  "5" ), ValueDataUtil.remainder( new ValueMetaBigNumber( ), new BigDecimal(  "875" ), new ValueMetaBigNumber( ), new BigDecimal(  "30" ) ) );
   }
 
   @Test
@@ -848,16 +1080,20 @@ public class ValueDataUtilTest {
         CalculatorMetaFunction.CALC_COMBINATION_2 ) );
     assertEquals( Double.valueOf( "111.80339887498948" ), calculate( "100", "50", ValueMetaInterface.TYPE_NUMBER,
         CalculatorMetaFunction.CALC_COMBINATION_2 ) );
+    assertEquals( Double.valueOf( "100.0" ), calculate( "100", "0", ValueMetaInterface.TYPE_NUMBER,
+      CalculatorMetaFunction.CALC_COMBINATION_2 ) );
 
     // Test Kettle Integer (Java Long) types
     assertEquals( Long.valueOf( "1" ), calculate( "1", "1", ValueMetaInterface.TYPE_INTEGER,
         CalculatorMetaFunction.CALC_COMBINATION_2 ) );
-    assertEquals( Long.valueOf( "2" ), calculate( "2", "2", ValueMetaInterface.TYPE_INTEGER,
+    assertEquals( Long.valueOf( "3" ), calculate( "2", "2", ValueMetaInterface.TYPE_INTEGER,
         CalculatorMetaFunction.CALC_COMBINATION_2 ) );
-    assertEquals( Long.valueOf( "10" ), calculate( "10", "20", ValueMetaInterface.TYPE_INTEGER,
+    assertEquals( Long.valueOf( "22" ), calculate( "10", "20", ValueMetaInterface.TYPE_INTEGER,
         CalculatorMetaFunction.CALC_COMBINATION_2 ) );
-    assertEquals( Long.valueOf( "100" ), calculate( "100", "50", ValueMetaInterface.TYPE_INTEGER,
+    assertEquals( Long.valueOf( "112" ), calculate( "100", "50", ValueMetaInterface.TYPE_INTEGER,
         CalculatorMetaFunction.CALC_COMBINATION_2 ) );
+    assertEquals( Long.valueOf( "100" ), calculate( "100", "0", ValueMetaInterface.TYPE_INTEGER,
+      CalculatorMetaFunction.CALC_COMBINATION_2 ) );
 
     // Test Kettle big Number types
     assertEquals( 0, new BigDecimal( "1.4142135623730951" ).compareTo( (BigDecimal) calculate( "1", "1",
@@ -868,6 +1104,8 @@ public class ValueDataUtilTest {
         ValueMetaInterface.TYPE_BIGNUMBER, CalculatorMetaFunction.CALC_COMBINATION_2 ) ) );
     assertEquals( 0, new BigDecimal( "111.80339887498948" ).compareTo( (BigDecimal) calculate( "100", "50",
         ValueMetaInterface.TYPE_BIGNUMBER, CalculatorMetaFunction.CALC_COMBINATION_2 ) ) );
+    assertEquals( 0, new BigDecimal( "100.0" ).compareTo( (BigDecimal) calculate( "100", "0",
+      ValueMetaInterface.TYPE_BIGNUMBER, CalculatorMetaFunction.CALC_COMBINATION_2 ) ) );
   }
 
   @Test
@@ -985,6 +1223,69 @@ public class ValueDataUtilTest {
     assertEquals( BigDecimal.valueOf( Double.valueOf( "-12.35" ) ), calculate( "-12.355", "2",
         ValueMetaInterface.TYPE_BIGNUMBER, CalculatorMetaFunction.CALC_ROUND_2 ) );
   }
+
+  @Test
+  public void testRound3() {
+    ValueMetaInterface vmn = createValueMeta( "num", ValueMetaInterface.TYPE_NUMBER );
+    ValueMetaInterface vmi = createValueMeta( "integer", ValueMetaInterface.TYPE_INTEGER );
+    ValueMetaInterface vmbn = createValueMeta( "bigNum", ValueMetaInterface.TYPE_BIGNUMBER );
+
+    try {
+      // Number
+      assertEquals( Double.valueOf( "-2.0" ), ValueDataUtil.round( vmn, -1.1, BigDecimal.ROUND_UP ) );
+      assertEquals( Double.valueOf( "-1.0" ), ValueDataUtil.round( vmn, -1.1, BigDecimal.ROUND_DOWN ) );
+      assertEquals( Double.valueOf( "-1.0" ), ValueDataUtil.round( vmn, -1.1, BigDecimal.ROUND_CEILING ) );
+      assertEquals( Double.valueOf( "-2.0" ), ValueDataUtil.round( vmn, -1.1, BigDecimal.ROUND_FLOOR ) );
+      assertEquals( Double.valueOf( "-2.0" ), ValueDataUtil.round( vmn, -1.5, BigDecimal.ROUND_HALF_UP ) );
+      assertEquals( Double.valueOf( "-1.0" ), ValueDataUtil.round( vmn, -1.5, BigDecimal.ROUND_HALF_DOWN ) );
+      assertEquals( Double.valueOf( "2.0" ), ValueDataUtil.round( vmn, 2.5, BigDecimal.ROUND_HALF_EVEN ) );
+      assertEquals( Double.valueOf( "1.1" ), ValueDataUtil.round( vmn, 1.1, BigDecimal.ROUND_UNNECESSARY ) );
+
+      // Integer
+      assertEquals( Long.valueOf( "-1" ), ValueDataUtil.round( vmi, Long.valueOf( "-1" ), BigDecimal.ROUND_UP ) );
+      assertEquals( Long.valueOf( "-1" ), ValueDataUtil.round( vmi, Long.valueOf( "-1" ), BigDecimal.ROUND_DOWN ) );
+      assertEquals( Long.valueOf( "-1" ), ValueDataUtil.round( vmi, Long.valueOf( "-1" ), BigDecimal.ROUND_CEILING ) );
+      assertEquals( Long.valueOf( "-1" ), ValueDataUtil.round( vmi, Long.valueOf( "-1" ), BigDecimal.ROUND_FLOOR ) );
+      assertEquals( Long.valueOf( "-1" ), ValueDataUtil.round( vmi, Long.valueOf( "-1" ), BigDecimal.ROUND_HALF_UP ) );
+      assertEquals( Long.valueOf( "-1" ), ValueDataUtil.round( vmi, Long.valueOf( "-1" ), BigDecimal.ROUND_HALF_DOWN ) );
+      assertEquals( Long.valueOf( "-1" ), ValueDataUtil.round( vmi, Long.valueOf( "-1" ), BigDecimal.ROUND_HALF_EVEN ) );
+      assertEquals( Long.valueOf( "-1" ), ValueDataUtil.round( vmi, Long.valueOf( "-1" ), BigDecimal.ROUND_UNNECESSARY ) );
+
+      // Big Number
+      assertEquals( BigDecimal.valueOf( -2 ), ValueDataUtil.round( vmbn, BigDecimal.valueOf( -1.1 ), BigDecimal.ROUND_UP ) );
+      assertEquals( BigDecimal.valueOf( -1 ), ValueDataUtil.round( vmbn, BigDecimal.valueOf( -1.1 ), BigDecimal.ROUND_DOWN ) );
+      assertEquals( BigDecimal.valueOf( -1 ), ValueDataUtil.round( vmbn, BigDecimal.valueOf( -1.1 ), BigDecimal.ROUND_CEILING ) );
+      assertEquals( BigDecimal.valueOf( -2 ), ValueDataUtil.round( vmbn, BigDecimal.valueOf( -1.1 ), BigDecimal.ROUND_FLOOR ) );
+      assertEquals( BigDecimal.valueOf( -2 ), ValueDataUtil.round( vmbn, BigDecimal.valueOf( -1.5 ), BigDecimal.ROUND_HALF_UP ) );
+      assertEquals( BigDecimal.valueOf( -1 ), ValueDataUtil.round( vmbn, BigDecimal.valueOf( -1.5 ), BigDecimal.ROUND_HALF_DOWN ) );
+      assertEquals( BigDecimal.valueOf( 2 ), ValueDataUtil.round( vmbn, BigDecimal.valueOf( 2.5 ), BigDecimal.ROUND_HALF_EVEN ) );
+      assertEquals( BigDecimal.valueOf( 1.1 ), ValueDataUtil.round( vmbn, BigDecimal.valueOf( 1.1 ), BigDecimal.ROUND_UNNECESSARY ) );
+    } catch ( KettleValueException kve ) {
+      fail();
+    }
+
+    try {
+      ValueDataUtil.round( vmn, "hello", BigDecimal.ROUND_UP );
+      fail();
+    } catch ( KettleValueException kve ) {
+      assertTrue( true );
+    }
+
+    try {
+      ValueDataUtil.round( vmi, "hello", BigDecimal.ROUND_UP );
+      fail();
+    } catch ( KettleValueException kve ) {
+      assertTrue( true );
+    }
+
+    try {
+      ValueDataUtil.round( vmbn, "hello", BigDecimal.ROUND_UP );
+      fail();
+    } catch ( KettleValueException kve ) {
+      assertTrue( true );
+    }
+  }
+
 
   @Test
   public void testNVL() {
@@ -1153,6 +1454,23 @@ public class ValueDataUtilTest {
   }
 
   @Test
+  public void testAbs() throws  Exception {
+    BigDecimal field1 = new BigDecimal( "123456789012345678901.1234567890123456789" );
+    BigDecimal field2 = new BigDecimal( "-123456789012345678901.1234567890123456789" );
+    BigDecimal field3 = new BigDecimal( "1.0" );
+    BigDecimal field4 = new BigDecimal( "-1.0" );
+
+    BigDecimal expResult1 = field1;
+    BigDecimal expResult2 = field3;
+
+    assertEquals( expResult1, ValueDataUtil.abs( new ValueMetaBigNumber( ), field1 ) );
+    assertEquals( expResult1, ValueDataUtil.abs( new ValueMetaBigNumber( ), field2 ) );
+    assertEquals( expResult2, ValueDataUtil.abs( new ValueMetaBigNumber( ), field3 ) );
+    assertEquals( expResult2, ValueDataUtil.abs( new ValueMetaBigNumber( ), field4 ) );
+  }
+
+
+  @Test
   public void testJaro() {
     assertEquals( new Double( "0.0" ), calculate( "abcd", "defg", ValueMetaInterface.TYPE_STRING, CalculatorMetaFunction.CALC_JARO ) );
     assertEquals( new Double( "0.44166666666666665" ), calculate( "elephant", "hippo", ValueMetaInterface.TYPE_STRING, CalculatorMetaFunction.CALC_JARO ) );
@@ -1268,6 +1586,8 @@ public class ValueDataUtilTest {
         return ValueDataUtil.getJaroWinkler_Similitude( valueMetaA, dataA, valueMetaB, dataB );
       } else if ( calculatorMetaFunction == CalculatorMetaFunction.CALC_MULTIPLY ) {
         return ValueDataUtil.multiply( valueMetaA, dataA, valueMetaB, dataB );
+      } else if ( calculatorMetaFunction == CalculatorMetaFunction.CALC_SQUARE_ROOT ) {
+        return ValueDataUtil.sqrt( valueMetaA, dataA );
       } else {
         fail( "Invalid CalculatorMetaFunction specified." );
         return null;

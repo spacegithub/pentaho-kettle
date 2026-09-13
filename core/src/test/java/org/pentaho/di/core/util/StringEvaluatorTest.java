@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.util;
 
@@ -148,8 +140,8 @@ public class StringEvaluatorTest {
       evaluator.evaluateString( string );
     }
     assertFalse( evaluator.getStringEvaluationResults().isEmpty() );
-    assertTrue( evaluator.getAdvicedResult().getConversionMeta().isNumber() );
-    assertTrue( mask.equals( evaluator.getAdvicedResult().getConversionMeta().getConversionMask() ) );
+    assertTrue( evaluator.getAdvicedResult().getConversionMeta().isNumeric() );
+    assertEquals( mask, evaluator.getAdvicedResult().getConversionMeta().getConversionMask() );
   }
 
   /////////////////////////////////////
@@ -161,13 +153,129 @@ public class StringEvaluatorTest {
   }
 
   @Test
+  public void testNumberWithDecimals() {
+    testNumber( "#.##", "1.11" );
+  }
+
+  @Test
+  public void testColumnOfVaryingScale() {
+    testNumber( "#.###", "1.1", "1.999", "1.23" );
+  }
+
+  @Test
+  public void testMixedNumberForms() {
+    testNumber( "#,###.########", "1010.10101010", "10.01", "4,309.88" );
+  }
+
+  @Test
+  public void testNegCurrency() {
+    testNumber( "#,###.##", "-1,234,567.00", "-10.01", "-4,309.88" );
+  }
+
+  @Test
+  public void testNegInteger() {
+    testNumber( "#,###", "-1,234,567", "-10", "-4,309" );
+  }
+
+  @Test
+  public void testParenedNegative() {
+    testNumber( "#,###.000;(#,###.000)", "(1.2)", "2", "(1,222.333)" );
+  }
+
+  @Test
+  public void testParenedNegativeInteger() {
+    testNumber( "#,###;(#,###)", "(1)", "10,375", "(1,222)", "0", "2 " );
+  }
+
+  @Test
+  public void testExponentialIntegerStuff() {
+    testNumber( "###.####E0", "1.00E+00", "123E100", "1.2356E-100" );
+  }
+
+  @Test
+  public void testExponentialInteger() {
+    testNumber( "#", "123E16" );
+  }
+
+  @Test
+  public void testHugeExponentialInteger() {
+    testNumber( "###.#E0", "123E100" );
+  }
+
+  @Test
+  public void testExponentialFraction() {
+    testNumber("###.##E0", "-1.232E1" );
+  }
+
+  @Test
+  public void testMixOfExponentsFractionsAndIntegers() {
+    //The -456.230 forces 3 digit fractions even though the last digit was 0.  Why would have the 0 in the text
+    // if we didn't want that placeholder?
+    testNumber("###.###E0", "1.232E1", "-456.230", "123" );
+  }
+
+  @Test
+  public void testMixOfExponentsFractionsIntegersAndGrouping() {
+    testNumber("#,###.###", "1.232E1", "-456.230", "123", "1,111.1" );
+  }
+
+  @Test
+  public void testMixOfExponentsFractionsIntegersAndGrouping2() {
+    testNumber("#,###.###", "1.232E1", "-456.234", "123", "1,111.1" );
+  }
+
+  @Test
+  public void testNumbersThatCouldBeEUorUS() {
+    testNumber("#.######", "-81.706865", "-81.718452" );
+  }
+
+  @Test
+  public void testMixOfExponentsFractionsIntegersAndGrouping3() {
+    // Adding the (1234.1) to the values forces the parens mask to parse the value.  Since the parens mask is intended
+    // for currency we use 0's in the fraction instead of #'s.  See the default masks.  Note that the comma group
+    // separator do not force commas to exist in the number.  If it did then there would be no solution for (1234.1).
+    testNumber("#,###.000;(#,###.000)", "1.232E1", "-456.234", "123", "1,111.1", "(1234.1)" );
+  }
+
+  @Test
+  public void testEmptySet() {
+    //There is a mask for parens with and without $ but there is no mask supporting both forms simultaneously
+    testNumber(null, "(1234.1)", "($1234.1)" );
+  }
+
+  @Test
+  public void testExponentNonPreference() {
+    testNumber("#.###", "1.234" );
+  }
+
+  @Test
+  public void testExponentPreference1() {
+    testNumber("###.###E0", "1.234E0" );
+  }
+
+  @Test
+  public void testExponentPreference2() {
+    testNumber("###.###E0", "1234E-3" );
+  }
+
+  @Test
+  public void testExponentPreference3() {
+    testNumber("###.###E0", "1234E-33" );
+  }
+
+  @Test
+  public void testPercent() {
+    testNumber("#.##%", "123%" );
+  }
+
+  @Test
   public void testNumberWithGroupAndPoint() {
-    testNumber( "#,###,###.#", "1,111,111.1" );
+    testNumber( "#,###.#", "1,111,111.1" );
   }
 
   @Test
   public void testNumbers() {
-    testNumber( "#,###,###.#", "1,111,111.1", "1,111" );
+    testNumber( "#,###.#", "1,111,111.1", "1,111" );
   }
 
   @Test
@@ -187,9 +295,14 @@ public class StringEvaluatorTest {
     for ( String string : strings ) {
       evaluator.evaluateString( string );
     }
-    assertFalse( evaluator.getStringEvaluationResults().isEmpty() );
-    assertTrue( evaluator.getAdvicedResult().getConversionMeta().isNumber() );
-    assertTrue( mask.equals( evaluator.getAdvicedResult().getConversionMeta().getConversionMask() ) );
+    if ( mask == null ){
+      assertTrue( evaluator.getStringEvaluationResults().isEmpty() );
+      assertTrue( evaluator.getAdvicedResult().getConversionMeta().getType() == 2 );
+    } else {
+      assertFalse( evaluator.getStringEvaluationResults().isEmpty() );
+      assertTrue( evaluator.getAdvicedResult().getConversionMeta().isNumeric() );
+      assertEquals( mask, evaluator.getAdvicedResult().getConversionMeta().getConversionMask() );
+    }
   }
 
   /////////////////////////////////////
@@ -225,8 +338,8 @@ public class StringEvaluatorTest {
     for ( String string : strings ) {
       evaluator.evaluateString( string );
     }
-    assertTrue( evaluator.getStringEvaluationResults().isEmpty() );
-    assertTrue( evaluator.getAdvicedResult().getConversionMeta().isString() );
+    assertTrue( evaluator.getAdvicedResult().getConversionMeta().isNumeric() );
+    assertTrue( evaluator.getAdvicedResult().getConversionMeta().getConversionMask().contains( "(" ) );
   }
 
   /////////////////////////////////////

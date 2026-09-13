@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.autodoc;
 
@@ -28,7 +20,7 @@ import java.awt.print.Paper;
 import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.pentaho.di.core.Const;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.logging.LoggingObjectInterface;
 import org.pentaho.reporting.engine.classic.core.AttributeNames;
 import org.pentaho.reporting.engine.classic.core.Element;
@@ -40,10 +32,9 @@ import org.pentaho.reporting.engine.classic.core.ReportFooter;
 import org.pentaho.reporting.engine.classic.core.ReportHeader;
 import org.pentaho.reporting.engine.classic.core.SimplePageDefinition;
 import org.pentaho.reporting.engine.classic.core.TableDataFactory;
-import org.pentaho.reporting.engine.classic.core.elementfactory.ContentElementFactory;
+import org.pentaho.reporting.engine.classic.core.elementfactory.ContentFieldElementFactory;
 import org.pentaho.reporting.engine.classic.core.elementfactory.LabelElementFactory;
 import org.pentaho.reporting.engine.classic.core.elementfactory.TextFieldElementFactory;
-import org.pentaho.reporting.engine.classic.core.modules.misc.beanshell.BSHExpression;
 import org.pentaho.reporting.engine.classic.core.modules.output.pageable.pdf.PdfReportUtil;
 import org.pentaho.reporting.engine.classic.core.modules.output.table.csv.CSVReportUtil;
 import org.pentaho.reporting.engine.classic.core.modules.output.table.html.HtmlReportUtil;
@@ -76,8 +67,11 @@ public class KettleReportBuilder {
 
   private LoggingObjectInterface parentObject;
 
-  public KettleReportBuilder( LoggingObjectInterface parentObject, List<ReportSubjectLocation> locations,
+  private Bowl bowl;
+
+  public KettleReportBuilder( Bowl bowl, LoggingObjectInterface parentObject, List<ReportSubjectLocation> locations,
     String targetFilename, AutoDocOptionsInterface options ) {
+    this.bowl = bowl;
     this.parentObject = parentObject;
     this.filenames = locations;
     this.targetFilename = targetFilename;
@@ -132,9 +126,12 @@ public class KettleReportBuilder {
     //
     report = new MasterReport();
 
+    String imageFieldName = options.getOutputType() == OutputType.PDF
+      ? KettleFileTableModel.Field.pdf_image.name() : KettleFileTableModel.Field.image.name();
+
     // Define where which transformation and step to read from, explain it to the reporting engine
     //
-    KettleFileTableModel transMetaTableModel = new KettleFileTableModel( parentObject, filenames );
+    KettleFileTableModel transMetaTableModel = new KettleFileTableModel( bowl, parentObject, filenames );
 
     TableDataFactory dataFactory = new TableDataFactory( "default", transMetaTableModel );
 
@@ -226,19 +223,9 @@ public class KettleReportBuilder {
     // Optionally include an image of the transformation...
     //
     if ( options.isIncludingImage() ) {
-      // for this to work the reporting engine must be able to see our classes, we do this by changing the thread
-      // classloader to be the plugin's classloader. see #render()
-      String bshCode =
-        "Object getValue() { "
-          + Const.CR + "  return new " + TransJobDrawable.class.getName() + "(dataRow, "
-          + ( options.getOutputType() == OutputType.PDF ? "true" : "false" ) + ");" + Const.CR + "}";
-      BSHExpression bshExpression = new BSHExpression();
-      bshExpression.setExpression( bshCode );
-      bshExpression.setName( "getImage" );
-      report.addExpression( bshExpression );
-
-      ContentElementFactory contentElementFactory = new ContentElementFactory();
+      ContentFieldElementFactory contentElementFactory = new ContentFieldElementFactory();
       contentElementFactory.setName( "image" );
+      contentElementFactory.setFieldname( imageFieldName );
       contentElementFactory.setAbsolutePosition( new Point( 0, pagePosition ) );
       contentElementFactory.setMinimumWidth( 750f );
       contentElementFactory.setMaximumWidth( 750f );
@@ -248,8 +235,6 @@ public class KettleReportBuilder {
       contentElementFactory.setDynamicHeight( true );
       Element imageElement = contentElementFactory.createElement();
 
-      imageElement
-        .setAttributeExpression( AttributeNames.Core.NAMESPACE, AttributeNames.Core.VALUE, bshExpression );
       imageElement.setAttribute( AttributeNames.Core.NAMESPACE, AttributeNames.Core.IMAGE_ENCODING_QUALITY, "9" );
       imageElement.setAttribute( AttributeNames.Core.NAMESPACE, AttributeNames.Core.IMAGE_ENCODING_TYPE, "PNG" );
 

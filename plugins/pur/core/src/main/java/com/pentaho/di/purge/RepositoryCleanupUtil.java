@@ -1,19 +1,16 @@
-/*!
- * Copyright 2010 - 2018 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 
 package com.pentaho.di.purge;
 
@@ -26,27 +23,30 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-import javax.ws.rs.core.MediaType;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang.WordUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.text.WordUtils;
 import org.pentaho.di.core.KettleClientEnvironment;
 import org.pentaho.di.core.encryption.Encr;
+import org.pentaho.di.ui.spoon.session.AuthenticationContext;
+import org.pentaho.di.ui.spoon.session.SpoonSessionManager;
 import org.pentaho.platform.security.policy.rolebased.actions.AdministerSecurityAction;
 import org.pentaho.platform.util.RepositoryPathEncoder;
 
 import com.pentaho.di.messages.Messages;
-import com.sun.jersey.api.client.Client;
-import com.sun.jersey.api.client.ClientResponse;
-import com.sun.jersey.api.client.WebResource;
-import com.sun.jersey.api.client.config.ClientConfig;
-import com.sun.jersey.api.client.config.DefaultClientConfig;
-import com.sun.jersey.api.client.filter.HTTPBasicAuthFilter;
-import com.sun.jersey.api.json.JSONConfiguration;
-import com.sun.jersey.multipart.FormDataMultiPart;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.client.ClientBuilder;
+import jakarta.ws.rs.client.WebTarget;
+import org.glassfish.jersey.client.ClientConfig;
+import org.glassfish.jersey.client.ClientProperties;
+import org.glassfish.jersey.client.authentication.HttpAuthenticationFeature;
+import org.glassfish.jersey.media.multipart.FormDataMultiPart;
 
 /**
  * Command line utility for purging files, file revisions, or shared objects. Passes through to purge services.
@@ -125,11 +125,11 @@ public class RepositoryCleanupUtil {
       String serviceURL = createPurgeServiceURL();
       form = createParametersForm();
 
-      WebResource resource = client.resource( serviceURL );
-      ClientResponse response = resource.type( MediaType.MULTIPART_FORM_DATA ).post( ClientResponse.class, form );
+      WebTarget target = client.target( serviceURL );
+      Response response = target.request( MediaType.MULTIPART_FORM_DATA ).post( Entity.entity( form, MediaType.MULTIPART_FORM_DATA_TYPE ) );
 
       if ( response != null && response.getStatus() == 200 ) {
-        String resultLog = response.getEntity( String.class );
+        String resultLog = response.getEntity().toString();
         String logName = writeLog( resultLog );
         writeOut( Messages.getInstance().getString( "REPOSITORY_CLEANUP_UTIL.INFO_0001.OP_SUCCESS", logName ), false );
       } else {
@@ -146,7 +146,7 @@ public class RepositoryCleanupUtil {
       }
     } finally {
       if ( client != null ) {
-        client.destroy();
+        client.notify();
       }
 
       if ( form != null ) {
@@ -357,14 +357,45 @@ public class RepositoryCleanupUtil {
     KettleClientEnvironment.init();
 
     if ( client == null ) {
-      ClientConfig clientConfig = new DefaultClientConfig();
-      clientConfig.getFeatures().put( JSONConfiguration.FEATURE_POJO_MAPPING, Boolean.TRUE );
-      client = Client.create( clientConfig );
-      client.addFilter( new HTTPBasicAuthFilter( username, Encr.decryptPasswordOptionallyEncrypted( password ) ) );
+      ClientConfig clientConfig = new ClientConfig();
+      clientConfig.property( ClientProperties.FOLLOW_REDIRECTS, Boolean.TRUE );
+      client = ClientBuilder.newClient( clientConfig );
+      
+      // Check if session-based authentication is enabled
+      final boolean useSessionAuth = AuthenticationContext.SESSION_AUTH_TOKEN.equals( password );
+
+      if ( useSessionAuth ) {
+        // Get authentication context using the factory pattern
+        AuthenticationContext authContext =
+          SpoonSessionManager.getInstance().getAuthenticationContext( url );
+
+        if ( authContext == null ) {
+          throw new SessionAuthenticationException(
+            "Unable to obtain authentication context for URL: " + url
+              + ". Verify the URL is valid and properly formatted." );
+        }
+
+        // Check if authenticated
+        if ( authContext.isAuthenticated() ) {
+          String jsessionId = authContext.getJSessionId();
+
+          // Register a ClientRequestFilter to add Cookie header to every request
+          final String finalJsessionId = jsessionId;
+          client.register( (jakarta.ws.rs.client.ClientRequestFilter) requestContext ->
+            requestContext.getHeaders().add( "Cookie", "JSESSIONID=" + finalJsessionId )
+          );
+        } else {
+          throw new SessionAuthenticationException( "Session-based authentication is enabled but no valid session found. Please authenticate through browser first." );
+        }
+      } else {
+        // Use basic authentication with username/password
+        HttpAuthenticationFeature feature = HttpAuthenticationFeature.basic( username, Encr.decryptPasswordOptionallyEncrypted( password ) );
+        client.register( feature );
+      }
     }
 
-    WebResource resource = client.resource( url + AUTHENTICATION + AdministerSecurityAction.NAME );
-    String response = resource.get( String.class );
+    WebTarget target = client.target( url + AUTHENTICATION + AdministerSecurityAction.NAME );
+    String response = target.request( MediaType.TEXT_PLAIN ).get( String.class );
 
     if ( !response.equals( "true" ) ) {
       throw new Exception( Messages.getInstance().getString( "REPOSITORY_CLEANUP_UTIL.ERROR_0012.ACCESS_DENIED" ) );
@@ -399,25 +430,25 @@ public class RepositoryCleanupUtil {
   private FormDataMultiPart createParametersForm() {
     FormDataMultiPart form = new FormDataMultiPart();
     if ( verCount != -1 && !purgeRev ) {
-      form.field( VER_COUNT, Integer.toString( verCount ), MediaType.MULTIPART_FORM_DATA_TYPE );
+      form.field( VER_COUNT, Integer.toString( verCount ) );
     }
     if ( delFrom != null && !purgeRev ) {
-      form.field( DEL_DATE, delFrom, MediaType.MULTIPART_FORM_DATA_TYPE );
+      form.field( DEL_DATE, delFrom );
     }
     if ( fileFilter != null ) {
-      form.field( FILE_FILTER, fileFilter, MediaType.MULTIPART_FORM_DATA_TYPE );
+      form.field( FILE_FILTER, fileFilter );
     }
     if ( logLevel != null ) {
-      form.field( LOG_LEVEL, logLevel, MediaType.MULTIPART_FORM_DATA_TYPE );
+      form.field( LOG_LEVEL, logLevel );
     }
     if ( purgeFiles ) {
-      form.field( PURGE_FILES, Boolean.toString( purgeFiles ), MediaType.MULTIPART_FORM_DATA_TYPE );
+      form.field( PURGE_FILES, Boolean.toString( purgeFiles ) );
     }
     if ( purgeRev ) {
-      form.field( PURGE_REV, Boolean.toString( purgeRev ), MediaType.MULTIPART_FORM_DATA_TYPE );
+      form.field( PURGE_REV, Boolean.toString( purgeRev ) );
     }
     if ( purgeShared ) {
-      form.field( PURGE_SHARED, Boolean.toString( purgeShared ), MediaType.MULTIPART_FORM_DATA_TYPE );
+      form.field( PURGE_SHARED, Boolean.toString( purgeShared ) );
     }
     return form;
   }
@@ -611,6 +642,15 @@ public class RepositoryCleanupUtil {
     public NormalExitException( int exitCode ) {
       super();
       this.exitCode = exitCode;
+    }
+  }
+
+  /**
+   * Thrown when session-based authentication is enabled but no valid session is found.
+   */
+  public static class SessionAuthenticationException extends Exception {
+    public SessionAuthenticationException( String message ) {
+      super( message );
     }
   }
 }

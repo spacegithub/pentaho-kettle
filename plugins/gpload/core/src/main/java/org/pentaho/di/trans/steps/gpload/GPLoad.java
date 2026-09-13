@@ -1,19 +1,16 @@
-/*!
- * This program is free software; you can redistribute it and/or modify it under the
- * terms of the GNU Lesser General Public License, version 2.1 as published by the Free Software
- * Foundation.
+/*! ******************************************************************************
  *
- * You should have received a copy of the GNU Lesser General Public License along with this
- * program; if not, you can obtain a copy at http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
- * or from the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * Pentaho
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU Lesser General Public License for more details.
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Copyright (c) 2002-2017 Hitachi Vantara..  All rights reserved.
- */
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.gpload;
 
@@ -457,7 +454,7 @@ public class GPLoad extends BaseStep implements StepInterface {
       throw new KettleException( exceptionMessage );
     }
 
-    FileObject fileObject = KettleVFS.getFileObject( pathToFile, getTransMeta() );
+    FileObject fileObject = KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( pathToFile, getTransMeta() );
     try {
       // we either check the existence of the file
       if ( checkExistenceOfFile ) {
@@ -642,6 +639,12 @@ public class GPLoad extends BaseStep implements StepInterface {
     return true;
   }
 
+  protected void verifyDatabaseConnection() throws KettleException {
+    if ( meta.getDatabaseMeta() == null ) {
+      throw new KettleException( BaseMessages.getString( PKG, "GPLoadMeta.GetSQL.NoConnectionDefined" ) );
+    }
+  }
+
   public boolean init( StepMetaInterface smi, StepDataInterface sdi ) {
     meta = (GPLoadMeta) smi;
     data = (GPLoadData) sdi;
@@ -650,6 +653,13 @@ public class GPLoad extends BaseStep implements StepInterface {
     preview = trans.isPreview();
 
     if ( super.init( smi, sdi ) ) {
+
+      try {
+        verifyDatabaseConnection();
+      } catch ( KettleException ex ) {
+        logError( ex.getMessage() );
+        return false;
+      }
       return true;
     }
     return false;
@@ -671,7 +681,8 @@ public class GPLoad extends BaseStep implements StepInterface {
       if ( GPLoadMeta.METHOD_AUTO_END.equals( method ) ) {
         if ( meta.getControlFile() != null ) {
           try {
-            fileObject = KettleVFS.getFileObject( environmentSubstitute( meta.getControlFile() ), getTransMeta() );
+            fileObject = KettleVFS.getInstance( getTransMeta().getBowl() )
+              .getFileObject( environmentSubstitute( meta.getControlFile() ), getTransMeta() );
             fileObject.delete();
             fileObject.close();
           } catch ( Exception ex ) {
@@ -684,7 +695,8 @@ public class GPLoad extends BaseStep implements StepInterface {
         // In concurrent mode the data is written to the control file.
         if ( meta.getDataFile() != null ) {
           try {
-            fileObject = KettleVFS.getFileObject( environmentSubstitute( meta.getDataFile() ), getTransMeta() );
+            fileObject = KettleVFS.getInstance( getTransMeta().getBowl() )
+              .getFileObject( environmentSubstitute( meta.getDataFile() ), getTransMeta() );
             fileObject.delete();
             fileObject.close();
           } catch ( Exception ex ) {

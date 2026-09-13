@@ -1,30 +1,22 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.cluster;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.Base64OutputStream;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
@@ -45,6 +37,9 @@ public class HttpUtil {
   public static final int ZIP_BUFFER_SIZE = 8192;
   private static final String PROTOCOL_UNSECURE = "http";
   private static final String PROTOCOL_SECURE = "https";
+
+  private HttpUtil() {
+  }
 
   /**
    * Returns http GET request string using specified parameters.
@@ -102,43 +97,15 @@ public class HttpUtil {
     // unzip to string encoding-wise
     ByteArrayInputStream zip = new ByteArrayInputStream( bytes64 );
 
-    GZIPInputStream unzip = null;
-    InputStreamReader reader = null;
-    BufferedInputStream in = null;
-    try {
-      unzip = new GZIPInputStream( zip, HttpUtil.ZIP_BUFFER_SIZE );
-      in = new BufferedInputStream( unzip, HttpUtil.ZIP_BUFFER_SIZE );
-      // PDI-4325 originally used xml encoding in servlet
-      reader = new InputStreamReader( in, Const.XML_ENCODING );
-      writer = new StringWriter();
+    // PDI-4325 originally used xml encoding in servlet
+    try ( GZIPInputStream unzip = new GZIPInputStream( zip, HttpUtil.ZIP_BUFFER_SIZE );
+           BufferedInputStream in = new BufferedInputStream( unzip, HttpUtil.ZIP_BUFFER_SIZE );
+           InputStreamReader reader = new InputStreamReader( in, Const.XML_ENCODING ) ) {
 
       // use same buffer size
       char[] buff = new char[ HttpUtil.ZIP_BUFFER_SIZE ];
-      for ( int length = 0; ( length = reader.read( buff ) ) > 0; ) {
+      for ( int length; ( length = reader.read( buff ) ) > 0; ) {
         writer.write( buff, 0, length );
-      }
-    } finally {
-      // close resources
-      if ( reader != null ) {
-        try {
-          reader.close();
-        } catch ( IOException e ) {
-          // Suppress
-        }
-      }
-      if ( in != null ) {
-        try {
-          in.close();
-        } catch ( IOException e ) {
-          // Suppress
-        }
-      }
-      if ( unzip != null ) {
-        try {
-          unzip.close();
-        } catch ( IOException e ) {
-          // Suppress
-        }
       }
     }
     return writer.toString();

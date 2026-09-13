@@ -1,34 +1,24 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.transexecutor;
 
-import org.apache.commons.vfs2.FileObject;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.CCombo;
 import org.eclipse.swt.custom.CTabFolder;
 import org.eclipse.swt.custom.CTabItem;
 import org.eclipse.swt.custom.ScrolledComposite;
-import org.eclipse.swt.events.ModifyEvent;
 import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
@@ -55,7 +45,6 @@ import org.pentaho.di.core.Props;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.row.value.ValueMetaFactory;
 import org.pentaho.di.core.util.Utils;
-import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
@@ -68,18 +57,18 @@ import org.pentaho.di.trans.steps.transexecutor.TransExecutorMeta;
 import org.pentaho.di.trans.steps.transexecutor.TransExecutorParameters;
 import org.pentaho.di.ui.core.ConstUI;
 import org.pentaho.di.ui.core.dialog.ErrorDialog;
+import org.pentaho.di.ui.core.events.dialog.FilterType;
+import org.pentaho.di.ui.core.events.dialog.SelectionOperation;
 import org.pentaho.di.ui.core.widget.ColumnInfo;
 import org.pentaho.di.ui.core.widget.ColumnsResizer;
 import org.pentaho.di.ui.core.widget.TableView;
 import org.pentaho.di.ui.core.widget.TextVar;
-import org.pentaho.di.ui.spoon.Spoon;
 import org.pentaho.di.ui.trans.step.BaseStepDialog;
 import org.pentaho.di.ui.util.DialogHelper;
 import org.pentaho.di.ui.util.DialogUtils;
+import org.pentaho.di.ui.util.ParameterTableHelper;
 import org.pentaho.di.ui.util.SwtSvgImageUtil;
-import org.pentaho.vfs.ui.VfsFileChooserDialog;
 
-import java.io.IOException;
 import java.util.Arrays;
 
 public class TransExecutorDialog extends BaseStepDialog implements StepDialogInterface {
@@ -87,6 +76,8 @@ public class TransExecutorDialog extends BaseStepDialog implements StepDialogInt
 
   private static int FIELD_DESCRIPTION = 1;
   private static int FIELD_NAME = 2;
+
+  private ParameterTableHelper parameterTableHelper = new ParameterTableHelper();
 
   private TransExecutorMeta transExecutorMeta;
 
@@ -102,6 +93,7 @@ public class TransExecutorDialog extends BaseStepDialog implements StepDialogInt
   protected boolean jobModified;
 
   private ModifyListener lsMod;
+  private ModifyListener lsModParams;
 
   private Button wInheritAll;
 
@@ -170,12 +162,14 @@ public class TransExecutorDialog extends BaseStepDialog implements StepDialogInt
     props.setLook( shell );
     setShellImage( shell, transExecutorMeta );
 
-    lsMod = new ModifyListener() {
-      public void modifyText( ModifyEvent e ) {
-        transExecutorMeta.setChanged();
-        setFlags();
-      }
+    lsMod = modifyEvent -> doMod();
+
+    // Extended Modify Listener for Params Table to enable/disable fields according to disable listeners
+    lsModParams = modifyEvent -> {
+      parameterTableHelper.checkTableOnMod( modifyEvent );
+      doMod();
     };
+
     changed = transExecutorMeta.hasChanged();
 
     FormLayout formLayout = new FormLayout();
@@ -243,17 +237,8 @@ public class TransExecutorDialog extends BaseStepDialog implements StepDialogInt
     fdBrowse.left = new FormAttachment( wPath, 5 );
     fdBrowse.top = new FormAttachment( wlPath, Const.isOSX() ? 0 : 5 );
     wbBrowse.setLayoutData( fdBrowse );
-
-    wbBrowse.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        if ( repository != null ) {
-          selectRepositoryTrans();
-        } else {
-          selectFileTrans();
-        }
-      }
-    } );
-
+    wbBrowse.addSelectionListener(DialogHelper.constructSelectionAdapterFileDialogTextVarForKettleFile(log, wPath, transMeta,
+        SelectionOperation.FILE_OR_FOLDER, FilterType.KETTLE_TRANS, repository ) );
     //
     // Add a tab folder for the parameters and various input and output
     // streams
@@ -354,25 +339,6 @@ public class TransExecutorDialog extends BaseStepDialog implements StepDialogInt
         ConstUI.LARGE_ICON_SIZE );
   }
 
-  private void selectRepositoryTrans() {
-    RepositoryObject repositoryObject = DialogHelper.selectRepositoryObject( "*.ktr", log );
-
-    try {
-      if ( repositoryObject != null ) {
-        loadRepositoryTrans( repositoryObject.getName(), repositoryObject.getRepositoryDirectory() );
-        String path = DialogUtils.getPath( transMeta.getRepositoryDirectory().getPath(),
-          executorTransMeta.getRepositoryDirectory().getPath() );
-        String fullPath = ( path.equals( "/" ) ? "/" : path + "/" ) + executorTransMeta.getName();
-        wPath.setText( fullPath );
-        specificationMethod = ObjectLocationSpecificationMethod.REPOSITORY_BY_NAME;
-      }
-    } catch ( KettleException ke ) {
-      new ErrorDialog( shell,
-        BaseMessages.getString( PKG, "TransExecutorDialog.ErrorSelectingObject.DialogTitle" ),
-        BaseMessages.getString( PKG, "TransExecutorDialog.ErrorSelectingObject.DialogMessage" ), ke );
-    }
-  }
-
   private void loadRepositoryTrans( String transName, RepositoryDirectoryInterface repdir ) throws KettleException {
     // Read the transformation...
     //
@@ -381,48 +347,8 @@ public class TransExecutorDialog extends BaseStepDialog implements StepDialogInt
     executorTransMeta.clearChanged();
   }
 
-  private void selectFileTrans() {
-    String curFile = transMeta.environmentSubstitute( wPath.getText() );
-
-    FileObject root = null;
-
-    String parentFolder = null;
-    try {
-      parentFolder =
-        KettleVFS.getFileObject( transMeta.environmentSubstitute( transMeta.getFilename() ) ).getParent().toString();
-    } catch ( Exception e ) {
-      // Take no action
-    }
-
-    try {
-      root = KettleVFS.getFileObject( curFile != null ? curFile : Const.getUserHomeDirectory() );
-
-      VfsFileChooserDialog vfsFileChooser = Spoon.getInstance().getVfsFileChooserDialog( root.getParent(), root );
-      FileObject file =
-        vfsFileChooser.open(
-          shell, null, Const.STRING_TRANS_FILTER_EXT, Const.getTransformationFilterNames(),
-          VfsFileChooserDialog.VFS_DIALOG_OPEN_FILE );
-      if ( file == null ) {
-        return;
-      }
-      String fileName = file.getName().toString();
-      if ( fileName != null ) {
-        loadFileTrans( fileName );
-        if ( parentFolder != null && fileName.startsWith( parentFolder ) ) {
-          fileName = fileName.replace( parentFolder, "${" + Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY + "}" );
-        }
-        wPath.setText( fileName );
-        specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
-      }
-    } catch ( IOException | KettleException e ) {
-      new ErrorDialog( shell,
-        BaseMessages.getString( PKG, "TransExecutorDialog.ErrorLoadingTransformation.DialogTitle" ),
-        BaseMessages.getString( PKG, "TransExecutorDialog.ErrorLoadingTransformation.DialogMessage" ), e );
-    }
-  }
-
   private void loadFileTrans( String fname ) throws KettleException {
-    executorTransMeta = new TransMeta( transMeta.environmentSubstitute( fname ), repository );
+    executorTransMeta = new TransMeta( transMeta.getBowl(), transMeta.environmentSubstitute( fname ), repository );
     executorTransMeta.clearChanged();
   }
 
@@ -484,8 +410,11 @@ public class TransExecutorDialog extends BaseStepDialog implements StepDialogInt
         wPath.setText( Const.NVL( transExecutorMeta.getFileName(), "" ) );
         break;
       case REPOSITORY_BY_NAME:
-        String fullPath = Const.NVL( transExecutorMeta.getDirectoryPath(), "" ) + "/" + Const
-          .NVL( transExecutorMeta.getTransName(), "" );
+        String transname = transMeta.environmentSubstitute( Const.NVL( transExecutorMeta.getTransName(), "" ) );
+        String directoryPath = transMeta.environmentSubstitute( Const.NVL( transExecutorMeta.getDirectoryPath(), "" ) );
+        String fullPath = directoryPath.isEmpty() && !transname.isEmpty()
+          ? Const.NVL( transExecutorMeta.getTransName(), "" )
+          : Const.NVL( transExecutorMeta.getDirectoryPath(), "" ) + "/" + Const.NVL( transExecutorMeta.getTransName(), "" );
         wPath.setText( fullPath );
         break;
       case REPOSITORY_BY_REFERENCE:
@@ -625,7 +554,7 @@ public class TransExecutorDialog extends BaseStepDialog implements StepDialogInt
     TransExecutorParameters parameters = transExecutorMeta.getParameters();
     wTransExecutorParameters =
       new TableView( transMeta, wParametersComposite, SWT.FULL_SELECTION | SWT.SINGLE | SWT.BORDER, parameterColumns,
-        parameters.getVariable().length, false, lsMod, props, false );
+        parameters.getVariable().length, false, lsModParams, props, false );
     props.setLook( wTransExecutorParameters );
     FormData fdTransExecutors = new FormData();
     fdTransExecutors.left = new FormAttachment( 0, 0 );
@@ -635,11 +564,20 @@ public class TransExecutorDialog extends BaseStepDialog implements StepDialogInt
     wTransExecutorParameters.setLayoutData( fdTransExecutors );
     wTransExecutorParameters.getTable().addListener( SWT.Resize, new ColumnsResizer( 0, 33, 33, 33 ) );
 
+    parameterTableHelper.setParameterTableView( wTransExecutorParameters );
+    parameterTableHelper.setUpDisabledListeners();
+    // Add disabled listeners to columns
+    parameterColumns[0].setDisabledListener( parameterTableHelper.getVarDisabledListener() );
+    parameterColumns[1].setDisabledListener( parameterTableHelper.getFieldDisabledListener() );
+    parameterColumns[2].setDisabledListener( parameterTableHelper.getInputDisabledListener() );
+
     for ( int i = 0; i < parameters.getVariable().length; i++ ) {
       TableItem tableItem = wTransExecutorParameters.table.getItem( i );
       tableItem.setText( 1, Const.NVL( parameters.getVariable()[ i ], "" ) );
       tableItem.setText( 2, Const.NVL( parameters.getField()[ i ], "" ) );
       tableItem.setText( 3, Const.NVL( parameters.getInput()[ i ], "" ) );
+      // Check disable listeners to shade fields gray
+      parameterTableHelper.checkTableOnOpen( tableItem, i );
     }
     wTransExecutorParameters.setRowNums();
     wTransExecutorParameters.optWidth( true );
@@ -664,6 +602,11 @@ public class TransExecutorDialog extends BaseStepDialog implements StepDialogInt
 
     wParametersComposite.layout();
     wParametersTab.setControl( wParametersComposite );
+  }
+
+  private void doMod() {
+    transExecutorMeta.setChanged();
+    setFlags();
   }
 
   protected void getParametersFromTrans( TransMeta inputTransMeta ) {
@@ -1061,6 +1004,11 @@ public class TransExecutorDialog extends BaseStepDialog implements StepDialogInt
 
   private void ok() {
     if ( Utils.isEmpty( wStepname.getText() ) ) {
+      return;
+    }
+
+    // Check if all parameters have names. If so, continue on.
+    if ( parameterTableHelper.checkParams( shell ) ) {
       return;
     }
 

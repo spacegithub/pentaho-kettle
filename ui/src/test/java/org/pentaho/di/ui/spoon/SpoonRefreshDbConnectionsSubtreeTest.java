@@ -1,41 +1,41 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.spoon;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.MockedStatic;
 import org.pentaho.di.base.AbstractMeta;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.database.DatabaseMeta;
+import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.shared.DatabaseConnectionManager;
+import org.pentaho.di.shared.DatabaseManagementInterface;
 import org.pentaho.di.ui.core.gui.GUIResource;
 import org.pentaho.di.ui.core.widget.tree.TreeNode;
 import org.pentaho.di.ui.spoon.tree.provider.DBConnectionFolderProvider;
 
-import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static java.util.Arrays.asList;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
 /**
@@ -45,17 +45,50 @@ public class SpoonRefreshDbConnectionsSubtreeTest {
 
   private DBConnectionFolderProvider dbConnectionFolderProvider;
   private TreeNode treeNode;
+  private Spoon mockSpoon;
+  private GUIResource mockGuiResource;
+  private DatabaseConnectionManager mockDbManager;
+  private DefaultBowl mockDefaultBowl;
+  private MockedStatic<Spoon> spoonMockedStatic;
+  private MockedStatic<GUIResource> guiResourceMockedStatic;
+  private MockedStatic<DefaultBowl> defaultBowlMockedStatic;
 
   @Before
   public void setUp() throws Exception {
-    GUIResource guiResource = mock( GUIResource.class );
-    Spoon spoon = mock( Spoon.class );
-    dbConnectionFolderProvider = new DBConnectionFolderProvider( guiResource, spoon );
+    mockGuiResource = mock( GUIResource.class );
+    mockSpoon = mock( Spoon.class );
+    mockDefaultBowl = mock( DefaultBowl.class );
+
+    spoonMockedStatic = mockStatic( Spoon.class );
+    guiResourceMockedStatic = mockStatic( GUIResource.class );
+    defaultBowlMockedStatic = mockStatic( DefaultBowl.class );
+
+    when( Spoon.getInstance() ).thenReturn( mockSpoon );
+    when( GUIResource.getInstance() ).thenReturn( mockGuiResource );
+    when( DefaultBowl.getInstance() ).thenReturn( mockDefaultBowl );
+
+    mockDbManager = mock( DatabaseConnectionManager.class );
+    dbConnectionFolderProvider = new DBConnectionFolderProvider( mockGuiResource, mockSpoon );
+
     treeNode = new TreeNode();
+    doReturn( DefaultBowl.getInstance() ).when( mockSpoon ).getManagementBowl();
+    doReturn( DefaultBowl.getInstance() ).when( mockSpoon ).getGlobalManagementBowl();
+    when( mockDefaultBowl.getManager( DatabaseManagementInterface.class ) ).thenReturn( mockDbManager );
   }
 
-  private void callRefreshWith( AbstractMeta meta, String filter ) {
-    dbConnectionFolderProvider.refresh( meta, treeNode, filter );
+  @After
+  public void tearDown() {
+    spoonMockedStatic.close();
+    guiResourceMockedStatic.close();
+    defaultBowlMockedStatic.close();
+  }
+
+  private void callRefreshWith( AbstractMeta meta, String filter ) throws Exception {
+    if ( meta == null ) {
+      dbConnectionFolderProvider.refresh( Optional.empty(), treeNode, filter );
+    } else {
+      dbConnectionFolderProvider.refresh( Optional.of( meta ), treeNode, filter );
+    }
   }
 
   private void verifyNumberOfNodesCreated( int times ) {
@@ -63,37 +96,50 @@ public class SpoonRefreshDbConnectionsSubtreeTest {
   }
 
   @Test
-  public void noConnectionsExist() {
-    AbstractMeta meta = mock( AbstractMeta.class );
-    when( meta.getDatabases() ).thenReturn( Collections.<DatabaseMeta>emptyList() );
+  public void noConnectionsExist() throws Exception {
+    DatabasesCollector dbCollector = new DatabasesCollector( prepareDbManager( null ), null );
+    Assert.assertEquals( 0, dbCollector.getDatabaseNames().size() );
 
-    callRefreshWith( meta, null );
+    dbCollector = new DatabasesCollector( prepareMeta( null ).getDatabaseManagementInterface(), null );
+    Assert.assertEquals( 0, dbCollector.getDatabaseNames().size() );
+
+    callRefreshWith( null, null );
     // one call - to create a parent tree node
     verifyNumberOfNodesCreated( 0 );
   }
 
   @Test
-  public void severalConnectionsExist() {
+  public void severalConnectionsExist() throws Exception {
+    DatabaseConnectionManager mgr = prepareDbManager( mockDatabaseMeta( "mysql" ), mockDatabaseMeta( "oracle" ) );
+    DatabasesCollector dbCollector = new DatabasesCollector( mgr, null );
+    Assert.assertEquals( 2, dbCollector.getDatabaseNames().size() );
+
     AbstractMeta meta = prepareMetaWithThreeDbs();
+    dbCollector = new DatabasesCollector( meta.getDatabaseManagementInterface(), null );
+    Assert.assertEquals( 3, dbCollector.getDatabaseNames().size() );
 
     callRefreshWith( meta, null );
-    verifyNumberOfNodesCreated( 3 );
+    verifyNumberOfNodesCreated( 5 );
   }
 
   @Test
-  public void onlyOneMatchesFiltering() {
+  public void onlyOneMatchesFiltering() throws Exception {
     AbstractMeta meta = prepareMetaWithThreeDbs();
-
+    DatabasesCollector dbCollector = new DatabasesCollector( meta.getDatabaseManagementInterface(), null );
+    Assert.assertEquals( 3, dbCollector.getDatabaseNames().size() );
     callRefreshWith( meta, "2" );
     verifyNumberOfNodesCreated( 1 );
   }
 
 
-  private static AbstractMeta prepareMetaWithThreeDbs() {
+  private static AbstractMeta prepareMetaWithThreeDbs() throws Exception {
     AbstractMeta meta = mock( AbstractMeta.class );
     List<DatabaseMeta> dbs =
             asList( mockDatabaseMeta( "1" ), mockDatabaseMeta( "2" ), mockDatabaseMeta( "3" ) );
-    when( meta.getDatabases() ).thenReturn( dbs );
+
+    DatabaseManagementInterface dbMgr = mock( DatabaseManagementInterface.class );
+    when( dbMgr.getAll() ).thenReturn( dbs );
+    when( meta.getDatabaseManagementInterface() ).thenReturn( dbMgr );
     return meta;
   }
 
@@ -102,5 +148,27 @@ public class SpoonRefreshDbConnectionsSubtreeTest {
     when( mock.getName() ).thenReturn( name );
     when( mock.getDisplayName() ).thenReturn( name );
     return mock;
+  }
+  private DatabaseConnectionManager prepareDbManager( DatabaseMeta... metas ) throws KettleException {
+    if ( metas == null ) {
+      metas = new DatabaseMeta[ 0 ];
+    }
+
+    List<DatabaseMeta> dbs = asList( metas );
+    when( mockDbManager.getAll() ).thenReturn( dbs );
+    return mockDbManager;
+  }
+
+  private static AbstractMeta prepareMeta( DatabaseMeta... metas ) throws Exception {
+    if ( metas == null ) {
+      metas = new DatabaseMeta[ 0 ];
+    }
+
+    AbstractMeta meta = mock( AbstractMeta.class );
+    List<DatabaseMeta> dbs = asList( metas );
+    DatabaseManagementInterface dbMgr = mock( DatabaseManagementInterface.class );
+    when( dbMgr.getAll() ).thenReturn( dbs );
+    when( meta.getDatabaseManagementInterface() ).thenReturn( dbMgr );
+    return meta;
   }
 }

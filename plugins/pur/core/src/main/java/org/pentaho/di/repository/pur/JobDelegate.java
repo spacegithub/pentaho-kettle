@@ -1,28 +1,23 @@
-/*!
- * Copyright 2010 - 2018 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.pur;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-import org.apache.commons.lang.StringUtils;
+import com.google.common.annotations.VisibleForTesting;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.NotePadMeta;
@@ -33,13 +28,13 @@ import org.pentaho.di.core.plugins.JobEntryPluginType;
 import org.pentaho.di.core.plugins.PluginInterface;
 import org.pentaho.di.core.plugins.PluginRegistry;
 import org.pentaho.di.core.xml.XMLHandler;
-import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.job.JobHopMeta;
 import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.job.entries.missing.MissingEntry;
 import org.pentaho.di.job.entry.JobEntryBase;
 import org.pentaho.di.job.entry.JobEntryCopy;
 import org.pentaho.di.job.entry.JobEntryInterface;
+import org.pentaho.di.metastore.MetaStoreConst;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.repository.RepositoryAttributeInterface;
@@ -47,10 +42,8 @@ import org.pentaho.di.repository.RepositoryElementInterface;
 import org.pentaho.di.repository.RepositoryObjectType;
 import org.pentaho.di.repository.StringObjectId;
 import org.pentaho.di.shared.SharedObjectInterface;
-import org.pentaho.di.shared.SharedObjects;
 import org.pentaho.di.ui.repository.pur.services.IConnectionAclService;
 import org.pentaho.platform.api.repository2.unified.IUnifiedRepository;
-import org.pentaho.platform.api.repository2.unified.RepositoryFilePermission;
 import org.pentaho.platform.api.repository2.unified.data.node.DataNode;
 import org.pentaho.platform.api.repository2.unified.data.node.DataNodeRef;
 
@@ -177,46 +170,19 @@ public class JobDelegate extends AbstractDelegate implements ISharedObjectsTrans
 
   // ~ Methods =========================================================================================================
   @SuppressWarnings( "unchecked" )
-  public SharedObjects loadSharedObjects( final RepositoryElementInterface element,
-      final Map<RepositoryObjectType, List<? extends SharedObjectInterface>> sharedObjectsByType )
+  @Override
+  @Deprecated // Shared Object reads should now go through a SharedObjectsIO
+  public void loadSharedObjects( final RepositoryElementInterface element,
+      final Map<RepositoryObjectType, List<? extends SharedObjectInterface<?>>> sharedObjectsByType )
     throws KettleException {
-    JobMeta jobMeta = (JobMeta) element;
-    jobMeta.setSharedObjects( jobMeta.readSharedObjects() );
-
-    // Repository objects take priority so let's overwrite them...
-    //
-    readDatabases( jobMeta, true, (List<DatabaseMeta>) sharedObjectsByType.get( RepositoryObjectType.DATABASE ) );
-    readSlaves( jobMeta, true, (List<SlaveServer>) sharedObjectsByType.get( RepositoryObjectType.SLAVE_SERVER ) );
-
-    return jobMeta.getSharedObjects();
+    // NO-OP
   }
 
+  @Override
+  @Deprecated // Shared Object writes should now go through a SharedObjectsIO
   public void saveSharedObjects( final RepositoryElementInterface element, final String versionComment )
     throws KettleException {
-    JobMeta jobMeta = (JobMeta) element;
-    // Now store the databases in the job.
-    // Only store if the database has actually changed or doesn't have an object ID (imported)
-    //
-    for ( DatabaseMeta databaseMeta : jobMeta.getDatabases() ) {
-      if ( databaseMeta.hasChanged() || databaseMeta.getObjectId() == null ) {
-        if ( databaseMeta.getObjectId() == null
-            || unifiedRepositoryConnectionAclService.hasAccess( databaseMeta.getObjectId(),
-                RepositoryFilePermission.WRITE ) ) {
-          repo.save( databaseMeta, versionComment, null );
-        } else {
-          log.logError( BaseMessages.getString( PKG, "PurRepository.ERROR_0004_DATABASE_UPDATE_ACCESS_DENIED",
-              databaseMeta.getName() ) );
-        }
-      }
-    }
-
-    // Store the slave server
-    //
-    for ( SlaveServer slaveServer : jobMeta.getSlaveServers() ) {
-      if ( slaveServer.hasChanged() || slaveServer.getObjectId() == null ) {
-        repo.save( slaveServer, versionComment, null );
-      }
-    }
+    // NO-OP
   }
 
   public RepositoryElementInterface dataNodeToElement( final DataNode rootNode ) throws KettleException {
@@ -229,32 +195,6 @@ public class JobDelegate extends AbstractDelegate implements ISharedObjectsTrans
     throws KettleException {
 
     JobMeta jobMeta = (JobMeta) element;
-
-    Set<String> privateDatabases = null;
-    // read the private databases
-    DataNode privateDbsNode = rootNode.getNode( NODE_JOB_PRIVATE_DATABASES );
-    // if we have node than we use one of two new formats. The older format that took
-    // too long to save, uses a separate node for each database name, the new format
-    // puts all the database names in the PROP_JOB_PRIVATE_DATABASE_NAMES property.
-    // BACKLOG-6635
-    if ( privateDbsNode != null ) {
-      privateDatabases = new HashSet<>();
-      if ( privateDbsNode.hasProperty( PROP_JOB_PRIVATE_DATABASE_NAMES ) ) {
-        for ( String privateDatabaseName : getString( privateDbsNode, PROP_JOB_PRIVATE_DATABASE_NAMES ).split(
-            JOB_PRIVATE_DATABASE_DELIMITER ) ) {
-          if ( !privateDatabaseName.isEmpty() ) {
-            privateDatabases.add( privateDatabaseName );
-          }
-        }
-      } else {
-        for ( DataNode privateDatabase : privateDbsNode.getNodes() ) {
-          privateDatabases.add( privateDatabase.getName() );
-        }
-      }
-    }
-    jobMeta.setPrivateDatabases( privateDatabases );
-
-    jobMeta.setSharedObjectsFile( getString( rootNode, PROP_SHARED_FILE ) );
 
     // Keep a unique list of job entries to facilitate in the loading.
     //
@@ -290,10 +230,9 @@ public class JobDelegate extends AbstractDelegate implements ISharedObjectsTrans
         AttributesMapUtil.loadAttributesMap( copyNode, (JobEntryBase) jobEntry );
       }
 
-      // And read the job entry copy group attributes map
-      AttributesMapUtil.loadAttributesMap( copyNode, copy, PROP_ATTRIBUTES_JOB_ENTRY_COPY );
+      loadAttributesMap( copyNode, copy );
 
-      jobMeta.getJobCopies().add( copy );
+      jobMeta.addJobEntry( copy );
     }
 
     if ( jobMeta.getJobCopies().size() != nrCopies ) {
@@ -371,6 +310,17 @@ public class JobDelegate extends AbstractDelegate implements ISharedObjectsTrans
     }
   }
 
+  @VisibleForTesting
+  static void loadAttributesMap( DataNode copyNode, JobEntryCopy copy ) throws KettleException {
+    // And read the job entry copy group attributes map
+    DataNode groupsNode = copyNode.getNode( PROP_ATTRIBUTES_JOB_ENTRY_COPY );
+    if ( groupsNode != null ) {
+      AttributesMapUtil.loadAttributesMap( copyNode, copy, PROP_ATTRIBUTES_JOB_ENTRY_COPY );
+    } else {
+      AttributesMapUtil.loadAttributesMap( copyNode, copy );
+    }
+  }
+
   protected void loadJobMetaDetails( DataNode rootNode, JobMeta jobMeta ) throws KettleException {
     try {
       jobMeta.setExtendedDescription( getString( rootNode, PROP_EXTENDED_DESCRIPTION ) );
@@ -440,7 +390,7 @@ public class JobDelegate extends AbstractDelegate implements ISharedObjectsTrans
       jobMetaInterface.setName( name );
       jobMetaInterface.setDescription( getString( copyNode, PROP_DESCRIPTION ) );
       jobMetaInterface.setObjectId( new StringObjectId( copyNode.getId().toString() ) );
-      RepositoryProxy proxy = new RepositoryProxy( copyNode.getNode( NODE_CUSTOM ) );
+      RepositoryProxy proxy = new RepositoryProxy( copyNode.getNode( NODE_CUSTOM ), this.repo );
 
       jobMetaInterface.setMetaStore( jobMeta.getMetaStore() ); // make sure metastore is passed
       if ( !isMissing ) {
@@ -466,13 +416,6 @@ public class JobDelegate extends AbstractDelegate implements ISharedObjectsTrans
     JobMeta jobMeta = (JobMeta) element;
 
     DataNode rootNode = new DataNode( NODE_JOB );
-
-    if ( jobMeta.getPrivateDatabases() != null ) {
-      // save all private database names http://jira.pentaho.com/browse/PPP-3413
-      String privateDatabaseNames = StringUtils.join( jobMeta.getPrivateDatabases(), JOB_PRIVATE_DATABASE_DELIMITER );
-      DataNode privateDatabaseNode = rootNode.addNode( NODE_JOB_PRIVATE_DATABASES );
-      privateDatabaseNode.setProperty( PROP_JOB_PRIVATE_DATABASE_NAMES, privateDatabaseNames );
-    }
 
     // Save the notes
     //
@@ -525,8 +468,8 @@ public class JobDelegate extends AbstractDelegate implements ISharedObjectsTrans
       //
       copyNode.setProperty( PROP_JOBENTRY_TYPE, entry.getPluginId() );
       DataNode customNode = new DataNode( NODE_CUSTOM );
-      RepositoryProxy proxy = new RepositoryProxy( customNode );
-      entry.saveRep( proxy, proxy.getMetaStore(), null );
+      RepositoryProxy proxy = new RepositoryProxy( customNode, this.repo );
+      entry.saveRep( proxy, MetaStoreConst.getDefaultMetastore(), null );
       compatibleEntrySaveRep( entry, proxy, null );
 
       copyNode.addNode( customNode );
@@ -596,7 +539,6 @@ public class JobDelegate extends AbstractDelegate implements ISharedObjectsTrans
     rootNode.setProperty( PROP_USE_BATCH_ID, jobMeta.getJobLogTable().isBatchIdUsed() );
     rootNode.setProperty( PROP_PASS_BATCH_ID, jobMeta.isBatchIdPassed() );
     rootNode.setProperty( PROP_USE_LOGFIELD, jobMeta.getJobLogTable().isLogFieldUsed() );
-    rootNode.setProperty( PROP_SHARED_FILE, jobMeta.getSharedObjectsFile() );
 
     rootNode.setProperty( PROP_LOG_SIZE_LIMIT, jobMeta.getJobLogTable().getLogSizeLimit() );
 
@@ -620,12 +562,13 @@ public class JobDelegate extends AbstractDelegate implements ISharedObjectsTrans
    * @param overWriteShared
    *          if an object with the same name exists, overwrite
    */
-  protected void readDatabases( JobMeta jobMeta, boolean overWriteShared, List<DatabaseMeta> databaseMetas ) {
+  protected void readDatabases( JobMeta jobMeta, boolean overWriteShared, List<DatabaseMeta> databaseMetas )
+    throws KettleException{
     for ( DatabaseMeta databaseMeta : databaseMetas ) {
       if ( overWriteShared || jobMeta.findDatabase( databaseMeta.getName() ) == null ) {
         if ( databaseMeta.getName() != null ) {
           databaseMeta.shareVariablesWith( jobMeta );
-          jobMeta.addOrReplaceDatabase( databaseMeta );
+          jobMeta.getDatabaseManagementInterface().add( databaseMeta );
           if ( !overWriteShared ) {
             databaseMeta.setChanged( false );
           }

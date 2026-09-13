@@ -1,38 +1,36 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 package org.pentaho.di.base;
 
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
+
 import org.pentaho.di.cluster.SlaveServer;
+import org.pentaho.di.core.bowl.BaseBowl;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.NotePadMeta;
 import org.pentaho.di.core.Props;
 import org.pentaho.di.core.changed.ChangedFlagInterface;
 import org.pentaho.di.core.changed.PDIObserver;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
-import org.pentaho.di.core.exception.KettlePluginException;
 import org.pentaho.di.core.gui.OverwritePrompter;
 import org.pentaho.di.core.gui.Point;
 import org.pentaho.di.core.listeners.ContentChangedListener;
@@ -56,49 +54,49 @@ import org.pentaho.di.junit.rules.RestorePDIEngineEnvironment;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.ObjectRevision;
 import org.pentaho.di.repository.Repository;
+import org.pentaho.di.repository.RepositoryBowl;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
 import org.pentaho.di.repository.RepositoryObjectType;
-import org.pentaho.di.shared.SharedObjects;
+import org.pentaho.di.shared.MemorySharedObjectsIO;
+import org.pentaho.di.shared.SharedObjectsIO;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.steps.named.cluster.NamedClusterEmbedManager;
-import org.pentaho.metastore.api.IMetaStore;
-import org.pentaho.metastore.api.IMetaStoreElement;
-import org.pentaho.metastore.api.IMetaStoreElementType;
-import org.pentaho.metastore.util.PentahoDefaults;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyObject;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+@RunWith( MockitoJUnitRunner.class )
 public class AbstractMetaTest {
-  AbstractMeta meta;
-  ObjectId objectId;
-  Repository repo;
+  private AbstractMeta meta;
+  private ObjectId objectId;
+  private Repository repo;
+
+  @Mock private MetastoreLocatorOsgi mockMetastoreLocatorOsgi;
 
   @ClassRule public static RestorePDIEngineEnvironment env = new RestorePDIEngineEnvironment();
 
@@ -106,6 +104,7 @@ public class AbstractMetaTest {
   public static void setUpBeforeClass() throws Exception {
     PluginRegistry.addPluginType( DatabasePluginType.getInstance() );
     PluginRegistry.init();
+    DefaultBowl.getInstance().setSharedObjectsIO( new MemorySharedObjectsIO() );
   }
 
   @Before
@@ -113,6 +112,7 @@ public class AbstractMetaTest {
     meta = new AbstractMetaStub();
     objectId = mock( ObjectId.class );
     repo = mock( Repository.class );
+    when( repo.getBowl() ).thenReturn( new RepositoryBowl( repo ) );
   }
 
   @Test
@@ -121,42 +121,42 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testGetSetObjectId() throws Exception {
+  public void testGetSetObjectId() {
     assertNull( meta.getObjectId() );
     meta.setObjectId( objectId );
     assertEquals( objectId, meta.getObjectId() );
   }
 
   @Test
-  public void testGetSetContainerObjectId() throws Exception {
+  public void testGetSetContainerObjectId() {
     assertNull( meta.getContainerObjectId() );
     meta.setCarteObjectId( "myObjectId" );
     assertEquals( "myObjectId", meta.getContainerObjectId() );
   }
 
   @Test
-  public void testGetSetName() throws Exception {
+  public void testGetSetName() {
     assertNull( meta.getName() );
     meta.setName( "myName" );
     assertEquals( "myName", meta.getName() );
   }
 
   @Test
-  public void testGetSetDescription() throws Exception {
+  public void testGetSetDescription() {
     assertNull( meta.getDescription() );
     meta.setDescription( "I am a meta" );
     assertEquals( "I am a meta", meta.getDescription() );
   }
 
   @Test
-  public void testGetSetExtendedDescription() throws Exception {
+  public void testGetSetExtendedDescription() {
     assertNull( meta.getExtendedDescription() );
     meta.setExtendedDescription( "I am a meta" );
     assertEquals( "I am a meta", meta.getExtendedDescription() );
   }
 
   @Test
-  public void testNameFromFilename() throws Exception {
+  public void testNameFromFilename() {
     assertNull( meta.getName() );
     assertNull( meta.getFilename() );
     meta.nameFromFilename();
@@ -167,14 +167,14 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testGetSetFilename() throws Exception {
+  public void testGetSetFilename() {
     assertNull( meta.getFilename() );
     meta.setFilename( "myfile" );
     assertEquals( "myfile", meta.getFilename() );
   }
 
   @Test
-  public void testGetSetRepositoryDirectory() throws Exception {
+  public void testGetSetRepositoryDirectory() {
     assertNull( meta.getRepositoryDirectory() );
     RepositoryDirectoryInterface dir = mock( RepositoryDirectoryInterface.class );
     meta.setRepositoryDirectory( dir );
@@ -182,44 +182,70 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testGetSetRepository() throws Exception {
+  public void testGetSetRepository() {
     assertNull( meta.getRepository() );
     meta.setRepository( repo );
     assertEquals( repo, meta.getRepository() );
   }
 
   @Test
+  public void testDatabaseManagementInterface() throws Exception {
+    assertEquals( 0, meta.nrDatabases() );
+    assertNotNull( meta.getDatabases() );
+    assertEquals( 0, meta.getDatabases().size() );
+    assertFalse( meta.haveConnectionsChanged() );
+    meta.clear();
+    assertTrue( meta.getDatabases().isEmpty() );
+    assertTrue( meta.getDatabaseManagementInterface().getAll().isEmpty() );
+    assertEquals( 0, meta.nrDatabases() );
+    assertFalse( meta.haveConnectionsChanged() );
+
+    DatabaseMeta db1 = new DatabaseMeta();
+    db1.setName( "db1" );
+    db1.setDisplayName( "db1" );
+    meta.getDatabaseManagementInterface().add( db1 );
+
+    assertEquals( 1, meta.getDatabases().size() );
+    assertEquals( 1, meta.getDatabaseManagementInterface().getAll().size() );
+    assertEquals( 1, meta.nrDatabases() );
+    assertTrue( meta.haveConnectionsChanged() );
+    assertEquals( db1, meta.getDatabaseManagementInterface().get( "db1" ) );
+    assertEquals( db1, meta.findDatabase( "db1" ) );
+  }
+
+  @Test
   public void testGetSetDatabase() throws Exception {
     assertEquals( 0, meta.nrDatabases() );
-    assertNull( meta.getDatabases() );
+    assertNotNull( meta.getDatabases() );
+    assertEquals( 0, meta.getDatabases().size() );
     assertFalse( meta.haveConnectionsChanged() );
     meta.clear();
     assertTrue( meta.getDatabases().isEmpty() );
     assertEquals( 0, meta.nrDatabases() );
     assertFalse( meta.haveConnectionsChanged() );
-    DatabaseMeta db1 = mock( DatabaseMeta.class );
-    when( db1.getName() ).thenReturn( "db1" );
-    when( db1.getDisplayName() ).thenReturn( "db1" );
-    meta.addDatabase( db1 );
+    DatabaseMeta db1 = new DatabaseMeta();
+    db1.setName( "db1" );
+    db1.setDisplayName( "db1" );
+    meta.getDatabaseManagementInterface().add( db1 );
     assertEquals( 1, meta.nrDatabases() );
     assertFalse( meta.getDatabases().isEmpty() );
     assertTrue( meta.haveConnectionsChanged() );
-    DatabaseMeta db2 = mock( DatabaseMeta.class );
-    when( db2.getName() ).thenReturn( "db2" );
-    when( db2.getDisplayName() ).thenReturn( "db2" );
-    meta.addDatabase( db2 );
+    DatabaseMeta db2 = new DatabaseMeta();
+    db2.setName( "db2" );
+    db2.setDisplayName( "db2" );
+    meta.getDatabaseManagementInterface().add( db2 );
     assertEquals( 2, meta.nrDatabases() );
     // Test replace
-    meta.addDatabase( db1, true );
+    meta.getDatabaseManagementInterface().add( db1 );
     assertEquals( 2, meta.nrDatabases() );
-    meta.addOrReplaceDatabase( db1 );
+    meta.getDatabaseManagementInterface().add( db1 );
     assertEquals( 2, meta.nrDatabases() );
     // Test duplicate
-    meta.addDatabase( db2, false );
+    meta.getDatabaseManagementInterface().add( db2 );
     assertEquals( 2, meta.nrDatabases() );
-    DatabaseMeta db3 = mock( DatabaseMeta.class );
-    when( db3.getName() ).thenReturn( "db3" );
-    meta.addDatabase( db3, false );
+    DatabaseMeta db3 = new DatabaseMeta();
+    db3.setName( "db3" );
+    meta.getDatabaseManagementInterface().add( db3 );
     assertEquals( 3, meta.nrDatabases() );
     assertEquals( db1, meta.getDatabase( 0 ) );
     assertEquals( 0, meta.indexOfDatabase( db1 ) );
@@ -227,53 +253,40 @@ public class AbstractMetaTest {
     assertEquals( 1, meta.indexOfDatabase( db2 ) );
     assertEquals( db3, meta.getDatabase( 2 ) );
     assertEquals( 2, meta.indexOfDatabase( db3 ) );
-    DatabaseMeta db4 = mock( DatabaseMeta.class );
-    when( db4.getName() ).thenReturn( "db4" );
-    meta.addDatabase( 3, db4 );
+    DatabaseMeta db4 = new DatabaseMeta();
+    db4.setName( "db4" );
+    meta.getDatabaseManagementInterface().add( db4 );
     assertEquals( 4, meta.nrDatabases() );
     assertEquals( db4, meta.getDatabase( 3 ) );
     assertEquals( 3, meta.indexOfDatabase( db4 ) );
-    meta.removeDatabase( 3 );
+    meta.getDatabaseManagementInterface().remove( db4 );
     assertEquals( 3, meta.nrDatabases() );
     assertTrue( meta.haveConnectionsChanged() );
     meta.clearChangedDatabases();
     assertFalse( meta.haveConnectionsChanged() );
-
-    List<DatabaseMeta> list = Arrays.asList( db2, db1 );
-    meta.setDatabases( list );
-    assertEquals( 2, meta.nrDatabases() );
-    assertEquals( "db1", meta.getDatabaseNames()[0] );
-    assertEquals( 0, meta.indexOfDatabase( db1 ) );
-    meta.removeDatabase( -1 );
-    assertEquals( 2, meta.nrDatabases() );
-    meta.removeDatabase( 2 );
-    assertEquals( 2, meta.nrDatabases() );
-    assertEquals( db1, meta.findDatabase( "db1" ) );
-    assertNull( meta.findDatabase( "" ) );
-  }
-
-  @Test( expected = KettlePluginException.class )
-  public void testGetSetImportMetaStore() throws Exception {
-    assertNull( meta.getMetaStore() );
-    meta.importFromMetaStore();
-    IMetaStore metastore = mock( IMetaStore.class );
-    meta.setMetaStore( metastore );
-    assertEquals( metastore, meta.getMetaStore() );
-    meta.importFromMetaStore();
-    IMetaStoreElementType elementType = mock( IMetaStoreElementType.class );
-    when( metastore.getElementTypeByName(
-      PentahoDefaults.NAMESPACE, PentahoDefaults.DATABASE_CONNECTION_ELEMENT_TYPE_NAME ) ).thenReturn( elementType );
-    when( metastore.getElements( PentahoDefaults.NAMESPACE, elementType ) )
-      .thenReturn( new ArrayList<IMetaStoreElement>() );
-    meta.importFromMetaStore();
-    IMetaStoreElement element = mock( IMetaStoreElement.class );
-    when( metastore.getElements( PentahoDefaults.NAMESPACE, elementType ) )
-      .thenReturn( Arrays.asList( element ) );
-    meta.importFromMetaStore();
   }
 
   @Test
-  public void testAddNameChangedListener() throws Exception {
+  public void testSetBowlDoesNotClearCache() throws Exception {
+    MemorySharedObjectsIO sharedObjectsIO = new MemorySharedObjectsIO();
+
+    Bowl bowl = mock( BaseBowl.class );
+    when( bowl.getSharedObjectsIO() ).thenReturn( sharedObjectsIO );
+
+    AbstractMetaStub meta = new AbstractMetaStub();
+    meta.setBowl( bowl );
+    List<DatabaseMeta> databases = meta.getDatabases();
+    assertEquals( 0, databases.size() );
+
+    AbstractMetaStub meta2 = new AbstractMetaStub();
+    meta2.setBowl( bowl );
+    List<DatabaseMeta> databases2 = meta2.getDatabases();
+    assertEquals( 0, databases2.size() );
+    verify( bowl, never() ).clearCache();
+  }
+
+  @Test
+  public void testAddNameChangedListener() {
     meta.fireNameChangedListeners( "a", "a" );
     meta.fireNameChangedListeners( "a", "b" );
     meta.addNameChangedListener( null );
@@ -289,7 +302,7 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testAddFilenameChangedListener() throws Exception {
+  public void testAddFilenameChangedListener() {
     meta.fireFilenameChangedListeners( "a", "a" );
     meta.fireFilenameChangedListeners( "a", "b" );
     meta.addFilenameChangedListener( null );
@@ -305,26 +318,26 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testAddRemoveFireContentChangedListener() throws Exception {
+  public void testAddRemoveFireContentChangedListener() {
     assertTrue( meta.getContentChangedListeners().isEmpty() );
     ContentChangedListener listener = mock( ContentChangedListener.class );
     meta.addContentChangedListener( listener );
     assertFalse( meta.getContentChangedListeners().isEmpty() );
     meta.fireContentChangedListeners();
-    verify( listener, times( 1 ) ).contentChanged( anyObject() );
-    verify( listener, never() ).contentSafe( anyObject() );
+    verify( listener, times( 1 ) ).contentChanged( any() );
+    verify( listener, never() ).contentSafe( any() );
     meta.fireContentChangedListeners( true );
-    verify( listener, times( 2 ) ).contentChanged( anyObject() );
-    verify( listener, never() ).contentSafe( anyObject() );
+    verify( listener, times( 2 ) ).contentChanged( any() );
+    verify( listener, never() ).contentSafe( any() );
     meta.fireContentChangedListeners( false );
-    verify( listener, times( 2 ) ).contentChanged( anyObject() );
-    verify( listener, times( 1 ) ).contentSafe( anyObject() );
+    verify( listener, times( 2 ) ).contentChanged( any() );
+    verify( listener, times( 1 ) ).contentSafe( any() );
     meta.removeContentChangedListener( listener );
     assertTrue( meta.getContentChangedListeners().isEmpty() );
   }
 
   @Test
-  public void testAddCurrentDirectoryChangedListener() throws Exception {
+  public void testAddCurrentDirectoryChangedListener() {
     meta.fireNameChangedListeners( "a", "a" );
     meta.fireNameChangedListeners( "a", "b" );
     meta.addCurrentDirectoryChangedListener( null );
@@ -343,23 +356,24 @@ public class AbstractMetaTest {
   @Test
   public void testAddOrReplaceSlaveServer() throws Exception {
     // meta.addOrReplaceSlaveServer() right now will fail with an NPE
-    assertNull( meta.getSlaveServers() );
+    assertEquals( 0, meta.getSlaveServers().size() );
     List<SlaveServer> slaveServers = new ArrayList<>();
     meta.setSlaveServers( slaveServers );
     assertNotNull( meta.getSlaveServers() );
-    SlaveServer slaveServer = mock( SlaveServer.class );
+    SlaveServer slaveServer = new SlaveServer();
+    slaveServer.setName("ss1");
     meta.addOrReplaceSlaveServer( slaveServer );
     assertFalse( meta.getSlaveServers().isEmpty() );
-    meta.addOrReplaceSlaveServer( slaveServer );
     assertEquals( 1, meta.getSlaveServerNames().length );
     assertNull( meta.findSlaveServer( null ) );
     assertNull( meta.findSlaveServer( "" ) );
-    when( slaveServer.getName() ).thenReturn( "ss1" );
+
+    assertEquals( slaveServer, meta.getSlaveServerManagementInterface().get( "ss1" ) );
     assertEquals( slaveServer, meta.findSlaveServer( "ss1" ) );
   }
 
   @Test
-  public void testAddRemoveViewUndo() throws Exception {
+  public void testAddRemoveViewUndo() {
     // addUndo() right now will fail with an NPE
     assertEquals( 0, meta.getUndoSize() );
     meta.clearUndo();
@@ -405,7 +419,7 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testGetSetAttributes() throws Exception {
+  public void testGetSetAttributes() {
     assertNull( meta.getAttributesMap() );
     Map<String, Map<String, String>> attributesMap = new HashMap<>();
     meta.setAttributesMap( attributesMap );
@@ -426,7 +440,7 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testNotes() throws Exception {
+  public void testNotes() {
     assertNull( meta.getNotes() );
     // most note methods will NPE at this point, so call clear() to create an empty note list
     meta.clear();
@@ -480,7 +494,7 @@ public class AbstractMetaTest {
 
 
   @Test
-  public void testCopyVariablesFrom() throws Exception {
+  public void testCopyVariablesFrom() {
     assertNull( meta.getVariable( "var1" ) );
     VariableSpace vars = mock( VariableSpace.class );
     when( vars.getVariable( "var1" ) ).thenReturn( "x" );
@@ -490,7 +504,7 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testEnvironmentSubstitute() throws Exception {
+  public void testEnvironmentSubstitute() {
     // This is just a delegate method, verify it's called
     VariableSpace vars = mock( VariableSpace.class );
     // This method is reused by the stub to set the mock as the variables object
@@ -517,7 +531,7 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testGetSetParentVariableSpace() throws Exception {
+  public void testGetSetParentVariableSpace() {
     assertNull( meta.getParentVariableSpace() );
     VariableSpace variableSpace = mock( VariableSpace.class );
     meta.setParentVariableSpace( variableSpace );
@@ -525,7 +539,7 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testGetSetVariable() throws Exception {
+  public void testGetSetVariable() {
     assertNull( meta.getVariable( "var1" ) );
     assertEquals( "x", meta.getVariable( "var1", "x" ) );
     meta.setVariable( "var1", "y" );
@@ -566,38 +580,23 @@ public class AbstractMetaTest {
     NamedParams newParams = new NamedParamsDefault();
     newParams.addParameterDefinition( "var3", "default", "description" );
     newParams.setParameterValue( "var3", "a" );
+    newParams.addParameterDefinition( "emptyVar", "", "emptyDesc" );
+    newParams.setParameterValue( "emptyVar", "" );
     meta.copyParametersFrom( newParams );
     meta.activateParameters();
     assertEquals( "default", meta.getParameterDefault( "var3" ) );
+    assertEquals( "", meta.getParameterDefault( "emptyVar" ) );
   }
 
   @Test
-  public void testGetSetLogLevel() throws Exception {
+  public void testGetSetLogLevel() {
     assertEquals( LogLevel.BASIC, meta.getLogLevel() );
     meta.setLogLevel( LogLevel.DEBUG );
     assertEquals( LogLevel.DEBUG, meta.getLogLevel() );
   }
 
   @Test
-  public void testGetSetSharedObjectsFile() throws Exception {
-    assertNull( meta.getSharedObjectsFile() );
-    meta.setSharedObjectsFile( "mySharedObjects" );
-    assertEquals( "mySharedObjects", meta.getSharedObjectsFile() );
-  }
-
-  @Test
-  public void testGetSetSharedObjects() throws Exception {
-    SharedObjects sharedObjects = mock( SharedObjects.class );
-    meta.setSharedObjects( sharedObjects );
-    assertEquals( sharedObjects, meta.getSharedObjects() );
-    meta.setSharedObjects( null );
-    AbstractMeta spyMeta = spy( meta );
-    doThrow( KettleException.class ).when( spyMeta ).environmentSubstitute( anyString() );
-    assertNull( spyMeta.getSharedObjects() );
-  }
-
-  @Test
-  public void testGetSetCreatedDate() throws Exception {
+  public void testGetSetCreatedDate() {
     assertNull( meta.getCreatedDate() );
     Date now = Calendar.getInstance().getTime();
     meta.setCreatedDate( now );
@@ -605,14 +604,14 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testGetSetCreatedUser() throws Exception {
+  public void testGetSetCreatedUser() {
     assertNull( meta.getCreatedUser() );
     meta.setCreatedUser( "joe" );
     assertEquals( "joe", meta.getCreatedUser() );
   }
 
   @Test
-  public void testGetSetModifiedDate() throws Exception {
+  public void testGetSetModifiedDate() {
     assertNull( meta.getModifiedDate() );
     Date now = Calendar.getInstance().getTime();
     meta.setModifiedDate( now );
@@ -620,14 +619,14 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testGetSetModifiedUser() throws Exception {
+  public void testGetSetModifiedUser() {
     assertNull( meta.getModifiedUser() );
     meta.setModifiedUser( "joe" );
     assertEquals( "joe", meta.getModifiedUser() );
   }
 
   @Test
-  public void testAddDeleteModifyObserver() throws Exception {
+  public void testAddDeleteModifyObserver() {
     PDIObserver observer = mock( PDIObserver.class );
     meta.addObserver( observer );
     Object event = new Object();
@@ -636,16 +635,16 @@ public class AbstractMetaTest {
     verify( observer, never() ).update( meta, event );
     meta.setChanged( true );
     meta.notifyObservers( event );
-    verify( observer, times( 1 ) ).update( any( ChangedFlagInterface.class ), anyObject() );
+    verify( observer, times( 1 ) ).update( any( ChangedFlagInterface.class ), any() );
   }
 
   @Test
-  public void testGetRegistrationDate() throws Exception {
+  public void testGetRegistrationDate() {
     assertNull( meta.getRegistrationDate() );
   }
 
   @Test
-  public void testGetObjectNameCopyRevision() throws Exception {
+  public void testGetObjectNameCopyRevision() {
     assertNull( meta.getObjectName() );
     meta.setName( "x" );
     assertEquals( "x", meta.getObjectName() );
@@ -657,20 +656,12 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testHasMissingPlugins() throws Exception {
+  public void testHasMissingPlugins() {
     assertFalse( meta.hasMissingPlugins() );
   }
 
   @Test
-  public void testGetSetPrivateDatabases() throws Exception {
-    assertNull( meta.getPrivateDatabases() );
-    Set<String> dbs = new HashSet<>();
-    meta.setPrivateDatabases( dbs );
-    assertEquals( dbs, meta.getPrivateDatabases() );
-  }
-
-  @Test
-  public void testGetSetChannelLogTable() throws Exception {
+  public void testGetSetChannelLogTable() {
     assertNull( meta.getChannelLogTable() );
     ChannelLogTable table = mock( ChannelLogTable.class );
     meta.setChannelLogTable( table );
@@ -703,7 +694,6 @@ public class AbstractMetaTest {
     assertNotNull( meta.listVariables() );
     VariableSpace newVars = mock( VariableSpace.class );
     when( newVars.getVariable( "var2" ) ).thenReturn( "y" );
-    when( newVars.listVariables() ).thenReturn( new String[]{ "var2" } );
     meta.shareVariablesWith( newVars );
     assertEquals( "y", meta.getVariable( "var2" ) );
     Map<String, String> props = new HashMap<>();
@@ -744,7 +734,7 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testGetSetNamedClusterServiceOsgi() throws Exception {
+  public void testGetSetNamedClusterServiceOsgi() {
     assertNull( meta.getNamedClusterServiceOsgi() );
     NamedClusterServiceOsgi mockNamedClusterOsgi = mock( NamedClusterServiceOsgi.class );
     meta.setNamedClusterServiceOsgi( mockNamedClusterOsgi );
@@ -752,7 +742,7 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testGetNamedClusterEmbedManager() throws Exception {
+  public void testGetNamedClusterEmbedManager() {
     assertNull( meta.getNamedClusterEmbedManager() );
     NamedClusterEmbedManager mockNamedClusterEmbedManager = mock( NamedClusterEmbedManager.class );
     meta.namedClusterEmbedManager = mockNamedClusterEmbedManager;
@@ -760,40 +750,40 @@ public class AbstractMetaTest {
   }
 
   @Test
-  public void testGetSetEmbeddedMetastoreProviderKey() throws Exception {
-    assertNull( meta.getEmbeddedMetastoreProviderKey() );
+  public void testEmbeddedMetastoreProviderKeyIsMemoized() {
     String keyValue = "keyValue";
-    meta.setEmbeddedMetastoreProviderKey( keyValue );
+    meta.setMetastoreLocatorOsgi( mockMetastoreLocatorOsgi );
+    when( mockMetastoreLocatorOsgi.setEmbeddedMetastore( meta.getEmbeddedMetaStore() ) ).thenReturn( keyValue );
+
     assertEquals( keyValue, meta.getEmbeddedMetastoreProviderKey() );
+    assertEquals( keyValue, meta.getEmbeddedMetastoreProviderKey() );
+    verify( mockMetastoreLocatorOsgi, times( 1 ) )
+      .setEmbeddedMetastore( meta.getEmbeddedMetaStore() );
   }
 
+
   @Test
-  public void testGetSetMetastoreLocatorOsgi() throws Exception {
+  public void testGetSetMetastoreLocatorOsgi() {
     assertNull( meta.getMetastoreLocatorOsgi() );
-    MetastoreLocatorOsgi mockMetastoreLocatorOsgi = mock( MetastoreLocatorOsgi.class );
     meta.setMetastoreLocatorOsgi( mockMetastoreLocatorOsgi );
     assertEquals( mockMetastoreLocatorOsgi, meta.getMetastoreLocatorOsgi() );
   }
 
   @Test
-  public void testMultithreadHammeringOfListener() throws Exception {
+  public void testMultithreadHammeringOfListener() throws InterruptedException {
 
     CountDownLatch latch = new CountDownLatch( 3 );
-    AbstractMetaListenerThread th1 = new AbstractMetaListenerThread( meta, 2000, latch); // do 2k random add/delete/fire
+    AbstractMetaListenerThread th1 = new AbstractMetaListenerThread( meta, 2000, latch ); // do 2k random add/delete/fire
     AbstractMetaListenerThread th2 = new AbstractMetaListenerThread( meta, 2000, latch ); // do 2k random add/delete/fire
     AbstractMetaListenerThread th3 = new AbstractMetaListenerThread( meta, 2000, latch ); // do 2k random add/delete/fire
 
     Thread t1 = new Thread( th1 );
     Thread t2 = new Thread( th2 );
     Thread t3 = new Thread( th3 );
-    try {
-      t1.start();
-      t2.start();
-      t3.start();
-      latch.await(); // Will hang out waiting for each thread to complete...
-    } catch ( InterruptedException badTest ) {
-      throw badTest;
-    }
+    t1.start();
+    t2.start();
+    t3.start();
+    assertTrue( "Test took longer than 5 minutes, deadlock?", latch.await( 300, TimeUnit.SECONDS ) ); // Will hang out waiting for each thread to complete...
     assertEquals( "No exceptions encountered", th1.message );
     assertEquals( "No exceptions encountered", th2.message );
     assertEquals( "No exceptions encountered", th3.message );
@@ -819,6 +809,25 @@ public class AbstractMetaTest {
     @Override
     protected void setInternalNameKettleVariable( VariableSpace var ) {
 
+    }
+
+    @Override
+    public List<String> getUsedVariables() {
+      return Collections.emptyList();
+    }
+
+    @Override
+    public void allDatabasesUpdated() {
+    }
+
+    @Override
+    public void databasesUpdated( String name, Optional<DatabaseMeta> database ) {
+
+    }
+
+    @Override
+    public Set<String> getUsedDatabaseConnectionNames() {
+      return Collections.emptySet();
     }
 
     @Override
@@ -886,13 +895,13 @@ public class AbstractMetaTest {
 
 
 
-  private class AbstractMetaListenerThread implements Runnable {
+  private static class AbstractMetaListenerThread implements Runnable {
     AbstractMeta metaToWork;
     int times;
     CountDownLatch whenDone;
     String message;
 
-    AbstractMetaListenerThread ( AbstractMeta aMeta, int times, CountDownLatch latch ) {
+    AbstractMetaListenerThread( AbstractMeta aMeta, int times, CountDownLatch latch ) {
       this.metaToWork = aMeta;
       this.times = times;
       this.whenDone = latch;
@@ -901,7 +910,7 @@ public class AbstractMetaTest {
     @Override public void run() {
       for ( int i = 0; i < times; i++ ) {
         int randomNum = ThreadLocalRandom.current().nextInt( 0, 3 );
-        switch( randomNum ) {
+        switch ( randomNum ) {
           case 0: {
             try {
               metaToWork.addFilenameChangedListener( mock( FilenameChangedListener.class ) );

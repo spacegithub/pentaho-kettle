@@ -1,38 +1,31 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.csvinput;
 
+import java.io.BufferedInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
-import java.io.BufferedInputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.io.ByteOrderMark;
 import org.apache.commons.io.input.BOMInputStream;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.provider.local.LocalFile;
 import org.pentaho.di.core.Const;
@@ -48,6 +41,7 @@ import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.i18n.BaseMessages;
+import org.pentaho.di.repository.Repository;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.BaseStep;
@@ -86,7 +80,8 @@ public class CsvInput extends BaseStep implements StepInterface {
       first = false;
 
       data.outputRowMeta = new RowMeta();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
       if ( data.filenames == null ) {
         // We're expecting the list of filenames from the previous step(s)...
@@ -197,7 +192,8 @@ public class CsvInput extends BaseStep implements StepInterface {
       // We'll use the same algorithm...
       //
       for ( String filename : data.filenames ) {
-        long size = KettleVFS.getFileObject( filename, getTransMeta() ).getContent().getSize();
+        long size = KettleVFS.getInstance( getTransMeta().getBowl() )
+          .getFileObject( filename, getTransMeta() ).getContent().getSize();
         data.fileSizes.add( size );
         data.totalFileSize += size;
       }
@@ -262,7 +258,7 @@ public class CsvInput extends BaseStep implements StepInterface {
   }
 
   private void getFilenamesFromPreviousSteps() throws KettleException {
-    List<String> filenames = new ArrayList<String>();
+    List<String> filenames = new ArrayList<>();
     boolean firstRow = true;
     int index = -1;
     Object[] row = getRow();
@@ -330,7 +326,8 @@ public class CsvInput extends BaseStep implements StepInterface {
       // Open the next one...
       //
       data.fieldsMapping = createFieldMapping( data.filenames[data.filenr], meta );
-      FileObject fileObject = KettleVFS.getFileObject( data.filenames[ data.filenr ], getTransMeta() );
+      FileObject fileObject = KettleVFS.getInstance( getTransMeta().getBowl() )
+        .getFileObject( data.filenames[ data.filenr ], getTransMeta() );
       if ( !( fileObject instanceof LocalFile ) ) {
         // We can only use NIO on local files at the moment, so that's what we limit ourselves to.
         //
@@ -341,11 +338,13 @@ public class CsvInput extends BaseStep implements StepInterface {
         data.binaryFilename = data.filenames[ data.filenr ].getBytes();
       }
 
-      BOMDetector bom = new BOMDetector( new BufferedInputStream( new FileInputStream( KettleVFS.getFilename( fileObject ) ) ) );
+      String vfsFilename = KettleVFS.getFilename( fileObject );
 
-      data.fis = new FileInputStream( KettleVFS.getFilename( fileObject ) );
-      if ( bom.bomExist() ) {
-        data.fis.skip( bom.getBomSize() );
+      int bomSize = getBOMSize( vfsFilename );
+
+      data.fis = new FileInputStream( vfsFilename );
+      if ( 0 != bomSize ) {
+        data.fis.skip( bomSize );
       }
 
       data.fc = data.fis.getChannel();
@@ -420,6 +419,20 @@ public class CsvInput extends BaseStep implements StepInterface {
     }
   }
 
+  protected int getBOMSize( String vfsFilename ) throws Exception {
+    int bomSize = 0;
+    try ( FileInputStream fis = new FileInputStream( vfsFilename );
+          BufferedInputStream bis = new BufferedInputStream( fis ) ) {
+      BOMDetector bom = new BOMDetector( bis );
+
+      if ( bom.bomExist() ) {
+        bomSize = bom.getBomSize();
+      }
+    }
+
+    return bomSize;
+  }
+
   FieldsMapping createFieldMapping( String fileName, CsvInputMeta csvInputMeta )
     throws KettleException {
     FieldsMapping mapping = null;
@@ -438,7 +451,8 @@ public class CsvInput extends BaseStep implements StepInterface {
     String enclosure = environmentSubstitute( csvInputMeta.getEnclosure() );
     String realEncoding = environmentSubstitute( csvInputMeta.getEncoding() );
 
-    try ( FileObject fileObject = KettleVFS.getFileObject( fileName, getTransMeta() );
+    try ( FileObject fileObject = KettleVFS.getInstance( getTransMeta().getBowl() )
+            .getFileObject( fileName, getTransMeta() );
         BOMInputStream inputStream =
             new BOMInputStream( KettleVFS.getInputStream( fileObject ), ByteOrderMark.UTF_8, ByteOrderMark.UTF_16LE,
                 ByteOrderMark.UTF_16BE ) ) {
@@ -556,6 +570,11 @@ public class CsvInput extends BaseStep implements StepInterface {
       List<Exception> conversionExceptions = null;
       List<ValueMetaInterface> exceptionFields = null;
 
+      //Set file format to mixed if empty
+      if ( StringUtils.isBlank( meta.getFileFormat() ) ) {
+        meta.setFileFormat( "mixed" );
+      }
+
       // The strategy is as follows...
       // We read a block of byte[] from the file.
       // We scan for the separators in the file (NOT for line feeds etc)
@@ -628,6 +647,7 @@ public class CsvInput extends BaseStep implements StepInterface {
             for ( int i = 0; i < data.encodingType.getLength(); i++ ) {
               data.moveEndBufferPointer();
             }
+
             // Re-check for double new line (\r\n)...
             if ( data.newLineFound() ) {
               // Found another one, need to skip it later
@@ -746,16 +766,32 @@ public class CsvInput extends BaseStep implements StepInterface {
         // do-while loop below) and possibly skipping a newline character. This can occur if there is an
         // empty column at the end of the row (see the Jira case for details)
         if ( ( !newLineFound && outputIndex < data.fieldsMapping.size() ) || ( newLineFound && doubleLineEnd ) ) {
+
           int i = 0;
           while ( ( !data.newLineFound() && ( i < data.delimiter.length ) ) ) {
             data.moveEndBufferPointer();
             i++;
           }
-          if ( data.newLineFound() && outputIndex >= data.fieldsMapping.size() ) {
-            data.moveEndBufferPointer();
-          }
-          if ( doubleLineEnd && data.encodingType.getLength() > 1 ) {
-            data.moveEndBufferPointer();
+
+          switch ( meta.getFileFormatTypeNr() ) {
+            case TextFileInputMeta.FILE_FORMAT_DOS:
+              if ( data.newLineFound() ) {
+                if ( doubleLineEnd == true ) {
+                  data.moveEndBufferPointerXTimes( data.encodingType.getLength() );
+                } else {
+                  //Re-check for a new Line
+                  data.moveEndBufferPointerXTimes( data.encodingType.getLength() );
+                  if ( !data.newLineFound() ) {
+                    throw new KettleFileException( BaseMessages.getString( PKG, "TextFileInput.Log.SingleLineFound" ) );
+                  }
+                }
+              }
+              break;
+            case TextFileInputMeta.FILE_FORMAT_MIXED:
+              if ( data.isCarriageReturn() || doubleLineEnd ) {
+                data.moveEndBufferPointerXTimes( data.encodingType.getLength() );
+              }
+              break;
           }
         }
 
@@ -839,7 +875,8 @@ public class CsvInput extends BaseStep implements StepInterface {
       // Otherwise, we'll grab the list of file names later...
       //
       if ( getTransMeta().findNrPrevSteps( getStepMeta() ) == 0 ) {
-        String filename = environmentSubstitute( meta.getFilename() );
+
+        String filename = filenameValidatorForInputFiles( meta.getFilename() );
 
         if ( Utils.isEmpty( filename ) ) {
           logError( BaseMessages.getString( PKG, "CsvInput.MissingFilename.Message" ) );
@@ -942,7 +979,7 @@ public class CsvInput extends BaseStep implements StepInterface {
    */
   public static String[] guessStringsFromLine( LogChannelInterface log, String line, String delimiter,
                                                String enclosure, String escapeCharacter ) throws KettleException {
-    List<String> strings = new ArrayList<String>();
+    List<String> strings = new ArrayList<>();
 
     String pol; // piece of line
 
@@ -1123,4 +1160,16 @@ public class CsvInput extends BaseStep implements StepInterface {
 
     return strings.toArray( new String[ strings.size() ] );
   }
+
+  String filenameValidatorForInputFiles( String filename ) {
+    Repository rep = getTransMeta().getRepository();
+    if ( rep != null && rep.isConnected() && filename
+      .contains( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY ) ) {
+      return environmentSubstitute( filename.replace( Const.INTERNAL_VARIABLE_ENTRY_CURRENT_DIRECTORY,
+        Const.INTERNAL_VARIABLE_TRANSFORMATION_FILENAME_DIRECTORY ) );
+    } else {
+      return environmentSubstitute( filename );
+    }
+  }
+
 }

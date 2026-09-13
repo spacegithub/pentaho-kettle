@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step.jms.ui;
 
@@ -40,8 +32,7 @@ import org.pentaho.di.trans.step.jms.context.JmsProvider;
 import org.pentaho.di.ui.core.PropsUI;
 import org.pentaho.di.ui.core.widget.TextVar;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.EnumMap;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.pentaho.di.i18n.BaseMessages.getString;
@@ -52,14 +43,14 @@ public class ConnectionForm {
 
   private final Composite parentComponent;
   private final JmsDelegate jmsDelegate;
-  private final JmsProvider.ConnectionType currentConnType;
   private final JmsDialogSecurityLayout jmsDialogSecurityLayout;
 
   private PropsUI props;
   private TransMeta transMeta;
   private ModifyListener lsMod;
 
-  private Map<JmsProvider.ConnectionType, Button> typesToButtons = new HashMap<>();
+  private EnumMap<JmsProvider.ConnectionType, Button> typesToButtons
+    = new EnumMap<>( JmsProvider.ConnectionType.class );
   private Group wConnectionGroup;
 
   private Label wlIbmUrl;
@@ -80,7 +71,6 @@ public class ConnectionForm {
     this.transMeta = transMeta;
     this.lsMod = lsMod;
     this.jmsDelegate = jmsDelegate;
-    this.currentConnType = JmsProvider.ConnectionType.valueOf( jmsDelegate.connectionType );
     this.jmsDialogSecurityLayout = jmsDialogSecurityLayout;
   }
 
@@ -150,7 +140,6 @@ public class ConnectionForm {
         @Override public void widgetSelected( final SelectionEvent selectionEvent ) {
           lsMod.modifyText( null );
           toggleVisibility( type );
-          //jmsDialogSecurityLayout.toggleVisibility( type );
         }
 
         @Override public void widgetDefaultSelected( final SelectionEvent selectionEvent ) {
@@ -231,18 +220,15 @@ public class ConnectionForm {
   }
 
   private void toggleVisibility( JmsProvider.ConnectionType type ) {
-    switch ( type ) {
-      case WEBSPHERE:
-        jmsDialogSecurityLayout.toggleVisibility( type );
-        setIbmMqVisibility( true );
-        setActiveMqVisibility( false );
+    if ( type == JmsProvider.ConnectionType.WEBSPHERE ) {
+      jmsDialogSecurityLayout.toggleVisibility( type );
+      setIbmMqVisibility( true );
+      setActiveMqVisibility( false );
+    } else if ( type == JmsProvider.ConnectionType.ACTIVEMQ ) {
+      jmsDialogSecurityLayout.toggleVisibility( type );
+      setIbmMqVisibility( false );
+      setActiveMqVisibility( true );
 
-        break;
-      case ACTIVEMQ:
-        jmsDialogSecurityLayout.toggleVisibility( type );
-        setIbmMqVisibility( false );
-        setActiveMqVisibility( true );
-        break;
     }
   }
 

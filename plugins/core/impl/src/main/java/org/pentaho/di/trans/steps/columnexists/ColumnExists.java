@@ -1,28 +1,19 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.columnexists;
 
-import org.pentaho.di.core.database.Database;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.core.row.RowDataUtil;
@@ -30,11 +21,7 @@ import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
-import org.pentaho.di.trans.step.BaseStep;
-import org.pentaho.di.trans.step.StepDataInterface;
-import org.pentaho.di.trans.step.StepInterface;
-import org.pentaho.di.trans.step.StepMeta;
-import org.pentaho.di.trans.step.StepMetaInterface;
+import org.pentaho.di.trans.step.*;
 
 /**
  * Check if a column exists in table on a specified connection *
@@ -44,7 +31,7 @@ import org.pentaho.di.trans.step.StepMetaInterface;
  *
  */
 
-public class ColumnExists extends BaseStep implements StepInterface {
+public class ColumnExists extends BaseDatabaseStep implements StepInterface {
   private static Class<?> PKG = ColumnExistsMeta.class; // for i18n purposes, needed by Translator2!!
 
   private ColumnExistsMeta meta;
@@ -75,7 +62,8 @@ public class ColumnExists extends BaseStep implements StepInterface {
       first = false;
 
       data.outputRowMeta = getInputRowMeta().clone();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
       // Check is columnname field is provided
       if ( Utils.isEmpty( meta.getDynamicColumnnameField() ) ) {
@@ -187,38 +175,19 @@ public class ColumnExists extends BaseStep implements StepInterface {
         logError( BaseMessages.getString( PKG, "ColumnExists.Error.ResultFieldMissing" ) );
         return false;
       }
-      data.db = new Database( this, meta.getDatabase() );
-      data.db.shareVariablesWith( this );
-      try {
-        if ( getTransMeta().isUsingUniqueConnections() ) {
-          synchronized ( getTrans() ) {
-            data.db.connect( getTrans().getTransactionId(), getPartitionID() );
-          }
-        } else {
-          data.db.connect( getPartitionID() );
-        }
-
-        if ( log.isDetailed() ) {
-          logDetailed( BaseMessages.getString( PKG, "ColumnExists.Log.ConnectedToDB" ) );
-        }
-
-        return true;
-      } catch ( KettleException e ) {
-        logError( BaseMessages.getString( PKG, "ColumnExists.Log.DBException" ) + e.getMessage() );
-        if ( data.db != null ) {
-          data.db.disconnect();
-        }
-      }
+      return true;
     }
     return false;
+  }
+
+  @Override
+  protected Class<?> getPKG() {
+    return PKG;
   }
 
   public void dispose( StepMetaInterface smi, StepDataInterface sdi ) {
     meta = (ColumnExistsMeta) smi;
     data = (ColumnExistsData) sdi;
-    if ( data.db != null ) {
-      data.db.disconnect();
-    }
     super.dispose( smi, sdi );
   }
 }

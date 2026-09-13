@@ -1,56 +1,65 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.be.ibridge.kettle.dummy;
 
-import org.eclipse.swt.widgets.*;
-import org.pentaho.di.core.*;
-import org.pentaho.di.core.annotations.*;
-import org.pentaho.di.core.database.*;
-import org.pentaho.di.core.exception.*;
-import org.pentaho.di.core.row.*;
-import org.pentaho.di.core.row.value.*;
-import org.pentaho.di.core.variables.*;
-import org.pentaho.di.core.xml.*;
-import org.pentaho.di.repository.*;
-import org.pentaho.di.trans.*;
-import org.pentaho.di.trans.step.*;
-import org.w3c.dom.*;
-
 import java.util.List;
-import java.util.*;
+import java.util.Map;
+
+import org.eclipse.swt.widgets.Shell;
+import org.pentaho.di.core.CheckResult;
+import org.pentaho.di.core.CheckResultInterface;
+import org.pentaho.di.core.Const;
+import org.pentaho.di.core.Counter;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.database.DatabaseMeta;
+import org.pentaho.di.core.exception.KettleDatabaseException;
+import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.exception.KettleXMLException;
+import org.pentaho.di.core.row.RowMetaInterface;
+import org.pentaho.di.core.row.ValueMeta;
+import org.pentaho.di.core.row.ValueMetaAndData;
+import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.di.core.row.value.ValueMetaFactory;
+import org.pentaho.di.core.row.value.ValueMetaNumber;
+import org.pentaho.di.core.row.value.ValueMetaString;
+import org.pentaho.di.core.variables.VariableSpace;
+import org.pentaho.di.core.xml.XMLHandler;
+import org.pentaho.di.repository.ObjectId;
+import org.pentaho.di.repository.Repository;
+import org.pentaho.di.trans.Trans;
+import org.pentaho.di.trans.TransMeta;
+import org.pentaho.di.trans.step.BaseStepMeta;
+import org.pentaho.di.trans.step.StepDataInterface;
+import org.pentaho.di.trans.step.StepDialogInterface;
+import org.pentaho.di.trans.step.StepInterface;
+import org.pentaho.di.trans.step.StepMeta;
+import org.pentaho.di.trans.step.StepMetaInterface;
+import org.w3c.dom.Node;
 
 /*
  * Created on 02-jun-2003
  *
  */
-
-@Step( id = "DummyStep",
-      image = "deprecated.svg",
-      i18nPackageName = "be.ibridge.kettle.dummy",
-      name = "DummyPlugin.Step.Name",
-      description = "DummyPlugin.Step.Description",
-      categoryDescription = "i18n:org.pentaho.di.trans.step:BaseStep.Category.Deprecated",
-      suggestion = "DummyPlugin.Step.SuggestedStep" )
+// BACKLOG-38582 Remove specific deprecated steps and job entries from PDI, Please uncomment to enable plugin if needed.
+//@Step( id = "DummyStep",
+//      image = "ui/images/deprecated.svg",
+//      i18nPackageName = "be.ibridge.kettle.dummy",
+//      name = "DummyPlugin.Step.Name",
+//      description = "DummyPlugin.Step.Description",
+//      categoryDescription = "i18n:org.pentaho.di.trans.step:BaseStep.Category.Deprecated",
+//      suggestion = "DummyPlugin.Step.SuggestedStep" )
 public class DummyPluginMeta extends BaseStepMeta implements StepMetaInterface {
   private ValueMetaAndData value;
 
@@ -86,7 +95,8 @@ public class DummyPluginMeta extends BaseStepMeta implements StepMetaInterface {
   }
 
   @Override
-  public void getFields( RowMetaInterface r, String origin, RowMetaInterface[] info, StepMeta nextStep, VariableSpace space ) {
+  public void getFields( Bowl bowl, RowMetaInterface r, String origin, RowMetaInterface[] info, StepMeta nextStep,
+      VariableSpace space ) {
     if ( value != null ) {
       ValueMetaInterface v = value.getValueMeta();
       v.setOrigin( origin );

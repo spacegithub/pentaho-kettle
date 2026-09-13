@@ -1,27 +1,20 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entry;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -29,14 +22,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.pentaho.di.cluster.SlaveServer;
+import org.pentaho.di.connections.vfs.provider.ConnectionFileProvider;
 import org.pentaho.di.core.AttributesInterface;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.CheckResultSourceInterface;
+import org.pentaho.di.core.util.StringUtil;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.ExtensionDataInterface;
 import org.pentaho.di.core.SQLStatement;
 import org.pentaho.di.core.attributes.AttributesUtil;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleValueException;
@@ -917,8 +915,15 @@ public class JobEntryBase implements Cloneable, VariableSpace, CheckResultSource
    * @throws KettleException
    *           in case something goes wrong during the export
    */
+  @Deprecated
   public String exportResources( VariableSpace space, Map<String, ResourceDefinition> definitions,
     ResourceNamingInterface namingInterface, Repository repository, IMetaStore metaStore ) throws KettleException {
+    return null;
+  }
+
+  public String exportResources( Bowl executionBowl, Bowl globalManagementBowl, VariableSpace space,
+      Map<String, ResourceDefinition> definitions, ResourceNamingInterface namingInterface, Repository repository,
+      IMetaStore metaStore ) throws KettleException {
     return null;
   }
 
@@ -1371,6 +1376,16 @@ public class JobEntryBase implements Cloneable, VariableSpace, CheckResultSource
   }
 
   /**
+   * Checks if the specified filename has a VFS reference.
+   *
+   * @param filename the filename to check
+   * @return true if it is a VFS reference, false otherwise
+   */
+  public boolean isVfsReference( String filename ) {
+    return StringUtils.startsWith( filename, ConnectionFileProvider.ROOT_URI );
+  }
+
+  /**
    * Looks up the references after import
    *
    * @param repository
@@ -1410,7 +1425,8 @@ public class JobEntryBase implements Cloneable, VariableSpace, CheckResultSource
    * @throws KettleException
    */
   @Deprecated
-  public Object loadReferencedObject( int index, Repository rep, VariableSpace space ) throws KettleException {
+  public Object loadReferencedObject( Bowl bowl, int index, Repository rep, VariableSpace space )
+    throws KettleException {
     return null;
   }
 
@@ -1428,7 +1444,8 @@ public class JobEntryBase implements Cloneable, VariableSpace, CheckResultSource
    * @return the referenced object once loaded
    * @throws KettleException
    */
-  public Object loadReferencedObject( int index, Repository rep, IMetaStore metaStore, VariableSpace space ) throws KettleException {
+  public Object loadReferencedObject( Bowl bowl, int index, Repository rep, IMetaStore metaStore, VariableSpace space )
+    throws KettleException {
     return null;
   }
 
@@ -1538,7 +1555,14 @@ public class JobEntryBase implements Cloneable, VariableSpace, CheckResultSource
    *
    */
   public void setEntryStepSetVariable( String variableName, String variableValue ) {
-    entryStepSetVariablesMap.put( variableName, variableValue );
+    // ConcurrentHashMap does not allow null keys and null values.
+    if ( variableName != null ) {
+      if ( variableValue != null ) {
+        entryStepSetVariablesMap.put( variableName, variableValue );
+      } else {
+        entryStepSetVariablesMap.put( variableName, StringUtils.EMPTY );
+      }
+    }
   }
 
   /**
@@ -1547,5 +1571,58 @@ public class JobEntryBase implements Cloneable, VariableSpace, CheckResultSource
    */
   public String getEntryStepSetVariable( String variableName ) {
     return entryStepSetVariablesMap.get( variableName );
+  }
+
+  /**
+   * <p>Appends the date, time and/or datetime to the given filename (before the extension if it exists), using the
+   * provided patterns.</p>
+   *
+   * @param filename       the original filename (can have path and variables)
+   * @param addDate        if the date is to be added
+   * @param datePattern    the pattern to be used for the date
+   * @param addTime        if the time is to be added
+   * @param timePattern    the pattern to be used for the time
+   * @param specifyFormat  if the datetime is to be added
+   * @param datetimeFormat the pattern to be used for the datetime
+   * @return the resulting filename after adding the specified suffixes to the given filename
+   */
+  protected String addDatetimeToFilename( String filename, boolean addDate, String datePattern, boolean addTime,
+                                          String timePattern, boolean specifyFormat, String datetimeFormat ) {
+
+    if ( Utils.isEmpty( filename ) ) {
+      return null;
+    }
+
+    // Replace possible environment variables...
+    String realfilename = environmentSubstitute( filename );
+    String filenameNoExtension = FilenameUtils.removeExtension( realfilename );
+    String extension = FilenameUtils.getExtension( realfilename );
+
+    // If an extension exists, add the corresponding dot before
+    if ( !StringUtil.isEmpty( extension ) ) {
+      extension = '.' + extension;
+    }
+
+    final SimpleDateFormat sdf = new SimpleDateFormat();
+    Date now = new Date();
+
+    if ( specifyFormat && !Utils.isEmpty( datetimeFormat ) ) {
+      sdf.applyPattern( datetimeFormat );
+      String dt = sdf.format( now );
+      filenameNoExtension += dt;
+    } else {
+      if ( addDate && null != datePattern ) {
+        sdf.applyPattern( datePattern );
+        String d = sdf.format( now );
+        filenameNoExtension += '_' + d;
+      }
+      if ( addTime && null != timePattern ) {
+        sdf.applyPattern( timePattern );
+        String t = sdf.format( now );
+        filenameNoExtension += '_' + t;
+      }
+    }
+
+    return filenameNoExtension + extension;
   }
 }

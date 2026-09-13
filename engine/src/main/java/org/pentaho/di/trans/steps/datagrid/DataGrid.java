@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.datagrid;
 
@@ -73,7 +65,8 @@ public class DataGrid extends BaseStep implements StepInterface {
       data.linesWritten = 0;
 
       data.outputRowMeta = new RowMeta();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
       // Use these metadata values to convert data...
       //
@@ -96,7 +89,7 @@ public class DataGrid extends BaseStep implements StepInterface {
         if ( valueData != null && valueMeta.isNull( valueData ) ) {
           valueData = null;
         }
-        outputRowData[ i ] = valueMeta.convertDataFromString( valueData, convertMeta, null, null, 0 );
+        outputRowData[ i ] = valueMeta.convertDataFromString( valueData, convertMeta, meta.getFieldNullIf( valueMeta.getName() ), null, 0 );
       }
     }
 
@@ -108,10 +101,8 @@ public class DataGrid extends BaseStep implements StepInterface {
         .toString( getLinesWritten() ), data.outputRowMeta.getString( outputRowData ) ) );
     }
 
-    if ( checkFeedback( getLinesWritten() ) ) {
-      if ( log.isBasic() ) {
-        logBasic( BaseMessages.getString( PKG, "DataGrid.Log.LineNr", Long.toString( getLinesWritten() ) ) );
-      }
+    if ( checkFeedback( getLinesWritten() ) && log.isBasic() ) {
+      logBasic( BaseMessages.getString( PKG, "DataGrid.Log.LineNr", Long.toString( getLinesWritten() ) ) );
     }
 
     return true;

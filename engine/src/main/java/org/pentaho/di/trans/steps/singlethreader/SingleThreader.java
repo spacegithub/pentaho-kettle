@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.singlethreader;
 
@@ -165,7 +157,7 @@ public class SingleThreader extends BaseStep implements StepInterface {
     //
     StepWithMappingMeta
       .activateParams( getData().mappingTrans, getData().mappingTrans, this, getData().mappingTrans.listParameters(),
-        meta.getParameters(), meta.getParameterValues() );
+        meta.getParameters(), meta.getParameterValues(), meta.isPassingAllParameters() );
     getData().mappingTrans.activateParameters();
 
     // Disable thread priority managment as it will slow things down needlessly.
@@ -260,7 +252,8 @@ public class SingleThreader extends BaseStep implements StepInterface {
         // Pass the repository down to the metadata object...
         //
         meta.setRepository( getTransMeta().getRepository() );
-        singleThreaderData.mappingTransMeta = SingleThreaderMeta.loadSingleThreadedTransMeta( meta, meta.getRepository(), this, meta.isPassingAllParameters() );
+        singleThreaderData.mappingTransMeta = SingleThreaderMeta.loadSingleThreadedTransMeta( getTransMeta().getBowl(),
+          meta, meta.getRepository(), this, meta.isPassingAllParameters() );
         if ( singleThreaderData.mappingTransMeta != null ) { // Do we have a mapping at all?
 
           // Validate the inject and retrieve step names
@@ -305,6 +298,32 @@ public class SingleThreader extends BaseStep implements StepInterface {
 
     }
     return false;
+  }
+
+  @Override public boolean beforeStartProcessing( StepMetaInterface smi, StepDataInterface sdi ) throws KettleException {
+    // beforeStartProcessing of the single threading execution engine
+    try {
+      if ( getData().executor != null ) {
+        return getData().executor.beforeStartProcessing( smi, sdi );
+      }
+    } catch ( KettleException e ) {
+      log.logError( "Error disposing of sub-transformation: ", e );
+    }
+
+    return super.beforeStartProcessing( smi, sdi );
+  }
+
+  @Override public boolean afterFinishProcessing( StepMetaInterface smi, StepDataInterface sdi ) {
+    // afterFinishProcessing of the single threading execution engine
+    try {
+      if ( getData().executor != null ) {
+        return getData().executor.afterFinishProcessing( smi, sdi );
+      }
+    } catch ( KettleException e ) {
+      log.logError( "Error disposing of sub-transformation: ", e );
+    }
+
+    return super.afterFinishProcessing( smi, sdi );
   }
 
   public void dispose( StepMetaInterface smi, StepDataInterface sdi ) {

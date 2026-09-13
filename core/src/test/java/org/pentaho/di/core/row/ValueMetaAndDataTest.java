@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.row;
 
@@ -26,10 +18,13 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentMatchers;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.exception.KettlePluginException;
 import org.pentaho.di.core.exception.KettleValueException;
+import org.pentaho.di.core.exception.KettleXMLException;
 import org.pentaho.di.core.plugins.PluginInterface;
 import org.pentaho.di.core.plugins.PluginRegistry;
 import org.pentaho.di.core.row.value.ValueMetaBase;
@@ -37,11 +32,8 @@ import org.pentaho.di.core.row.value.ValueMetaFactory;
 import org.pentaho.di.core.row.value.ValueMetaPluginType;
 import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.core.util.EnvUtil;
-import org.powermock.api.mockito.PowerMockito;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.junit4.PowerMockRunner;
+import org.pentaho.di.core.xml.XMLHandler;
 import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
 import java.math.BigDecimal;
 import java.text.ParseException;
@@ -56,8 +48,9 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
 
-@RunWith( PowerMockRunner.class )
+@RunWith( MockitoJUnitRunner.class )
 public class ValueMetaAndDataTest {
 
   private PluginRegistry pluginRegistry;
@@ -89,11 +82,11 @@ public class ValueMetaAndDataTest {
     assertEquals( "NumberName", result.getValueMeta().getName() );
     assertEquals( Double.valueOf( "123.45" ), result.getValueData() );
 
-    result = new ValueMetaAndData( "IntegerName", Long.valueOf( 234 ) );
+    result = new ValueMetaAndData( "IntegerName", 234L );
     assertNotNull( result );
     assertEquals( ValueMetaInterface.TYPE_INTEGER, result.getValueMeta().getType() );
     assertEquals( "IntegerName", result.getValueMeta().getName() );
-    assertEquals( Long.valueOf( 234 ), result.getValueData() );
+    assertEquals( 234L, result.getValueData() );
 
     Date testDate = Calendar.getInstance().getTime();
     result = new ValueMetaAndData( "DateName", testDate );
@@ -114,7 +107,7 @@ public class ValueMetaAndDataTest {
     assertEquals( "BooleanName", result.getValueMeta().getName() );
     assertEquals( Boolean.TRUE, result.getValueData() );
 
-    byte[] testBytes = new byte[50];
+    byte[] testBytes = new byte[ 50 ];
     new Random().nextBytes( testBytes );
     result = new ValueMetaAndData( "BinaryName", testBytes );
     assertNotNull( result );
@@ -132,44 +125,36 @@ public class ValueMetaAndDataTest {
   }
 
   @Test
-  @PrepareForTest( { EnvUtil.class } )
-  public void testLoadXML() throws KettleValueException, KettlePluginException, ParseException {
-    PowerMockito.mockStatic( EnvUtil.class );
-    Mockito.when( EnvUtil.getSystemProperty( Const.KETTLE_DEFAULT_DATE_FORMAT ) ).thenReturn( "yyyy-MM-dd HH:mm:ss.SSS" );
-    ValueMetaAndData valueMetaAndData = new ValueMetaAndData( Mockito.mock( ValueMetaInterface.class ), new Object() );
-    List<PluginInterface> pluginTypeList = new ArrayList<>();
-    PluginInterface plugin = Mockito.mock( PluginInterface.class );
-    Mockito.when( plugin.getName() ).thenReturn( "3" );
-    String[] ids = { "3" };
-    Mockito.when( plugin.getIds() ).thenReturn( ids );
-    pluginTypeList.add( plugin );
-    Mockito.when( pluginRegistry.getPlugins( ValueMetaPluginType.class ) ).thenReturn( pluginTypeList );
-    ValueMetaFactory.pluginRegistry = pluginRegistry;
+  public void testLoadXML() throws KettleXMLException, ParseException {
+    try ( MockedStatic<EnvUtil> envUtilMockedStatic = Mockito.mockStatic( EnvUtil.class ) ) {
+      envUtilMockedStatic.when( () -> EnvUtil.getSystemProperty( eq( Const.KETTLE_DEFAULT_DATE_FORMAT ) ) )
+        .thenReturn( "yyyy-MM-dd HH:mm:ss.SSS" );
+      ValueMetaAndData valueMetaAndData =
+        new ValueMetaAndData( Mockito.mock( ValueMetaInterface.class ), new Object() );
+      List<PluginInterface> pluginTypeList = new ArrayList<>();
+      PluginInterface plugin = Mockito.mock( PluginInterface.class );
+      Mockito.when( plugin.getName() ).thenReturn( "3" );
+      String[] ids = { "3" };
+      Mockito.when( plugin.getIds() ).thenReturn( ids );
+      pluginTypeList.add( plugin );
+      Mockito.when( pluginRegistry.getPlugins( ValueMetaPluginType.class ) ).thenReturn( pluginTypeList );
+      ValueMetaFactory.pluginRegistry = pluginRegistry;
 
-    NodeList nodeList = Mockito.mock( NodeList.class );
-    Mockito.when( nodeList.getLength() ).thenReturn( 2 );
-    Node node = Mockito.mock( Node.class );
-    Mockito.when( node.getChildNodes() ).thenReturn( nodeList );
+      String testData = "2010/01/01 00:00:00.000";
+      Node node = XMLHandler.loadXMLString(
+        "<value>\n"
+          + "    <name/>\n"
+          + "    <type>3</type>\n"
+          + "    <text>" + testData + "</text>\n"
+          + "    <length>-1</length>\n"
+          + "    <precision>-1</precision>\n"
+          + "    <isnull>N</isnull>\n"
+          + "    <mask/>\n"
+          + "</value>", "value" );
 
-    Node childNodeText = Mockito.mock( Node.class );
-    Mockito.when( childNodeText.getNodeName() ).thenReturn( "text" );
-    Mockito.when( nodeList.item( 0 ) ).thenReturn( childNodeText );
-    Node nodeValue = Mockito.mock( Node.class );
-    Mockito.when( childNodeText.getFirstChild() ).thenReturn( nodeValue );
-    String testData = "2010/01/01 00:00:00.000";
-    Mockito.when( nodeValue.getNodeValue() ).thenReturn( testData );
-
-
-    Node childNodeType = Mockito.mock( Node.class );
-    Mockito.when( childNodeType.getNodeName() ).thenReturn( "type" );
-    Mockito.when( nodeList.item( 1 ) ).thenReturn( childNodeType );
-    Node nodeTypeValue = Mockito.mock( Node.class );
-    Mockito.when( childNodeType.getFirstChild() ).thenReturn( nodeTypeValue );
-    Mockito.when( nodeTypeValue.getNodeValue() ).thenReturn( "3" );
-
-
-    valueMetaAndData.loadXML( node );
-    Assert.assertEquals( valueMetaAndData.getValueData(),
-            new SimpleDateFormat( ValueMetaBase.COMPATIBLE_DATE_FORMAT_PATTERN ).parse( testData ) );
+      valueMetaAndData.loadXML( node );
+      Assert.assertEquals( valueMetaAndData.getValueData(),
+        new SimpleDateFormat( ValueMetaBase.COMPATIBLE_DATE_FORMAT_PATTERN ).parse( testData ) );
+    }
   }
 }

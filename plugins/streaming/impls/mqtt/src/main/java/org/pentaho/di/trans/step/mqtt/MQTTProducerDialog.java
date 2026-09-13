@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step.mqtt;
 
@@ -45,6 +37,7 @@ import org.pentaho.di.core.annotations.PluginDialog;
 import org.pentaho.di.core.plugins.PluginInterface;
 import org.pentaho.di.core.plugins.PluginRegistry;
 import org.pentaho.di.core.plugins.StepPluginType;
+import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.BaseStepMeta;
 import org.pentaho.di.trans.step.StepDialogInterface;
@@ -69,14 +62,14 @@ import static org.pentaho.di.ui.core.WidgetUtils.createFieldDropDown;
 import static org.pentaho.di.ui.core.WidgetUtils.formDataBelow;
 
 @SuppressWarnings ( "unused" )
-@PluginDialog ( id = "MQTTProducer", image = "MQTTProducer.svg", pluginType = PluginDialog.PluginType.STEP )
+@PluginDialog ( id = "MQTTProducer", image = "MQTTProducer.svg", pluginType = PluginDialog.PluginType.STEP,
+  documentationUrl = "pdi-transformation-steps-reference-overview/mqtt-producer" )
 public class MQTTProducerDialog extends BaseStepDialog implements StepDialogInterface {
   private static final int SHELL_MIN_WIDTH = 527;
   private static final int SHELL_MIN_HEIGHT = 650;
   private static final int INPUT_WIDTH = 350;
 
-  private static Class<?> PKG = MQTTProducerDialog.class;
-  private static Label topicEntryType;
+  private static final Class<?> PKG = MQTTProducerDialog.class;
 
   private MQTTProducerMeta meta;
   private ModifyListener lsMod;
@@ -90,8 +83,8 @@ public class MQTTProducerDialog extends BaseStepDialog implements StepDialogInte
   private MqttDialogSecurityLayout securityLayout;
   private MqttDialogOptionsLayout optionsLayout;
 
-  public MQTTProducerDialog( Shell parent, Object in, TransMeta transMeta, String stepname ) {
-    super( parent, (BaseStepMeta) in, transMeta, stepname );
+  public MQTTProducerDialog( Shell parent, Object in, TransMeta transMeta, String stepName ) {
+    super( parent, (BaseStepMeta) in, transMeta, stepName );
     meta = (MQTTProducerMeta) in;
   }
 
@@ -105,7 +98,7 @@ public class MQTTProducerDialog extends BaseStepDialog implements StepDialogInte
     lsCancel = e -> cancel();
     lsOK = e -> ok();
     lsDef = new SelectionAdapter() {
-      public void widgetDefaultSelected( SelectionEvent e ) {
+      @Override public void widgetDefaultSelected( SelectionEvent e ) {
         ok();
       }
     };
@@ -129,7 +122,7 @@ public class MQTTProducerDialog extends BaseStepDialog implements StepDialogInte
     formLayout.marginHeight = 15;
     shell.setLayout( formLayout );
     shell.addShellListener( new ShellAdapter() {
-      public void shellClosed( ShellEvent e ) {
+      @Override public void shellClosed( ShellEvent e ) {
         cancel();
       }
     } );
@@ -201,7 +194,8 @@ public class MQTTProducerDialog extends BaseStepDialog implements StepDialogInte
 
     buildSetupTab();
 
-    securityLayout = new MqttDialogSecurityLayout( props, wTabFolder, lsMod, transMeta, meta.getSslConfig(), meta.useSsl );
+    securityLayout =
+      new MqttDialogSecurityLayout( props, wTabFolder, lsMod, transMeta, meta.getSslConfig(), meta.useSsl );
     securityLayout.buildSecurityTab();
 
     optionsLayout = new MqttDialogOptionsLayout( props, wTabFolder, lsMod, transMeta,
@@ -271,19 +265,19 @@ public class MQTTProducerDialog extends BaseStepDialog implements StepDialogInte
     wClientId.setLayoutData( o );
 
     topicSelection = new TopicSelection.Builder().
-       setComposite( wSetupComp ).
-       setStyle( SWT.LEFT ).
-       setTransMeta( transMeta ).
-       setStepMeta( meta ).
-       setProps( props ).
-       setLsMod( lsMod ).
-       setTopicInField( meta.topicInField ).
-       setTopicGroupLabel( getString( PKG, "MQTTProducerDialog.Topic" ) ).
-       setFieldTopicRadioLabel( getString( PKG, "MQTTProducerDialog.GetDataFromField" ) ).
-       setTextTopicRadioLabel( getString( PKG, "MQTTProducerDialog.SpecifyTopic" ) ).
-       setFieldTopicLabel( getString( PKG, "MQTTProducerDialog.FieldName" ) ).
-       setTextTopicLabel( getString( PKG, "MQTTProducerDialog.TopicName" ) ).
-       build();
+      setComposite( wSetupComp ).
+      setStyle( SWT.LEFT ).
+      setTransMeta( transMeta ).
+      setStepMeta( meta ).
+      setProps( props ).
+      setLsMod( lsMod ).
+      setTopicInField( meta.topicInField ).
+      setTopicGroupLabel( getString( PKG, "MQTTProducerDialog.Topic" ) ).
+      setFieldTopicRadioLabel( getString( PKG, "MQTTProducerDialog.GetDataFromField" ) ).
+      setTextTopicRadioLabel( getString( PKG, "MQTTProducerDialog.SpecifyTopic" ) ).
+      setFieldTopicLabel( getString( PKG, "MQTTProducerDialog.FieldName" ) ).
+      setTextTopicLabel( getString( PKG, "MQTTProducerDialog.TopicName" ) ).
+      build();
 
     props.setLook( topicSelection );
     FormData fdTopicSelection = new FormData();
@@ -401,6 +395,8 @@ public class MQTTProducerDialog extends BaseStepDialog implements StepDialogInte
           case AUTOMATIC_RECONNECT:
             meta.automaticReconnect = option.getValue();
             break;
+          default:
+            log.logBasic( BaseMessages.getString( PKG, "MQTTDialog.Error.UnknownOption", option.getKey() ) );
         }
       } );
 

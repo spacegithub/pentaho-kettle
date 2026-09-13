@@ -1,0 +1,401 @@
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
+package org.pentaho.di.shared;
+
+import org.apache.commons.vfs2.FileObject;
+import org.junit.Test;
+import org.junit.BeforeClass;
+import org.junit.Before;
+import org.pentaho.di.core.KettleClientEnvironment;
+import org.pentaho.di.core.bowl.DefaultBowl;
+import org.pentaho.di.core.database.DatabaseMeta;
+import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.plugins.DatabasePluginType;
+import org.pentaho.di.core.row.value.ValueMetaPluginType;
+import org.pentaho.di.core.vfs.KettleVFS;
+import org.pentaho.di.core.xml.XMLHandler;
+import org.w3c.dom.Node;
+
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+
+
+public class VfsSharedObjectsIOTest {
+  private static final String ROOT_FILE_PATH = "ram:///config";
+  private static final String SHARED_FILE = "shared.xml";
+  private static final String SHARED_FILE_BACKUP = SHARED_FILE + ".backup";
+  private static final String CONN_STR = "<?xml version=\"1.0\" encoding=\"UTF-8\"?> <sharedobjects> "
+    + " <connection> <name>postgres-docker</name> <server>localhost</server> <type>POSTGRESQL</type> "
+    + " <access>Native</access> <database>sampledata</database> <port>5435</port> <username>postgres</username> "
+    + " </connection> </sharedobjects>";
+
+  private String db_type;
+
+  @BeforeClass
+  public static void setUpOnce() throws KettleException {
+    // Register Natives to create a default DatabaseMeta
+    DatabasePluginType.getInstance().searchPlugins();
+    ValueMetaPluginType.getInstance().searchPlugins();
+    KettleClientEnvironment.init();
+  }
+
+  @Before
+  public void setup() throws Exception {
+    db_type = String.valueOf( SharedObjectsIO.SharedObjectType.CONNECTION );
+    FileObject projectDirectory = KettleVFS.getInstance( DefaultBowl.getInstance() ).getFileObject( ROOT_FILE_PATH );
+    if ( projectDirectory.exists() ) {
+      FileObject sharedFile = projectDirectory.resolveFile( SHARED_FILE );
+      if ( sharedFile.exists() ) {
+        sharedFile.delete();
+      }
+
+      FileObject sharedBackupFile = projectDirectory.resolveFile( SHARED_FILE_BACKUP );
+      if ( sharedBackupFile.exists() ) {
+        sharedBackupFile.delete();
+      }
+    }
+  }
+
+  @Test
+  public void testGetSharedObjects() throws Exception {
+    // Prepare the test shared.xml
+    FileObject projectDirectory = KettleVFS.getInstance( DefaultBowl.getInstance() ).getFileObject( ROOT_FILE_PATH );
+    projectDirectory.createFolder();
+
+    FileObject sharedFile = projectDirectory.resolveFile( SHARED_FILE );
+
+    try ( OutputStream outputStream = sharedFile.getContent().getOutputStream() ) {
+      outputStream.write( CONN_STR.getBytes( StandardCharsets.UTF_8 ) );
+    }
+
+    SharedObjectsIO sharedObjectsIO = new VfsSharedObjectsIO( ROOT_FILE_PATH, DefaultBowl.getInstance() );
+    try {
+      sharedObjectsIO.lock();
+      Map<String, Node> nodesMap = sharedObjectsIO.getSharedObjects( "connection" );
+      assertEquals( 1, nodesMap.size() );
+
+      //Get the key
+      Map.Entry<String, Node> entry = nodesMap.entrySet().iterator().next();
+      String key = entry.getKey();
+      Node node = entry.getValue();
+      assertEquals( "postgres-docker", key );
+      validateNode( node );
+
+      // close the file
+      sharedFile.close();
+    } finally {
+      sharedObjectsIO.unlock();
+    }
+  }
+
+  private void validateNode( Node node ) {
+    assertEquals( "localhost", XMLHandler.getTagValue( node, "server" ) );
+    assertEquals( "POSTGRESQL", XMLHandler.getTagValue( node, "type" ) );
+    assertEquals( "Native", XMLHandler.getTagValue( node, "access" ) );
+    assertEquals( "5435", XMLHandler.getTagValue( node, "port" ) );
+    assertEquals( "postgres", XMLHandler.getTagValue( node, "username" ) );
+  }
+
+  @Test
+  public void testSaveSharedObject() throws Exception {
+    FileObject projectDirectory = KettleVFS.getInstance( DefaultBowl.getInstance() ).getFileObject( ROOT_FILE_PATH );
+    projectDirectory.createFolder();
+
+    SharedObjectsIO sharedObjectsIO = new VfsSharedObjectsIO( ROOT_FILE_PATH, DefaultBowl.getInstance() );
+    try {
+      sharedObjectsIO.lock();
+
+      String type = String.valueOf( SharedObjectsIO.SharedObjectType.CONNECTION );
+      String connectionName = "NewConn";
+      // Create a new DatabaseMeta object
+      DatabaseMeta databaseMeta = new DatabaseMeta( connectionName, "Infobright", "JDBC", null, "stub:stub", null, null,
+        null );
+      sharedObjectsIO.saveSharedObject( type, connectionName,
+        XMLHandler.getSubNode( XMLHandler.loadXMLString( databaseMeta.getXML() ), type ) );
+
+      // Verify that the new connection is saved
+      Map<String, Node> nodesMap = sharedObjectsIO.getSharedObjects( type );
+      assertEquals( 1, nodesMap.size() );
+
+      //Get the key
+      Map.Entry<String, Node> entry = nodesMap.entrySet().iterator().next();
+      String key = entry.getKey();
+      assertEquals( connectionName, key );
+    } finally {
+      sharedObjectsIO.unlock();
+    }
+  }
+
+  @Test
+  public void testSaveSharedObjectLoadsExistingEntriesOnFreshInstance() throws Exception {
+    String rootPath = ROOT_FILE_PATH + "-reload-on-save";
+    String existingConnectionName = "ExistingConn";
+    String newConnectionName = "NewConn";
+
+    SharedObjectsIO initialSharedObjectsIO = createVfsSharedObject( rootPath );
+    try {
+      initialSharedObjectsIO.lock();
+
+      DatabaseMeta existingDatabaseMeta = createDatabaseMeta( existingConnectionName );
+      initialSharedObjectsIO.saveSharedObject( db_type, existingConnectionName, existingDatabaseMeta.toNode() );
+      assertNotNull( initialSharedObjectsIO.getSharedObject( db_type, existingConnectionName ) );
+    } finally {
+      initialSharedObjectsIO.unlock();
+    }
+
+    SharedObjectsIO reloadedSharedObjectsIO = new VfsSharedObjectsIO( rootPath, DefaultBowl.getInstance() );
+    try {
+      reloadedSharedObjectsIO.lock();
+
+      DatabaseMeta newDatabaseMeta = createDatabaseMeta( newConnectionName );
+      reloadedSharedObjectsIO.saveSharedObject( db_type, newConnectionName, newDatabaseMeta.toNode() );
+
+      Map<String, Node> nodesMap = reloadedSharedObjectsIO.getSharedObjects( db_type );
+      assertEquals( 2, nodesMap.size() );
+      assertNotNull( nodesMap.get( existingConnectionName ) );
+      assertNotNull( nodesMap.get( newConnectionName ) );
+    } finally {
+      reloadedSharedObjectsIO.unlock();
+    }
+  }
+
+  @Test
+  public void testGetSharedObjectLoadsExistingEntriesOnFreshInstance() throws Exception {
+    String rootPath = ROOT_FILE_PATH + "-reload-on-get";
+    String connectionName = "ExistingConn";
+
+    SharedObjectsIO initialSharedObjectsIO = createVfsSharedObject( rootPath );
+    try {
+      initialSharedObjectsIO.lock();
+
+      DatabaseMeta databaseMeta = createDatabaseMeta( connectionName );
+      initialSharedObjectsIO.saveSharedObject( db_type, connectionName, databaseMeta.toNode() );
+    } finally {
+      initialSharedObjectsIO.unlock();
+    }
+
+    SharedObjectsIO reloadedSharedObjectsIO = new VfsSharedObjectsIO( rootPath, DefaultBowl.getInstance() );
+    try {
+      reloadedSharedObjectsIO.lock();
+
+      Node node = reloadedSharedObjectsIO.getSharedObject( db_type, connectionName );
+      assertNotNull( node );
+      assertEquals( connectionName, XMLHandler.getTagValue( node, "name" ) );
+    } finally {
+      reloadedSharedObjectsIO.unlock();
+    }
+  }
+
+  @Test
+  public void testDeleteLoadsExistingEntriesOnFreshInstance() throws Exception {
+    String rootPath = ROOT_FILE_PATH + "-reload-on-delete";
+    String connectionName = "ExistingConn";
+
+    SharedObjectsIO initialSharedObjectsIO = createVfsSharedObject( rootPath );
+    try {
+      initialSharedObjectsIO.lock();
+
+      DatabaseMeta databaseMeta = createDatabaseMeta( connectionName );
+      initialSharedObjectsIO.saveSharedObject( db_type, connectionName, databaseMeta.toNode() );
+    } finally {
+      initialSharedObjectsIO.unlock();
+    }
+
+    SharedObjectsIO reloadedSharedObjectsIO = new VfsSharedObjectsIO( rootPath, DefaultBowl.getInstance() );
+    try {
+      reloadedSharedObjectsIO.lock();
+      reloadedSharedObjectsIO.delete( db_type, connectionName );
+    } finally {
+      reloadedSharedObjectsIO.unlock();
+    }
+
+    SharedObjectsIO verifySharedObjectsIO = new VfsSharedObjectsIO( rootPath, DefaultBowl.getInstance() );
+    try {
+      verifySharedObjectsIO.lock();
+
+      assertEquals( 0, verifySharedObjectsIO.getSharedObjects( db_type ).size() );
+      assertNull( verifySharedObjectsIO.getSharedObject( db_type, connectionName ) );
+    } finally {
+      verifySharedObjectsIO.unlock();
+    }
+  }
+
+  @Test
+  public void testClearLoadsExistingEntriesOnFreshInstance() throws Exception {
+    String rootPath = ROOT_FILE_PATH + "-reload-on-clear";
+    String firstConnectionName = "ExistingConn";
+    String secondConnectionName = "SecondConn";
+
+    SharedObjectsIO initialSharedObjectsIO = createVfsSharedObject( rootPath );
+    try {
+      initialSharedObjectsIO.lock();
+
+      initialSharedObjectsIO.saveSharedObject( db_type, firstConnectionName,
+        createDatabaseMeta( firstConnectionName ).toNode() );
+      initialSharedObjectsIO.saveSharedObject( db_type, secondConnectionName,
+        createDatabaseMeta( secondConnectionName ).toNode() );
+    } finally {
+      initialSharedObjectsIO.unlock();
+    }
+
+    SharedObjectsIO reloadedSharedObjectsIO = new VfsSharedObjectsIO( rootPath, DefaultBowl.getInstance() );
+    try {
+      reloadedSharedObjectsIO.lock();
+      reloadedSharedObjectsIO.clear( db_type );
+    } finally {
+      reloadedSharedObjectsIO.unlock();
+    }
+
+    SharedObjectsIO verifySharedObjectsIO = new VfsSharedObjectsIO( rootPath, DefaultBowl.getInstance() );
+    try {
+      verifySharedObjectsIO.lock();
+
+      assertEquals( 0, verifySharedObjectsIO.getSharedObjects( db_type ).size() );
+      assertNull( verifySharedObjectsIO.getSharedObject( db_type, firstConnectionName ) );
+      assertNull( verifySharedObjectsIO.getSharedObject( db_type, secondConnectionName ) );
+    } finally {
+      verifySharedObjectsIO.unlock();
+    }
+  }
+
+  @Test
+  public void testSaveSharedObjectCaseInsensitive() throws Exception {
+    SharedObjectsIO sharedObjectsIO = createVfsSharedObject( ROOT_FILE_PATH );
+    try {
+      sharedObjectsIO.lock();
+
+      // Create a new DatabaseMeta object
+      String connectionName = "NewConn";
+      DatabaseMeta dbMeta = createDatabaseMeta( connectionName );
+      sharedObjectsIO.saveSharedObject( db_type, connectionName, dbMeta.toNode() );
+
+      // Add another connection with same name different case
+      String newConnectionName = "newconn";
+      dbMeta = createDatabaseMeta( newConnectionName );
+      sharedObjectsIO.saveSharedObject( db_type, newConnectionName, dbMeta.toNode() );
+
+      // Verify that there is only one entry in the map
+      Map<String, Node> nodesMap = sharedObjectsIO.getSharedObjects( db_type );
+      assertEquals( 1, nodesMap.size() );
+
+      //Get the key
+      Map.Entry<String, Node> entry = nodesMap.entrySet().iterator().next();
+      String key = entry.getKey();
+      assertEquals( newConnectionName, key );
+    } finally {
+      sharedObjectsIO.unlock();
+    }
+  }
+
+  @Test
+  public void testGetSharedObjectCaseInsensitive() throws Exception {
+    SharedObjectsIO sharedObjectsIO = createVfsSharedObject( ROOT_FILE_PATH );
+    try {
+      sharedObjectsIO.lock();
+
+      String connectionName = "NewConn";
+      // Create a new DatabaseMeta object
+      DatabaseMeta dbMeta = createDatabaseMeta( connectionName );
+      sharedObjectsIO.saveSharedObject( db_type, connectionName, dbMeta.toNode() );
+
+      // Get the SharedObject with case-insensitive name
+      Node node = sharedObjectsIO.getSharedObject( db_type, "newconn" );
+      assertEquals( connectionName, XMLHandler.getTagValue( node, "name" ) );
+    } finally {
+      sharedObjectsIO.unlock();
+    }
+  }
+
+  @Test
+  public void testDeleteCaseInsensitive() throws Exception {
+    SharedObjectsIO sharedObjectsIO = createVfsSharedObject( ROOT_FILE_PATH );
+    try {
+      sharedObjectsIO.lock();
+
+      String connectionName = "NewConn";
+      // Create a new DatabaseMeta object
+      DatabaseMeta dbMeta = createDatabaseMeta( connectionName );
+      sharedObjectsIO.saveSharedObject( db_type, dbMeta.getName(), dbMeta.toNode() );
+
+      // Delete the SharedObject
+      sharedObjectsIO.delete( db_type, "newconn" );
+      Map<String, Node> nodesMap = sharedObjectsIO.getSharedObjects( db_type );
+      assertEquals( 0, nodesMap.size() );
+    } finally {
+      sharedObjectsIO.unlock();
+    }
+  }
+
+  @Test
+  public void testEmptyNameSharedObjectLifecycleAcrossReload() throws Exception {
+    String rootPath = ROOT_FILE_PATH + "-empty-name";
+    FileObject projectDirectory = KettleVFS.getInstance( DefaultBowl.getInstance() ).getFileObject( rootPath );
+    projectDirectory.createFolder();
+
+    String emptyName = "";
+
+    SharedObjectsIO sharedObjectsIO = new VfsSharedObjectsIO( rootPath, DefaultBowl.getInstance() );
+    try {
+      sharedObjectsIO.lock();
+
+      DatabaseMeta dbMeta = createDatabaseMeta( emptyName );
+      sharedObjectsIO.saveSharedObject( db_type, emptyName, dbMeta.toNode() );
+
+      Map<String, Node> nodesMap = sharedObjectsIO.getSharedObjects( db_type );
+      assertEquals( 1, nodesMap.size() );
+      assertNotNull( nodesMap.get( emptyName ) );
+
+      Node node = sharedObjectsIO.getSharedObject( db_type, emptyName );
+      assertNotNull( node );
+    } finally {
+      sharedObjectsIO.unlock();
+    }
+
+    SharedObjectsIO reloadedSharedObjectsIO = new VfsSharedObjectsIO( rootPath, DefaultBowl.getInstance() );
+    try {
+      reloadedSharedObjectsIO.lock();
+
+      Map<String, Node> reloadedNodesMap = reloadedSharedObjectsIO.getSharedObjects( db_type );
+      assertEquals( 1, reloadedNodesMap.size() );
+      assertNotNull( reloadedNodesMap.get( emptyName ) );
+
+      Node reloadedNode = reloadedSharedObjectsIO.getSharedObject( db_type, emptyName );
+      assertNotNull( reloadedNode );
+
+      reloadedSharedObjectsIO.delete( db_type, emptyName );
+      assertEquals( 0, reloadedSharedObjectsIO.getSharedObjects( db_type ).size() );
+      assertNull( reloadedSharedObjectsIO.getSharedObject( db_type, emptyName ) );
+    } finally {
+      reloadedSharedObjectsIO.unlock();
+    }
+  }
+
+  private VfsSharedObjectsIO createVfsSharedObject( String rootPath ) throws Exception {
+    FileObject projectDirectory = KettleVFS.getInstance( DefaultBowl.getInstance() ).getFileObject( rootPath );
+    projectDirectory.createFolder();
+
+    return new VfsSharedObjectsIO( rootPath, DefaultBowl.getInstance() );
+  }
+
+  private DatabaseMeta createDatabaseMeta( String name ) {
+    DatabaseMeta dbMeta = new DatabaseMeta();
+    dbMeta.setName( name );
+    return dbMeta;
+  }
+}

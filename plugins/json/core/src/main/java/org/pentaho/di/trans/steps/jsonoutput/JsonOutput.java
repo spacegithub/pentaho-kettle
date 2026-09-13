@@ -1,30 +1,28 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.jsonoutput;
 
 import java.io.BufferedOutputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.nio.charset.Charset;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.vfs2.FileObject;
 import org.json.simple.JSONArray;
@@ -57,6 +55,7 @@ public class JsonOutput extends BaseStep implements StepInterface {
 
   private JsonOutputMeta meta;
   private JsonOutputData data;
+  private Date startProcessingDate;
 
   private interface CompatibilityFactory {
     public void execute( Object[] row ) throws KettleException;
@@ -187,11 +186,13 @@ public class JsonOutput extends BaseStep implements StepInterface {
 
     if ( first ) {
       first = false;
+      startProcessingDate = new Date();
       data.inputRowMeta = getInputRowMeta();
       data.inputRowMetaSize = data.inputRowMeta.size();
       if ( data.outputValue ) {
         data.outputRowMeta = data.inputRowMeta.clone();
-        meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+        meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+                        metaStore );
       }
 
       // Cache the field name indexes
@@ -222,8 +223,14 @@ public class JsonOutput extends BaseStep implements StepInterface {
   private void outPutRow( Object[] rowData ) throws KettleStepException {
     // We can now output an object
     data.jg = new JSONObject();
-    data.jg.put( data.realBlocName, data.ja );
-    String value = data.jg.toJSONString();
+    String value;
+    if ( data.realBlocName == "" ) {
+      value = data.ja.toJSONString();
+    } else {
+      data.jg.put( data.realBlocName, data.ja );
+      value = data.jg.toJSONString();
+    }
+
 
     if ( data.outputValue && data.outputRowMeta != null ) {
       Object[] outputRowData = RowDataUtil.addValueData( rowData, data.inputRowMetaSize, value );
@@ -316,7 +323,8 @@ public class JsonOutput extends BaseStep implements StepInterface {
     FileObject parentfolder = null;
     try {
       // Get parent folder
-      parentfolder = KettleVFS.getFileObject( filename, getTransMeta() ).getParent();
+      parentfolder = KettleVFS.getInstance( getTransMeta().getBowl() )
+        .getFileObject( filename, getTransMeta() ).getParent();
       if ( !parentfolder.exists() ) {
         if ( log.isDebug() ) {
           logDebug( BaseMessages.getString( PKG, "JsonOutput.Error.ParentFolderNotExist", parentfolder.getName() ) );
@@ -356,14 +364,16 @@ public class JsonOutput extends BaseStep implements StepInterface {
           // Add this to the result file names...
           ResultFile resultFile =
             new ResultFile(
-              ResultFile.FILE_TYPE_GENERAL, KettleVFS.getFileObject( filename, getTransMeta() ),
+              ResultFile.FILE_TYPE_GENERAL, KettleVFS.getInstance( getTransMeta().getBowl() )
+                .getFileObject( filename, getTransMeta() ),
               getTransMeta().getName(), getStepname() );
           resultFile.setComment( BaseMessages.getString( PKG, "JsonOutput.ResultFilenames.Comment" ) );
           addResultFile( resultFile );
         }
 
         OutputStream outputStream;
-        OutputStream fos = KettleVFS.getOutputStream( filename, getTransMeta(), meta.isFileAppended() );
+        OutputStream fos = KettleVFS.getInstance( getTransMeta().getBowl() )
+          .getOutputStream( filename, getTransMeta(), meta.isFileAppended() );
         outputStream = fos;
 
         if ( !Utils.isEmpty( meta.getEncoding() ) ) {
@@ -391,6 +401,14 @@ public class JsonOutput extends BaseStep implements StepInterface {
   }
 
   public String buildFilename() {
+
+    boolean forceSameOutputFile = "Y".equalsIgnoreCase(
+      System.getProperty( Const.KETTLE_JSON_OUTPUT_FORCE_SAME_OUTPUT_FILE, "N" ) );
+
+    if ( forceSameOutputFile ) {
+      return meta.buildFilename( environmentSubstitute( meta.getFileName() ), startProcessingDate );
+    }
+
     return meta.buildFilename( meta.getParentStepMeta().getParentTransMeta(), getCopy() + "", null, data.splitnr + "",
       false );
   }

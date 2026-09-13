@@ -1,27 +1,22 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.pur;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.pentaho.di.cluster.ClusterSchema;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.Const;
@@ -34,7 +29,7 @@ import org.pentaho.di.core.plugins.PluginInterface;
 import org.pentaho.di.core.plugins.PluginRegistry;
 import org.pentaho.di.core.plugins.StepPluginType;
 import org.pentaho.di.core.xml.XMLHandler;
-import org.pentaho.di.i18n.BaseMessages;
+import org.pentaho.di.metastore.MetaStoreConst;
 import org.pentaho.di.partition.PartitionSchema;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.Repository;
@@ -43,7 +38,7 @@ import org.pentaho.di.repository.RepositoryElementInterface;
 import org.pentaho.di.repository.RepositoryObjectType;
 import org.pentaho.di.repository.StringObjectId;
 import org.pentaho.di.shared.SharedObjectInterface;
-import org.pentaho.di.shared.SharedObjects;
+import org.pentaho.di.trans.TransDependency;
 import org.pentaho.di.trans.TransHopMeta;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.TransMeta.TransformationType;
@@ -56,7 +51,6 @@ import org.pentaho.di.trans.step.StepPartitioningMeta;
 import org.pentaho.di.trans.steps.missing.MissingTrans;
 import org.pentaho.di.ui.repository.pur.services.IConnectionAclService;
 import org.pentaho.platform.api.repository2.unified.IUnifiedRepository;
-import org.pentaho.platform.api.repository2.unified.RepositoryFilePermission;
 import org.pentaho.platform.api.repository2.unified.data.node.DataNode;
 import org.pentaho.platform.api.repository2.unified.data.node.DataNodeRef;
 import org.pentaho.platform.api.repository2.unified.data.node.DataProperty;
@@ -174,7 +168,10 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
 
   private static final String NODE_PARTITIONER_CUSTOM = "partitionerCustom";
 
+  // always by ref
   private static final String PROP_PARTITIONING_SCHEMA = "PARTITIONING_SCHEMA";
+  // always by name
+  private static final String PROP_PARTITIONING_SCHEMA_NAME = "PARTITIONING_SCHEMA_NAME";
 
   private static final String PROP_PARTITIONING_METHOD = "PARTITIONING_METHOD";
 
@@ -203,6 +200,14 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
   static final String NODE_TRANS = "transformation";
 
   static final String NODE_TRANS_PRIVATE_DATABASES = "transPrivateDatabases";
+
+  static final String NODE_TRANS_DEPENDENCIES = "transDepedencies";
+
+  static final String PROP_TRANS_DEPENDENCY_DB_NAME = "TRANS_DEPENDENCY_DB_NAME";
+
+  static final String PROP_TRANS_DEPENDENCY_TABLE = "TRANS_DEPENDENCY_TABLE";
+
+  static final String PROP_TRANS_DEPENDENCY_FIELD = "TRANS_DEPENDENCY_FIELD";
 
   static final String PROP_TRANS_PRIVATE_DATABASE_NAMES = "PROP_TRANS_PRIVATE_DATABASE_NAMES";
 
@@ -252,30 +257,8 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
     throws KettleException {
     TransMeta transMeta = (TransMeta) element;
 
-    Set<String> privateDatabases = null;
-    // read the private databases
-    DataNode privateDbsNode = rootNode.getNode( NODE_TRANS_PRIVATE_DATABASES );
-    // if we have node than we use one of two new formats. The older format that took
-    // too long to save, uses a separate node for each database name, the new format
-    // puts all the database names in the PROP_TRANS_PRIVATE_DATABASE_NAMES property.
-    // BACKLOG-6635
-    if ( privateDbsNode != null ) {
-      privateDatabases = new HashSet<String>();
-      if ( privateDbsNode.hasProperty( PROP_TRANS_PRIVATE_DATABASE_NAMES ) ) {
-        for ( String privateDatabaseName : getString( privateDbsNode, PROP_TRANS_PRIVATE_DATABASE_NAMES ).split(
-            TRANS_PRIVATE_DATABASE_DELIMITER ) ) {
-          if ( !privateDatabaseName.isEmpty() ) {
-            privateDatabases.add( privateDatabaseName );
-          }
-        }
-      } else {
-        for ( DataNode privateDatabase : privateDbsNode.getNodes() ) {
-          privateDatabases.add( privateDatabase.getName() );
-        }
-      }
-    }
-    transMeta.setPrivateDatabases( privateDatabases );
-
+    // just load these once, and only if needed by a step
+    List<ClusterSchema> clusterSchemas = null;
     // read the steps...
     //
     DataNode stepsNode = rootNode.getNode( NODE_STEPS );
@@ -336,7 +319,7 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
 
       // Read the metadata from the repository too...
       //
-      RepositoryProxy proxy = new RepositoryProxy( stepNode.getNode( NODE_STEP_CUSTOM ) );
+      RepositoryProxy proxy = new RepositoryProxy( stepNode.getNode( NODE_STEP_CUSTOM ), this.repo );
       if ( !stepMeta.isMissing() ) {
         readRepCompatibleStepMeta( stepMetaInterface, proxy, null, transMeta.getDatabases() );
         stepMetaInterface.readRep( proxy, transMeta.getMetaStore(), null, transMeta.getDatabases() );
@@ -345,15 +328,20 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
 
       // Get the partitioning as well...
       StepPartitioningMeta stepPartitioningMeta = new StepPartitioningMeta();
-      if ( stepNode.hasProperty( PROP_PARTITIONING_SCHEMA ) ) {
-        String partSchemaId = stepNode.getProperty( PROP_PARTITIONING_SCHEMA ).getRef().getId().toString();
-        String schemaName = repo.loadPartitionSchema( new StringObjectId( partSchemaId ), null ).getName();
+      if ( stepNode.hasProperty( PROP_PARTITIONING_SCHEMA ) || stepNode.hasProperty( PROP_PARTITIONING_SCHEMA_NAME ) ) {
+        String schemaName;
+        if ( stepNode.hasProperty( PROP_PARTITIONING_SCHEMA ) ) {
+          String partSchemaId = stepNode.getProperty( PROP_PARTITIONING_SCHEMA ).getRef().getId().toString();
+          schemaName = repo.loadPartitionSchema( new StringObjectId( partSchemaId ), null ).getName();
+        } else {
+          schemaName = stepNode.getProperty( PROP_PARTITIONING_SCHEMA_NAME ).getString();
+        }
 
         stepPartitioningMeta.setPartitionSchemaName( schemaName );
         String methodCode = getString( stepNode, PROP_PARTITIONING_METHOD );
         stepPartitioningMeta.setMethod( StepPartitioningMeta.getMethod( methodCode ) );
         if ( stepPartitioningMeta.getPartitioner() != null ) {
-          proxy = new RepositoryProxy( stepNode.getNode( NODE_PARTITIONER_CUSTOM ) );
+          proxy = new RepositoryProxy( stepNode.getNode( NODE_PARTITIONER_CUSTOM ), this.repo );
           stepPartitioningMeta.getPartitioner().loadRep( proxy, null );
         }
         stepPartitioningMeta.hasChanged( true );
@@ -364,9 +352,13 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
       // Get the cluster schema name
       String clusterSchemaName = getString( stepNode, PROP_CLUSTER_SCHEMA );
       stepMeta.setClusterSchemaName( clusterSchemaName );
-      if ( clusterSchemaName != null && transMeta.getClusterSchemas() != null ) {
+      if ( clusterSchemaName != null) {
+        if ( clusterSchemas == null ) {
+          // only load these if they are used. 
+          clusterSchemas = transMeta.getClusterSchemas();
+        }
         // Get the cluster schema from the given name
-        for ( ClusterSchema clusterSchema : transMeta.getClusterSchemas() ) {
+        for ( ClusterSchema clusterSchema : clusterSchemas ) {
           if ( clusterSchema.getName().equals( clusterSchemaName ) ) {
             stepMeta.setClusterSchema( clusterSchema );
             break;
@@ -455,6 +447,7 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
     // Load the details at the end, to make sure we reference the databases correctly, etc.
     //
     loadTransformationDetails( rootNode, transMeta );
+    loadDependencies( rootNode, transMeta );
 
     transMeta.eraseParameters();
 
@@ -519,7 +512,14 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
 
     if ( rootNode.hasProperty( PROP_DATABASE_LOG ) ) {
       String id = rootNode.getProperty( PROP_DATABASE_LOG ).getRef().getId().toString();
-      DatabaseMeta conn = DatabaseMeta.findDatabase( transMeta.getDatabases(), new StringObjectId( id ) );
+      ObjectId objectId = new StringObjectId( id );
+      DatabaseMeta conn = DatabaseMeta.findDatabase( transMeta.getDatabases(), objectId );
+      if ( conn == null) {
+        // the referenced ObjectId is not in the current set of DBs. It may have been overridden by another.
+        // Try to find the original DB and load the overriding one by name.
+        DatabaseMeta orig = repo.loadDatabaseMeta( objectId, null );
+        conn = DatabaseMeta.findDatabase( transMeta.getDatabases(), orig.getName() );
+      }
       transMeta.getTransLogTable().setConnectionName( conn.getName() );
     }
     transMeta.getTransLogTable().setTableName( getString( rootNode, PROP_TABLE_NAME_LOG ) );
@@ -570,7 +570,6 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
       usingThreadPriorityManagement = rootNode.getProperty( PROP_USING_THREAD_PRIORITIES ).getBoolean();
     }
     transMeta.setUsingThreadPriorityManagment( usingThreadPriorityManagement );
-    transMeta.setSharedObjectsFile( getString( rootNode, PROP_SHARED_FILE ) );
     String transTypeCode = getString( rootNode, PROP_TRANSFORMATION_TYPE );
     transMeta.setTransformationType( TransformationType.getTransformationTypeByCode( transTypeCode ) );
 
@@ -600,13 +599,6 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
     TransMeta transMeta = (TransMeta) element;
 
     DataNode rootNode = new DataNode( NODE_TRANS );
-
-    if ( transMeta.getPrivateDatabases() != null ) {
-      // save all private transformations database name http://jira.pentaho.com/browse/PPP-3405
-      String privateDatabaseNames = StringUtils.join( transMeta.getPrivateDatabases(), TRANS_PRIVATE_DATABASE_DELIMITER );
-      DataNode privateDatabaseNode = rootNode.addNode( NODE_TRANS_PRIVATE_DATABASES );
-      privateDatabaseNode.setProperty( PROP_TRANS_PRIVATE_DATABASE_NAMES, privateDatabaseNames );
-    }
 
     DataNode stepsNode = rootNode.addNode( NODE_STEPS );
 
@@ -640,9 +632,9 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
       //
       StepMetaInterface stepMetaInterface = step.getStepMetaInterface();
       DataNode stepCustomNode = new DataNode( NODE_STEP_CUSTOM );
-      Repository proxy = new RepositoryProxy( stepCustomNode );
+      Repository proxy = new RepositoryProxy( stepCustomNode, this.repo );
       compatibleSaveRep( stepMetaInterface, proxy, null, null );
-      stepMetaInterface.saveRep( proxy, proxy.getMetaStore(), null, null );
+      stepMetaInterface.saveRep( proxy, MetaStoreConst.getDefaultMetastore(), null, null );
       stepNode.addNode( stepCustomNode );
 
       // Save the partitioning information by reference as well...
@@ -650,12 +642,16 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
       StepPartitioningMeta partitioningMeta = step.getStepPartitioningMeta();
       if ( partitioningMeta != null && partitioningMeta.getPartitionSchema() != null
           && partitioningMeta.isPartitioned() ) {
-        DataNodeRef ref = new DataNodeRef( partitioningMeta.getPartitionSchema().getObjectId().getId() );
-        stepNode.setProperty( PROP_PARTITIONING_SCHEMA, ref );
+        if ( partitioningMeta.getPartitionSchema().getObjectId() != null ) {
+          DataNodeRef ref = new DataNodeRef( partitioningMeta.getPartitionSchema().getObjectId().getId() );
+          stepNode.setProperty( PROP_PARTITIONING_SCHEMA, ref );
+        } else {
+          stepNode.setProperty( PROP_PARTITIONING_SCHEMA_NAME, partitioningMeta.getPartitionSchema().getName() );
+        }
         stepNode.setProperty( PROP_PARTITIONING_METHOD, partitioningMeta.getMethodCode() ); // method of partitioning
         if ( partitioningMeta.getPartitioner() != null ) {
           DataNode partitionerCustomNode = new DataNode( NODE_PARTITIONER_CUSTOM );
-          proxy = new RepositoryProxy( partitionerCustomNode );
+          proxy = new RepositoryProxy( partitionerCustomNode, this.repo );
           partitioningMeta.getPartitioner().saveRep( proxy, null, null );
           stepNode.addNode( partitionerCustomNode );
         }
@@ -732,6 +728,8 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
     //
     saveTransformationDetails( rootNode, transMeta );
 
+    saveDependencies( rootNode, transMeta );
+
     return rootNode;
   }
 
@@ -739,6 +737,39 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
   private void compatibleSaveRep( StepMetaInterface stepMetaInterface, Repository repository,
       ObjectId id_transformation, ObjectId objectId ) throws KettleException {
     stepMetaInterface.saveRep( repository, id_transformation, objectId );
+  }
+
+  /**
+   * Save transformation dependencies
+   * @param rootNode
+   * @param transMeta
+   */
+  private void saveDependencies( final DataNode rootNode, final TransMeta transMeta ) {
+    DataNode dependenciesNodeRoot = new DataNode( NODE_TRANS_DEPENDENCIES );
+    rootNode.addNode( dependenciesNodeRoot );
+    for ( TransDependency transDependency : transMeta.getDependencies() ) {
+      DataNode dependencyNode = new DataNode(
+        sanitizeNodeName( String.join( "_", transDependency.getDatabase().getName(),
+          transDependency.getTablename(), transDependency.getFieldname() ) ) );
+      dependencyNode.setProperty( PROP_TRANS_DEPENDENCY_DB_NAME, transDependency.getDatabase().getName() );
+      dependencyNode.setProperty( PROP_TRANS_DEPENDENCY_TABLE, transDependency.getTablename() );
+      dependencyNode.setProperty( PROP_TRANS_DEPENDENCY_FIELD, transDependency.getFieldname() );
+      dependenciesNodeRoot.addNode( dependencyNode );
+    }
+  }
+
+  private void loadDependencies( final DataNode rootNode, final TransMeta transMeta ) {
+    if ( rootNode.hasNode( NODE_TRANS_DEPENDENCIES ) ) {
+      DataNode dependenciesNode = rootNode.getNode( NODE_TRANS_DEPENDENCIES );
+      for ( DataNode dependencyNode : dependenciesNode.getNodes() ) {
+        TransDependency transDependency = new TransDependency();
+        transDependency.setTablename( getString( dependencyNode, PROP_TRANS_DEPENDENCY_TABLE ) );
+        transDependency.setFieldname( getString( dependencyNode, PROP_TRANS_DEPENDENCY_FIELD ) );
+        String dbName = getString( dependencyNode, PROP_TRANS_DEPENDENCY_DB_NAME );
+        transDependency.setDatabase( transMeta.findDatabase( dbName ) );
+        transMeta.addDependency( transDependency );
+      }
+    }
   }
 
   private void saveTransformationDetails( final DataNode rootNode, final TransMeta transMeta ) throws KettleException {
@@ -786,7 +817,6 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
     rootNode.setProperty( PROP_FEEDBACK_SHOWN, transMeta.isFeedbackShown() );
     rootNode.setProperty( PROP_FEEDBACK_SIZE, transMeta.getFeedbackSize() );
     rootNode.setProperty( PROP_USING_THREAD_PRIORITIES, transMeta.isUsingThreadPriorityManagment() );
-    rootNode.setProperty( PROP_SHARED_FILE, transMeta.getSharedObjectsFile() );
 
     rootNode.setProperty( PROP_CAPTURE_STEP_PERFORMANCE, transMeta.isCapturingStepPerformanceSnapShots() );
     rootNode.setProperty( PROP_STEP_PERFORMANCE_CAPTURING_DELAY, transMeta.getStepPerformanceCapturingDelay() );
@@ -810,22 +840,12 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
     AttributesMapUtil.saveAttributesMap( rootNode, transMeta );
   }
 
-  @SuppressWarnings( "unchecked" )
-  public SharedObjects loadSharedObjects( final RepositoryElementInterface element,
-      final Map<RepositoryObjectType, List<? extends SharedObjectInterface>> sharedObjectsByType )
+  @Override
+  @Deprecated // Shared Object reads should now go through a SharedObjectsIO
+  public void loadSharedObjects( final RepositoryElementInterface element,
+      final Map<RepositoryObjectType, List<? extends SharedObjectInterface<?>>> sharedObjectsByType )
     throws KettleException {
-    TransMeta transMeta = (TransMeta) element;
-    transMeta.setSharedObjects( transMeta.readSharedObjects() );
-
-    // Repository objects take priority so let's overwrite them...
-    //
-    readDatabases( transMeta, true, (List<DatabaseMeta>) sharedObjectsByType.get( RepositoryObjectType.DATABASE ) );
-    readPartitionSchemas( transMeta, true, (List<PartitionSchema>) sharedObjectsByType
-        .get( RepositoryObjectType.PARTITION_SCHEMA ) );
-    readSlaves( transMeta, true, (List<SlaveServer>) sharedObjectsByType.get( RepositoryObjectType.SLAVE_SERVER ) );
-    readClusters( transMeta, true, (List<ClusterSchema>) sharedObjectsByType.get( RepositoryObjectType.CLUSTER_SCHEMA ) );
-
-    return transMeta.getSharedObjects();
+    // NO-OP
   }
 
   /**
@@ -837,12 +857,13 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
    *          if an object with the same name exists, overwrite
    * @throws KettleException
    */
-  protected void readDatabases( TransMeta transMeta, boolean overWriteShared, List<DatabaseMeta> databaseMetas ) {
+  protected void readDatabases( TransMeta transMeta, boolean overWriteShared, List<DatabaseMeta> databaseMetas )
+    throws KettleException {
     for ( DatabaseMeta databaseMeta : databaseMetas ) {
       if ( overWriteShared || transMeta.findDatabase( databaseMeta.getName() ) == null ) {
         if ( databaseMeta.getName() != null ) {
           databaseMeta.shareVariablesWith( transMeta );
-          transMeta.addOrReplaceDatabase( databaseMeta );
+          transMeta.getDatabaseManagementInterface().add( databaseMeta );
           if ( !overWriteShared ) {
             databaseMeta.setChanged( false );
           }
@@ -918,51 +939,10 @@ public class TransDelegate extends AbstractDelegate implements ITransformer, ISh
     }
   }
 
+  @Deprecated // Shared Object writes should now go through a SharedObjectsIO
   public void saveSharedObjects( final RepositoryElementInterface element, final String versionComment )
     throws KettleException {
-    TransMeta transMeta = (TransMeta) element;
-    // First store the databases and other depending objects in the transformation.
-    //
-
-    // Only store if the database has actually changed or doesn't have an object ID (imported)
-    //
-    for ( DatabaseMeta databaseMeta : transMeta.getDatabases() ) {
-      if ( databaseMeta.hasChanged() || databaseMeta.getObjectId() == null ) {
-        if ( databaseMeta.getObjectId() == null
-            || unifiedRepositoryConnectionAclService.hasAccess( databaseMeta.getObjectId(),
-                RepositoryFilePermission.WRITE ) ) {
-          repo.save( databaseMeta, versionComment, null );
-        } else {
-          log.logError( BaseMessages.getString( PKG, "PurRepository.ERROR_0004_DATABASE_UPDATE_ACCESS_DENIED",
-              databaseMeta.getName() ) );
-        }
-      }
-    }
-
-    // Store the slave servers...
-    //
-    for ( SlaveServer slaveServer : transMeta.getSlaveServers() ) {
-      if ( slaveServer.hasChanged() || slaveServer.getObjectId() == null ) {
-        repo.save( slaveServer, versionComment, null );
-      }
-    }
-
-    // Store the cluster schemas
-    //
-    for ( ClusterSchema clusterSchema : transMeta.getClusterSchemas() ) {
-      if ( clusterSchema.hasChanged() || clusterSchema.getObjectId() == null ) {
-        repo.save( clusterSchema, versionComment, null );
-      }
-    }
-
-    // Save the partition schemas
-    //
-    for ( PartitionSchema partitionSchema : transMeta.getPartitionSchemas() ) {
-      if ( partitionSchema.hasChanged() || partitionSchema.getObjectId() == null ) {
-        repo.save( partitionSchema, versionComment, null );
-      }
-    }
-
+    // NO-OP
   }
 
 }

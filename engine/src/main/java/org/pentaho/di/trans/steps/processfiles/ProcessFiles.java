@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.processfiles;
 
@@ -113,7 +105,7 @@ public class ProcessFiles extends BaseStep implements StepInterface {
         logError( BaseMessages.getString( PKG, "ProcessFiles.Error.SourceFileEmpty" ) );
         throw new KettleException( BaseMessages.getString( PKG, "ProcessFiles.Error.SourceFileEmpty" ) );
       }
-      data.sourceFile = KettleVFS.getFileObject( sourceFilename, getTransMeta() );
+      data.sourceFile = KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( sourceFilename, getTransMeta() );
 
       if ( !data.sourceFile.exists() ) {
         logError( BaseMessages.getString( PKG, "ProcessFiles.Error.SourceFileNotExist", sourceFilename ) );
@@ -134,7 +126,7 @@ public class ProcessFiles extends BaseStep implements StepInterface {
           logError( BaseMessages.getString( PKG, "ProcessFiles.Error.TargetFileEmpty" ) );
           throw new KettleException( BaseMessages.getString( PKG, "ProcessFiles.Error.TargetFileEmpty" ) );
         }
-        data.targetFile = KettleVFS.getFileObject( targetFilename, getTransMeta() );
+        data.targetFile = KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( targetFilename, getTransMeta() );
         if ( data.targetFile.exists() ) {
           if ( log.isDetailed() ) {
             logDetailed( BaseMessages.getString( PKG, "ProcessFiles.Log.TargetFileExists", targetFilename ) );
@@ -182,7 +174,8 @@ public class ProcessFiles extends BaseStep implements StepInterface {
         case ProcessFilesMeta.OPERATION_TYPE_MOVE:
           if ( ( ( meta.isOverwriteTargetFile() && data.targetFile.exists() ) || !data.targetFile.exists() )
             && !meta.simulate ) {
-            data.sourceFile.moveTo( KettleVFS.getFileObject( targetFilename, getTransMeta() ) );
+            data.sourceFile.moveTo( KettleVFS.getInstance( getTransMeta().getBowl() )
+                                    .getFileObject( targetFilename, getTransMeta() ) );
             if ( log.isDetailed() ) {
               logDetailed( BaseMessages.getString(
                 PKG, "ProcessFiles.Log.SourceFileMoved", sourceFilename, targetFilename ) );

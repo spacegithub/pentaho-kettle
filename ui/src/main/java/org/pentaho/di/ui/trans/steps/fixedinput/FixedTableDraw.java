@@ -1,27 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.fixedinput;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Vector;
 
@@ -37,6 +31,7 @@ import org.eclipse.swt.events.PaintListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.graphics.Color;
+import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Point;
@@ -45,6 +40,7 @@ import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.ScrollBar;
+import org.pentaho.di.core.Const;
 import org.pentaho.di.core.row.value.ValueMetaFactory;
 import org.pentaho.di.trans.steps.fixedinput.FixedFileInputField;
 import org.pentaho.di.ui.core.PropsUI;
@@ -121,7 +117,17 @@ public class FixedTableDraw extends Canvas {
     dummy_gc = new GC( dummy_image );
     // dummy_gc.setFont(font);
     String teststring = "ABCDEF";
-    fontwidth = Math.round( dummy_gc.textExtent( teststring ).x / teststring.length() );
+    if ( Const.isRunningOnWebspoonMode() ) {
+      try {
+        Class textSizeUtil = Class.forName( "org.eclipse.rap.rwt.internal.textsize.TextSizeUtil" );
+        Method textExtent = textSizeUtil.getDeclaredMethod( "textExtent", Font.class, String.class, int.class );
+        fontwidth =  Math.round( ( (Point) textExtent.invoke( null, getFont(), teststring, 0 ) ).x / teststring.length() );
+      } catch ( ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException e ) {
+        e.printStackTrace();
+      }
+    } else {
+      fontwidth = Math.round( dummy_gc.textExtent( teststring ).x / teststring.length() );
+    }
 
     setBackground( bg );
     // setFont(font);
@@ -132,16 +138,19 @@ public class FixedTableDraw extends Canvas {
       }
     } );
 
-    addDisposeListener( new DisposeListener() {
-      public void widgetDisposed( DisposeEvent arg0 ) {
-        dummy_gc.dispose();
-        dummy_image.dispose();
+    if ( !Const.isRunningOnWebspoonMode() ) {
+      addDisposeListener( new DisposeListener() {
+        public void widgetDisposed( DisposeEvent arg0 ) {
+          dummy_gc.dispose();
+          dummy_image.dispose();
 
-        if ( cache_image != null ) {
-          cache_image.dispose();
+          if ( cache_image != null ) {
+            cache_image.dispose();
+          }
         }
-      }
-    } );
+      } );
+    }
+
 
     hori.addSelectionListener( new SelectionAdapter() {
       public void widgetSelected( SelectionEvent e ) {
@@ -346,16 +355,21 @@ public class FixedTableDraw extends Canvas {
     int fromx = -offset.x / fontwidth;
     int tox = fromx + ( area.x / fontwidth );
 
-    Image image = new Image( display, area.x, area.y );
+    Image image = null;
+    GC gc = null;
 
     if ( fromx != prev_fromx || fromy != prev_fromy || tox != prev_tox || toy != prev_toy ) {
-      if ( cache_image != null ) {
-        cache_image.dispose();
-        cache_image = null;
+      if ( Const.isRunningOnWebspoonMode() ) {
+        // Directly draw on the canvas
+        gc = new GC( this );
+      } else {
+        if ( cache_image != null ) {
+          cache_image.dispose();
+          cache_image = null;
+        }
+        cache_image = new Image( display, area.x, area.y );
+        gc = new GC( cache_image );
       }
-      cache_image = new Image( display, area.x, area.y );
-
-      GC gc = new GC( cache_image );
 
       // We have a cached image: draw onto it!
       int linepos = TOP - 5;
@@ -431,13 +445,17 @@ public class FixedTableDraw extends Canvas {
           + ( i + 1 ) * ( fontheight + 2 ) + offset.y );
       }
 
-      gc.dispose();
+      if ( !Const.isRunningOnWebspoonMode() ) {
+        gc.dispose();
+      }
     }
 
-    GC gc = new GC( image );
-
-    // Draw the cached image onto the canvas image:
-    gc.drawImage( cache_image, 0, 0 );
+    if ( !Const.isRunningOnWebspoonMode() ) {
+      image = new Image( display, area.x, area.y );
+      gc = new GC( image );
+      // Draw the cached image onto the canvas image:
+      gc.drawImage( cache_image, 0, 0 );
+    }
 
     // Also draw the markers...
     gc.setForeground( red );
@@ -456,10 +474,12 @@ public class FixedTableDraw extends Canvas {
       drawMarker( gc, potential_click, area.y );
     }
 
-    // Draw the image:
-    e.gc.drawImage( image, 0, 0 );
+    if ( !Const.isRunningOnWebspoonMode() ) {
+      // Draw the image:
+      e.gc.drawImage( image, 0, 0 );
+      image.dispose();
+    }
     gc.dispose();
-    image.dispose();
   }
 
   private void drawMarker( GC gc, int x, int maxy ) {

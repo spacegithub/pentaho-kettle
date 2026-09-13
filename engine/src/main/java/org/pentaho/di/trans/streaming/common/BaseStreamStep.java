@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.streaming.common;
 
@@ -55,7 +47,7 @@ public class BaseStreamStep extends BaseStep {
   private static final Class<?> PKG = BaseStreamStep.class;
   protected BaseStreamStepMeta variablizedStepMeta;
 
-  protected SubtransExecutor subtransExecutor;
+  private SubtransExecutor subtransExecutor;
   protected StreamWindow<List<Object>, Result> window;
   protected StreamSource<List<Object>> source;
 
@@ -64,6 +56,11 @@ public class BaseStreamStep extends BaseStep {
     super( stepMeta, stepDataInterface, copyNr, transMeta, trans );
   }
 
+  public BaseStreamStepMeta getVariablizedStepMeta() {
+    return variablizedStepMeta;
+  }
+
+  @Override
   public boolean init( StepMetaInterface stepMetaInterface, StepDataInterface stepDataInterface ) {
     Preconditions.checkNotNull( stepMetaInterface );
     variablizedStepMeta = (BaseStreamStepMeta) stepMetaInterface;
@@ -74,12 +71,12 @@ public class BaseStreamStep extends BaseStep {
 
     try {
       TransMeta transMeta = TransExecutorMeta
-        .loadMappingMeta( variablizedStepMeta, getTransMeta().getRepository(), getTransMeta().getMetaStore(),
-          getParentVariableSpace() );
+        .loadMappingMeta( getTransMeta().getBowl(), variablizedStepMeta, getTransMeta().getRepository(),
+           getTransMeta().getMetaStore(), getParentVariableSpace() );
       variablizedStepMeta = (BaseStreamStepMeta) variablizedStepMeta.withVariables( this );
       subtransExecutor = new SubtransExecutor( getStepname(),
         getTrans(), transMeta, true,
-        new TransExecutorParameters(), variablizedStepMeta.getSubStep() );
+        new TransExecutorParameters(), variablizedStepMeta.getSubStep(), getPrefetchCount() );
 
     } catch ( KettleException e ) {
       log.logError( e.getLocalizedMessage(), e );
@@ -114,24 +111,27 @@ public class BaseStreamStep extends BaseStep {
     Preconditions.checkNotNull( source );
     Preconditions.checkNotNull( window );
 
-    source.open();
+    try {
+      source.open();
 
-    bufferStream().forEach( result -> {
-      if ( result.isSafeStop() ) {
-        getTrans().safeStop();
-      }
+      bufferStream().forEach( result -> {
+        if ( result.isSafeStop() ) {
+          getTrans().safeStop();
+        }
 
-      putRows( result.getRows() );
-    } );
-    super.setOutputDone();
+        putRows( result.getRows() );
+      } );
+      super.setOutputDone();
 
-    // Needed for when an Abort Step is used.
-    source.close();
+    } finally {
+      // Needed for when an Abort Step is used.
+      source.close();
+    }
     return false;
   }
 
   private Iterable<Result> bufferStream() {
-    return window.buffer( source.observable() );
+    return window.buffer( source.flowable() );
   }
 
   @Override
@@ -181,11 +181,32 @@ public class BaseStreamStep extends BaseStep {
     }
   }
 
+  /**
+   * Get Prefetch Count
+   *
+   * @return the number of messages to prefetch from the broker
+   */
+  protected int getPrefetchCount() {
+    try {
+      return Integer.parseInt( variablizedStepMeta.getPrefetchCount() );
+    } catch ( NumberFormatException nfe ) {
+      return BaseStreamStepMeta.PREFETCH;
+    }
+  }
+
   protected long getDuration() {
     try {
       return Long.parseLong( variablizedStepMeta.getBatchDuration() );
     } catch ( NumberFormatException nfe ) {
       return 5000L;
+    }
+  }
+
+  protected int getParallelism() {
+    try {
+      return Integer.parseInt( variablizedStepMeta.getParallelism() );
+    } catch ( NumberFormatException nfe ) {
+      return 1;
     }
   }
 
@@ -201,5 +222,9 @@ public class BaseStreamStep extends BaseStep {
   @VisibleForTesting
   public void setSource( StreamSource<List<Object>> source ) {
     this.source = source;
+  }
+
+  public SubtransExecutor getSubtransExecutor() {
+    return subtransExecutor;
   }
 }

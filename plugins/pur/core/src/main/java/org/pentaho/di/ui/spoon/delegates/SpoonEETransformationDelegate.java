@@ -1,19 +1,16 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.ui.spoon.delegates;
 
 import org.pentaho.di.core.exception.KettleException;
@@ -29,20 +26,31 @@ public class SpoonEETransformationDelegate extends SpoonTransformationDelegate i
 
   private static final long serialVersionUID = -2067024540694335010L; /* EESOURCE: UPDATE SERIALVERUID */
 
-  ILockService service;
-
   public SpoonEETransformationDelegate( Spoon spoon ) {
     super( spoon );
+  }
+
+  /**
+   * Retrieves the current {@link ILockService} from the repository. This must be fetched each time rather than
+   * cached, because after a session timeout and reconnection the repository creates new service instances backed
+   * by fresh web-service stubs. Holding a stale reference would cause
+   * {@code "close method has already been invoked"} errors.
+   *
+   * @return the lock service, or {@code null} if unavailable
+   */
+  private ILockService getLockService() {
     Repository repository = spoon.getRepository();
+    if ( repository == null ) {
+      return null;
+    }
     try {
       if ( repository.hasService( ILockService.class ) ) {
-        service = (ILockService) repository.getService( ILockService.class );
-      } else {
-        throw new IllegalStateException();
+        return (ILockService) repository.getService( ILockService.class );
       }
     } catch ( KettleException e ) {
-      throw new RuntimeException( e );
+      log.logDebug( "Unable to retrieve ILockService from repository", e );
     }
+    return null;
   }
 
   @Override
@@ -52,6 +60,7 @@ public class SpoonEETransformationDelegate extends SpoonTransformationDelegate i
     if ( tabEntry != null ) {
       TabItem tabItem = tabEntry.getTabItem();
       try {
+        ILockService service = getLockService();
         if ( ( service != null ) && ( transMeta.getObjectId() != null )
             && ( service.getTransformationLock( transMeta.getObjectId() ) != null ) ) {
           tabItem.setImage( GUIResource.getInstance().getImageLocked() );

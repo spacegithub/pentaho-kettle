@@ -1,28 +1,18 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
 
-package org.pentaho.di.ui.job.entries.missing;
 
-import java.util.List;
+
+package org.pentaho.di.ui.job.entries.missing;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
@@ -36,6 +26,8 @@ import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Shell;
 import org.pentaho.di.core.Const;
+import org.pentaho.di.core.plugins.PluginInterface;
+import org.pentaho.di.core.plugins.PluginRegistry;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.job.entries.missing.MissingEntry;
@@ -46,6 +38,9 @@ import org.pentaho.di.ui.core.PropsUI;
 import org.pentaho.di.ui.core.gui.GUIResource;
 import org.pentaho.di.ui.job.entry.JobEntryDialog;
 import org.pentaho.di.ui.spoon.Spoon;
+import org.pentaho.di.ui.spoon.SpoonPluginType;
+
+import java.util.List;
 
 public class MissingEntryDialog extends JobEntryDialog implements JobEntryDialogInterface {
   private static Class<?> PKG = MissingEntryDialog.class;
@@ -75,6 +70,8 @@ public class MissingEntryDialog extends JobEntryDialog implements JobEntryDialog
 
   private String getErrorMessage( List<MissingEntry> missingEntries, int mode ) {
     String message = "";
+    boolean hasPluginManager = hasPluginManager();
+
     if ( mode == MISSING_JOB_ENTRIES ) {
       StringBuilder entries = new StringBuilder();
       for ( MissingEntry entry : missingEntries ) {
@@ -84,19 +81,29 @@ public class MissingEntryDialog extends JobEntryDialog implements JobEntryDialog
           entries.append( "- " + entry.getName() + " - " + entry.getMissingPluginId() + "\n" );
         }
       }
-      message = BaseMessages.getString( PKG, "MissingEntryDialog.MissingJobEntries", entries.toString() );
+      message = BaseMessages.getString( PKG, "MissingEntryDialog.MissingJobEntries", entries.toString(),
+        (hasPluginManager ? " " + BaseMessages.getString( PKG, "MissingEntryDialog.PluginManagerMessage") : "." ) );
     }
 
     if ( mode == MISSING_JOB_ENTRY_ID ) {
       message =
-          BaseMessages.getString( PKG, "MissingEntryDialog.MissingJobEntryId", jobEntryInt.getName() + " - "
-              + ( (MissingEntry) jobEntryInt ).getMissingPluginId() );
+          BaseMessages.getString( PKG, "MissingEntryDialog.MissingJobEntryId",
+            jobEntryInt.getName() + " - " + ( (MissingEntry) jobEntryInt ).getMissingPluginId(),
+            (hasPluginManager ? " " + BaseMessages.getString( PKG, "MissingEntryDialog.PluginManagerMessage") : "." ) );
     }
+
     return message;
   }
 
-  public JobEntryInterface open() {
+  // A bit of a nasty hack... Plugin Manager is itself a plugin, and one that is not currently distributed with CE.
+  // We check for the presence of a plugin with this ID to determine whether this dialog should have a button to
+  // open the plugin manager interface.
+  private boolean hasPluginManager() {
+    PluginInterface pluginManagerPlugin = PluginRegistry.getInstance().findPluginWithId( SpoonPluginType.class, "plugin-manager-di" );
+    return pluginManagerPlugin != null;
+  }
 
+  public JobEntryInterface open() {
     this.props = PropsUI.getInstance();
     Display display = shellParent.getDisplay();
     int margin = Const.MARGIN;
@@ -177,20 +184,22 @@ public class MissingEntryDialog extends JobEntryDialog implements JobEntryDialog
       fdSearch.bottom = new FormAttachment( closeButton, 0, SWT.BOTTOM );
     }
 
-    Button searchButton = new Button( shell, SWT.PUSH );
-    props.setLook( searchButton );
-    searchButton.setText( BaseMessages.getString( PKG, "MissingEntryDialog.SearchMarketplace" ) );
-    searchButton.setLayoutData( fdSearch );
-    searchButton.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        try {
-          shell.dispose();
-          Spoon.getInstance().openMarketplace();
-        } catch ( Exception ex ) {
-          ex.printStackTrace();
+    if ( hasPluginManager() ) {
+      Button searchButton = new Button( shell, SWT.PUSH );
+      props.setLook( searchButton );
+      searchButton.setText( BaseMessages.getString( PKG, "MissingEntryDialog.OpenPluginManager" ) );
+      searchButton.setLayoutData( fdSearch );
+      searchButton.addSelectionListener( new SelectionAdapter() {
+        public void widgetSelected( SelectionEvent e ) {
+          try {
+            shell.dispose();
+            Spoon.getInstance().openMarketplace();
+          } catch ( Exception ex ) {
+            ex.printStackTrace();
+          }
         }
-      }
-    } );
+      } );
+    }
 
     shell.pack();
     shell.open();

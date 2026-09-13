@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.database.util;
 
@@ -108,6 +100,21 @@ public class DatabaseLogExceptionFactoryTest {
     assertEquals( SUPPRESSABLE_WITH_SHORT_MESSAGE, strategyName );
   }
 
+  @Test public void testExceptionStrategyWithPacketTooBigException80driver() {
+    DatabaseMeta databaseMeta = mock( DatabaseMeta.class );
+    DatabaseInterface databaseInterface = new MySQLDatabaseMeta();
+    com.mysql.cj.jdbc.exceptions.PacketTooBigException e = new com.mysql.cj.jdbc.exceptions.PacketTooBigException();
+
+    when( logTable.getDatabaseMeta() ).thenReturn( databaseMeta );
+    when( databaseMeta.getDatabaseInterface() ).thenReturn( databaseInterface );
+
+    LogExceptionBehaviourInterface
+      exceptionStrategy =
+      DatabaseLogExceptionFactory.getExceptionStrategy( logTable, new KettleDatabaseException( e ) );
+    String strategyName = exceptionStrategy.getClass().getName();
+    assertEquals( SUPPRESSABLE_WITH_SHORT_MESSAGE, strategyName );
+  }
+
   /**
    * PDI-5153
    * Test that in case of MaxAllowedPacketException exception there will be no stack trace in log (MariaDB)
@@ -147,6 +154,21 @@ public class DatabaseLogExceptionFactoryTest {
     assertEquals( SUPPRESSABLE_WITH_SHORT_MESSAGE, strategyName );
   }
 
+  @Test public void testExceptionStrategyWithMysqlDataTruncationException80driver() {
+    DatabaseMeta databaseMeta = mock( DatabaseMeta.class );
+    DatabaseInterface databaseInterface = new MySQLDatabaseMeta();
+    com.mysql.cj.jdbc.exceptions.MysqlDataTruncation e = new com.mysql.cj.jdbc.exceptions.MysqlDataTruncation();
+
+    when( logTable.getDatabaseMeta() ).thenReturn( databaseMeta );
+    when( databaseMeta.getDatabaseInterface() ).thenReturn( databaseInterface );
+
+    LogExceptionBehaviourInterface
+      exceptionStrategy =
+      DatabaseLogExceptionFactory.getExceptionStrategy( logTable, new KettleDatabaseException( e ) );
+    String strategyName = exceptionStrategy.getClass().getName();
+    assertEquals( SUPPRESSABLE_WITH_SHORT_MESSAGE, strategyName );
+  }
+
   /**
    * Property value has priority
    */
@@ -156,6 +178,23 @@ public class DatabaseLogExceptionFactoryTest {
     DatabaseMeta databaseMeta = mock( DatabaseMeta.class );
     DatabaseInterface databaseInterface = new MySQLDatabaseMeta();
     PacketTooBigException e = new PacketTooBigException();
+
+    when( logTable.getDatabaseMeta() ).thenReturn( databaseMeta );
+    when( databaseMeta.getDatabaseInterface() ).thenReturn( databaseInterface );
+
+    LogExceptionBehaviourInterface
+      exceptionStrategy =
+      DatabaseLogExceptionFactory.getExceptionStrategy( logTable, new KettleDatabaseException( e ) );
+    String strategyName = exceptionStrategy.getClass().getName();
+    assertEquals( THROWABLE, strategyName );
+  }
+
+  @Test public void testExceptionStrategyWithPacketTooBigExceptionPropSetY80driver() {
+    System.setProperty( DatabaseLogExceptionFactory.KETTLE_GLOBAL_PROP_NAME, PROPERTY_VALUE_TRUE );
+
+    DatabaseMeta databaseMeta = mock( DatabaseMeta.class );
+    DatabaseInterface databaseInterface = new MySQLDatabaseMeta();
+    com.mysql.cj.jdbc.exceptions.PacketTooBigException e = new com.mysql.cj.jdbc.exceptions.PacketTooBigException();
 
     when( logTable.getDatabaseMeta() ).thenReturn( databaseMeta );
     when( databaseMeta.getDatabaseInterface() ).thenReturn( databaseInterface );

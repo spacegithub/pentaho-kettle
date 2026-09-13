@@ -1,25 +1,17 @@
 //CHECKSTYLE:FileLength:OFF
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core.row.value;
 
@@ -83,12 +75,17 @@ import java.util.TimeZone;
 public class ValueMetaBase implements ValueMetaInterface {
 
   // region Default Numeric Types Parse Format
-  public static final String DEFAULT_INTEGER_PARSE_MASK = "####0";
-  public static final String DEFAULT_NUMBER_PARSE_MASK = "####0.0#########";
-  public static final String DEFAULT_BIGNUMBER_PARSE_MASK = "######0.0###################";
+  public static final String DEFAULT_INTEGER_PARSE_MASK = Const.NVL(
+    EnvUtil.getSystemProperty( Const.KETTLE_DEFAULT_INTEGER_FORMAT ), "####0" );
+  public static final String DEFAULT_NUMBER_PARSE_MASK = Const.NVL(
+    EnvUtil.getSystemProperty( Const.KETTLE_DEFAULT_NUMBER_FORMAT ), "####0.0#########" );
+  public static final String DEFAULT_BIGNUMBER_PARSE_MASK = Const.NVL(
+    EnvUtil.getSystemProperty( Const.KETTLE_DEFAULT_BIGNUMBER_FORMAT ), "######0.0###################" );
 
-  public static final String DEFAULT_DATE_PARSE_MASK = "yyyy/MM/dd HH:mm:ss.SSS";
-  public static final String DEFAULT_TIMESTAMP_PARSE_MASK = "yyyy/MM/dd HH:mm:ss.SSSSSSSSS";
+  public static final String DEFAULT_DATE_PARSE_MASK = Const.NVL( EnvUtil
+    .getSystemProperty( Const.KETTLE_DEFAULT_DATE_FORMAT ), "yyyy/MM/dd HH:mm:ss.SSS" );
+  public static final String DEFAULT_TIMESTAMP_PARSE_MASK = Const.NVL( EnvUtil
+    .getSystemProperty( Const.KETTLE_DEFAULT_DATE_FORMAT ), "yyyy/MM/dd HH:mm:ss.SSSSSSSSS" );
   // endregion
 
   // region Default Types Format
@@ -119,9 +116,6 @@ public class ValueMetaBase implements ValueMetaInterface {
 
   public static final String COMPATIBLE_DATE_FORMAT_PATTERN = "yyyy/MM/dd HH:mm:ss.SSS";
 
-  public static final Boolean EMPTY_STRING_AND_NULL_ARE_DIFFERENT = convertStringToBoolean(
-          Const.NVL( System.getProperty( Const.KETTLE_EMPTY_STRING_DIFFERS_FROM_NULL, "N" ), "N" ) );
-
   protected String name;
   protected int length;
   protected int precision;
@@ -150,6 +144,8 @@ public class ValueMetaBase implements ValueMetaInterface {
   protected boolean dateFormatLenient;
   protected boolean lenientStringToNumber;
   protected boolean ignoreTimezone;
+  protected boolean emptyStringAndNullAreDifferent;
+  protected boolean ignoreOutOfRange;
 
   protected SimpleDateFormat dateFormat;
   protected boolean dateFormatChanged;
@@ -239,14 +235,16 @@ public class ValueMetaBase implements ValueMetaInterface {
     this.identicalFormat = true;
     this.bigNumberFormatting = true;
     this.lenientStringToNumber =
-      convertStringToBoolean( Const.NVL( System.getProperty( Const.KETTLE_LENIENT_STRING_TO_NUMBER_CONVERSION, "N" ),
-        "N" ) );
+      "Y".equalsIgnoreCase( System.getProperty( Const.KETTLE_LENIENT_STRING_TO_NUMBER_CONVERSION, "N" ) );
     this.ignoreTimezone =
-      convertStringToBoolean( Const.NVL( System.getProperty( Const.KETTLE_COMPATIBILITY_DB_IGNORE_TIMEZONE, "N" ),
-        "N" ) );
+      "Y".equalsIgnoreCase( System.getProperty( Const.KETTLE_COMPATIBILITY_DB_IGNORE_TIMEZONE, "N" ) );
+    this.emptyStringAndNullAreDifferent =
+      "Y".equalsIgnoreCase( System.getProperty( Const.KETTLE_EMPTY_STRING_DIFFERS_FROM_NULL, "N" ) );
+    this.ignoreOutOfRange =
+      "Y".equalsIgnoreCase( System.getProperty( Const.KETTLE_IGNORE_OUT_OF_RANGE_EXCEPTION, "N" ) );
+
 
     this.comparator = comparator;
-
     determineSingleByteEncoding();
     setDefaultConversionMask();
   }
@@ -1029,8 +1027,8 @@ public class ValueMetaBase implements ValueMetaInterface {
 
         if ( parsePosition.getIndex() < string.length() ) {
           throw new KettleValueException( toString()
-              + " : couldn't convert String to number : non-numeric character found at position "
-              + ( parsePosition.getIndex() + 1 ) + " for value [" + string + "]" );
+              + " : couldn't convert String to number with " + ( ( getFormatMask() == null ) ? "empty format" : "format [" + getFormatMask() + "]" ) +  ": unexpected character found at position "
+              + ( parsePosition.getErrorIndex() + 1 ) + " for value [" + string + "]" );
         }
 
       }
@@ -1334,18 +1332,29 @@ public class ValueMetaBase implements ValueMetaInterface {
     try {
       Number number;
       if ( lenientStringToNumber ) {
-        number = new Long( getDecimalFormat( false ).parse( string ).longValue() );
+        number = getDecimalFormat( false ).parse( string );
       } else {
         ParsePosition parsePosition = new ParsePosition( 0 );
         number = getDecimalFormat( false ).parse( string, parsePosition );
 
         if ( parsePosition.getIndex() < string.length() ) {
           throw new KettleValueException( toString()
-              + " : couldn't convert String to number : non-numeric character found at position "
-              + ( parsePosition.getIndex() + 1 ) + " for value [" + string + "]" );
+            + " : couldn't convert String to number : non-numeric character found at position "
+            + ( parsePosition.getIndex() + 1 ) + " for value [" + string + "]" );
         }
-
       }
+
+      if ( number instanceof Double && ( number.doubleValue() < Long.MIN_VALUE
+        || number.doubleValue() > Long.MAX_VALUE ) ) {
+        log.logBasic( "Value [" + string + "] is out of range for Integer." );
+        if ( !ignoreOutOfRange ) {
+          throw new KettleValueException( toString()
+            + " : couldn't convert String to Integer : value Out of Range [" + string
+            + "]. Change the destination data type or round to the nearest value possible for Integer by setting "
+            + "property KETTLE_IGNORE_OUT_OF_RANGE_EXCEPTION to \"Y\". " );
+        }
+      }
+
       return new Long( number.longValue() );
     } catch ( Exception e ) {
       throw new KettleValueException( toString() + " : couldn't convert String to Integer", e );
@@ -1490,7 +1499,7 @@ public class ValueMetaBase implements ValueMetaInterface {
    */
   protected String convertBinaryStringToString( byte[] binary ) throws KettleValueException {
     //noinspection deprecation
-    return convertBinaryStringToString( binary, EMPTY_STRING_AND_NULL_ARE_DIFFERENT );
+    return convertBinaryStringToString( binary, emptyStringAndNullAreDifferent );
   }
 
   /*
@@ -1673,10 +1682,14 @@ public class ValueMetaBase implements ValueMetaInterface {
           // inexpensive too.
 
         case ValueMetaInterface.TYPE_BINARY:
-          byte[] origin = (byte[]) object;
-          byte[] target = new byte[origin.length];
-          System.arraycopy( origin, 0, target, 0, origin.length );
-          return target;
+          if ( object instanceof java.lang.String ) {
+            return object;
+          } else {
+            byte[] origin = (byte[]) object;
+            byte[] target = new byte[origin.length];
+            System.arraycopy( origin, 0, target, 0, origin.length );
+            return target;
+          }
 
         case ValueMetaInterface.TYPE_SERIALIZABLE:
           // Let's not create a copy but simply return the same value.
@@ -1882,7 +1895,11 @@ public class ValueMetaBase implements ValueMetaInterface {
         case TYPE_BINARY:
           switch ( storageType ) {
             case STORAGE_TYPE_NORMAL:
-              string = convertBinaryStringToString( (byte[]) object );
+              if ( object instanceof java.lang.String ) {
+                string = (String) object;
+              } else {
+                string = convertBinaryStringToString( (byte[]) object );
+              }
               break;
             case STORAGE_TYPE_BINARY_STRING:
               string = convertBinaryStringToString( (byte[]) object );
@@ -3564,7 +3581,7 @@ public class ValueMetaBase implements ValueMetaInterface {
   @Override
   public boolean isNull( Object data ) throws KettleValueException {
     //noinspection deprecation
-    return isNull( data, EMPTY_STRING_AND_NULL_ARE_DIFFERENT );
+    return isNull( data, emptyStringAndNullAreDifferent );
   }
 
   /*
@@ -4029,8 +4046,13 @@ public class ValueMetaBase implements ValueMetaInterface {
     Boolean isEmptyAndNullDiffer = convertStringToBoolean(
         Const.NVL( System.getProperty( Const.KETTLE_EMPTY_STRING_DIFFERS_FROM_NULL, "N" ), "N" ) );
 
-    if ( pol == null && isStringValue && isEmptyAndNullDiffer ) {
-      pol = Const.NULL_STRING;
+    Boolean normalizeNullStringToEmpty = !convertStringToBoolean(
+      Const.NVL( System.getProperty( Const.KETTLE_DO_NOT_NORMALIZE_NULL_STRING_TO_EMPTY, "N" ), "N" ) );
+
+    if ( normalizeNullStringToEmpty ) {
+      if ( pol == null && isStringValue && isEmptyAndNullDiffer ) {
+        pol = Const.NULL_STRING;
+      }
     }
 
     if ( pol == null ) {
@@ -4050,10 +4072,15 @@ public class ValueMetaBase implements ValueMetaInterface {
           }
         }
       } else {
+
+
+        Boolean normalizeSpacesOnlyString = !convertStringToBoolean(
+          Const.NVL( System.getProperty( Const.KETTLE_DO_NOT_NORMALIZE_SPACES_ONLY_STRING_TO_EMPTY, "N" ), "N" ) );
+
         // Verify if there are only spaces in the polled value...
         // We consider that empty as well...
         //
-        if ( Const.onlySpaces( pol ) ) {
+        if ( Const.onlySpaces( pol ) && normalizeSpacesOnlyString ) {
           return emptyValue;
         }
       }
@@ -4905,8 +4932,6 @@ public class ValueMetaBase implements ValueMetaInterface {
             // PDI-6677 - don't call 'length = rm.getColumnDisplaySize(index);'
             length = -1; // keep the length to -1, e.g. for string functions (e.g.
             // CONCAT see PDI-4812)
-          } else if ( databaseMeta.getDatabaseInterface() instanceof SQLiteDatabaseMeta ) {
-            valtype = ValueMetaInterface.TYPE_STRING;
           } else {
             length = -1;
           }
@@ -5013,7 +5038,6 @@ public class ValueMetaBase implements ValueMetaInterface {
       int originalColumnDisplaySize = originalPrecision;
       String originalColumnTypeName = rs.getString( "TYPE_NAME" );
       String originalColumnLabel = rs.getString( "REMARKS" );
-      boolean originalSigned = false; // TODO not sure this is possible to get through metadata
       int length = -1;
       int precision = -1;
       int valtype = ValueMetaInterface.TYPE_NONE;
@@ -5036,17 +5060,11 @@ public class ValueMetaBase implements ValueMetaInterface {
           break;
 
         case java.sql.Types.BIGINT:
-          // verify Unsigned BIGINT overflow!
-          //
-          if ( originalSigned ) {
-            valtype = ValueMetaInterface.TYPE_INTEGER;
-            precision = 0; // Max 9.223.372.036.854.775.807
-            length = 15;
-          } else {
-            valtype = ValueMetaInterface.TYPE_BIGNUMBER;
-            precision = 0; // Max 18.446.744.073.709.551.615
-            length = 16;
-          }
+          // SQL BigInt is equivalent to a Java Long
+          // And a Java Long is equivalent to a PDI Integer.
+          valtype = ValueMetaInterface.TYPE_INTEGER;
+          precision = 0; // Max 9.223.372.036.854.775.807
+          length = 15;
           break;
 
         case java.sql.Types.INTEGER:
@@ -5097,9 +5115,13 @@ public class ValueMetaBase implements ValueMetaInterface {
 
             // MySQL: max resolution is double precision floating point (double)
             // The (12,31) that is given back is not correct
-            if ( databaseMeta.getDatabaseInterface().isMySQLVariant() ) {
+            if ( databaseMeta.isMySQLVariant() ) {
               if ( precision >= length ) {
                 precision = -1;
+                length = -1;
+                // MySQL: Double value is giving length of 22,
+                // that exceeds the maximum length.
+              } else if ( originalColumnType == java.sql.Types.DOUBLE && length > 15 ) {
                 length = -1;
               }
             }
@@ -5165,7 +5187,7 @@ public class ValueMetaBase implements ValueMetaInterface {
         case java.sql.Types.TIME:
           valtype = ValueMetaInterface.TYPE_DATE;
           //
-          if ( databaseMeta.getDatabaseInterface().isMySQLVariant() ) {
+          if ( databaseMeta.isMySQLVariant() ) {
             String property = databaseMeta.getConnectionProperties().getProperty( "yearIsDateType" );
             if ( property != null && property.equalsIgnoreCase( "false" )
                 && "YEAR".equalsIgnoreCase( originalColumnTypeName ) ) {

@@ -1,9 +1,20 @@
 <?xml version="1.0"?>
+<!-- ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************* -->
 <?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
 <dialog id="general-datasource-window"
 	title="${DatabaseDialog.Shell.title}" 
 	appicon="ui/images/CNC.svg"
-    height="610" width="775"
+    height="755" width="775"
 	orient="vertical"
 	onload="dataHandler.loadConnectionData()"
 	buttons="accept, cancel"
@@ -12,6 +23,7 @@
 	buttonlabelcancel="${DatabaseDialog.USER_CANCEL}"
 	ondialogaccept="dataHandler.onOK()"
 	ondialogcancel="dataHandler.onCancel()"
+	proxyoutercontext="true"
 	xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
 	xmlns:pen="http://www.pentaho.org/2008/xul">
 	

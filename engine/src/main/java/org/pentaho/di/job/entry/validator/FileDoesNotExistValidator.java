@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entry.validator;
 
@@ -27,6 +19,7 @@ import java.util.List;
 
 import org.apache.commons.validator.util.ValidatorUtils;
 import org.apache.commons.vfs2.FileObject;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.CheckResultSourceInterface;
 import org.pentaho.di.core.variables.VariableSpace;
@@ -45,7 +38,7 @@ public class FileDoesNotExistValidator extends AbstractFileValidator {
 
   static final String VALIDATOR_NAME = "fileDoesNotExist";
 
-  public boolean validate( CheckResultSourceInterface source, String propertyName,
+  public boolean validate( Bowl bowl, CheckResultSourceInterface source, String propertyName,
     List<CheckResultInterface> remarks, ValidatorContext context ) {
 
     String filename = ValidatorUtils.getValueAsString( source, propertyName );
@@ -59,7 +52,7 @@ public class FileDoesNotExistValidator extends AbstractFileValidator {
     String realFileName = variableSpace.environmentSubstitute( filename );
     FileObject fileObject = null;
     try {
-      fileObject = KettleVFS.getFileObject( realFileName, variableSpace );
+      fileObject = KettleVFS.getInstance( bowl ).getFileObject( realFileName, variableSpace );
 
       if ( fileObject.exists() && failIfExists ) {
         JobEntryValidatorUtils.addFailureRemark(

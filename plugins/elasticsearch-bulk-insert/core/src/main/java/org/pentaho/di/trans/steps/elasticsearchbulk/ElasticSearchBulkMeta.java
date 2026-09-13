@@ -1,32 +1,25 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.elasticsearchbulk;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.annotations.Step;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
@@ -58,12 +51,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
-
-@Step( id = "ElasticSearchBulk", i18nPackageName = "org.pentaho.di.trans.steps.elasticsearch",
-        name = "ElasticSearchBulk.TypeLongDesc.ElasticSearchBulk",
-        description = "ElasticSearchBulk.TypeTooltipDesc.ElasticSearchBulk",
-        categoryDescription = "i18n:org.pentaho.di.trans.step:BaseStep.Category.Bulk", image = "ESB.svg",
-        documentationUrl = "Products/Data_Integration/Transformation_Step_Reference/ElasticSearch_Bulk_Insert" )
+// BACKLOG-38582 Remove specific deprecated steps and job entries from PDI, Please uncomment to enable plugin if needed.
+//@Step( id = "ElasticSearchBulk", i18nPackageName = "org.pentaho.di.trans.steps.elasticsearch",
+//        name = "ElasticSearchBulk.TypeLongDesc.ElasticSearchBulk",
+//        description = "ElasticSearchBulk.TypeTooltipDesc.ElasticSearchBulk",
+//        categoryDescription = "i18n:org.pentaho.di.trans.step:BaseStep.Category.Deprecated", image = "ui/images/deprecated.svg",
+//        documentationUrl = "mk-95pdia003/pdi-transformation-steps/elasticsearch-bulk-insert-deprecated" )
 @InjectionSupported( localizationPrefix = "ElasticSearchBulk.Injection." )
 public class ElasticSearchBulkMeta extends BaseStepMeta implements StepMetaInterface {
 
@@ -380,7 +373,8 @@ public class ElasticSearchBulkMeta extends BaseStepMeta implements StepMetaInter
   }
 
   /* This function adds meta data to the rows being pushed out */
-  public void getFields( RowMetaInterface r, String name, RowMetaInterface[] info, StepMeta nextStep,
+  @Override
+  public void getFields( Bowl bowl, RowMetaInterface r, String name, RowMetaInterface[] info, StepMeta nextStep,
                          VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
     if ( StringUtils.isNotBlank( this.getIdOutField() ) ) {
       ValueMetaInterface valueMeta = new ValueMetaString( space.environmentSubstitute( this.getIdOutField() ) );

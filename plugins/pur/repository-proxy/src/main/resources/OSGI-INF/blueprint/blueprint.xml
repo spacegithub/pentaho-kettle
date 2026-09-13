@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************* -->
 <blueprint            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                       xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0"
                       xmlns:ext="http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.0.0"
@@ -16,7 +27,7 @@
     <property name="locationUrl" value="${repos.url}"/>
   </bean>
 
-  <service interface="org.pentaho.osgi.kettle.repository.locator.api.KettleRepositoryProvider" ranking="150">
+  <service interface="org.pentaho.kettle.repository.locator.api.KettleRepositoryProvider" ranking="150">
     <description>
       This service supplies a PUR repository.
       The repository url location and the user and password used to connect to it are obtained from the following

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.resource;
 
@@ -29,6 +21,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import org.apache.commons.vfs2.FileObject;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.variables.VariableSpace;
@@ -46,6 +39,11 @@ public class ResourceUtil {
    * Serializes the referenced resource export interface (Job, Transformation, Mapping, Step, Job Entry, etc) to a ZIP
    * file.
    *
+   * @param executionBowl
+   *          For file access
+   * @param globalManagementBowl
+   *          if needed for access to the current "global" (System or Repository) level config for export. If null, no
+   *          global config will be exported.
    * @param zipFilename
    *          The ZIP file to put the content in
    * @param resourceExportInterface
@@ -60,17 +58,22 @@ public class ResourceUtil {
    * @throws KettleException
    *           in case anything goes wrong during serialization
    */
-  public static final TopLevelResource serializeResourceExportInterface( String zipFilename,
-    ResourceExportInterface resourceExportInterface, VariableSpace space, Repository repository,
+  public static final TopLevelResource serializeResourceExportInterface( Bowl executionBowl, Bowl globalManagementBowl,
+    String zipFilename, ResourceExportInterface resourceExportInterface, VariableSpace space, Repository repository,
     IMetaStore metaStore ) throws KettleException {
-    return serializeResourceExportInterface(
-      zipFilename, resourceExportInterface, space, repository, metaStore, null, null );
+    return serializeResourceExportInterface( executionBowl, globalManagementBowl, zipFilename, resourceExportInterface,
+      space, repository, metaStore, null, null );
   }
 
   /**
    * Serializes the referenced resource export interface (Job, Transformation, Mapping, Step, Job Entry, etc) to a ZIP
    * file.
    *
+   * @param executionBowl
+   *          For file access
+   * @param globalManagementBowl
+   *          if needed for access to the current "global" (System or Repository) level config for export. If null, no
+   *          global config will be exported.
    * @param zipFilename
    *          The ZIP file to put the content in
    * @param resourceExportInterface
@@ -87,8 +90,8 @@ public class ResourceUtil {
    * @throws KettleException
    *           in case anything goes wrong during serialization
    */
-  public static final TopLevelResource serializeResourceExportInterface( String zipFilename,
-    ResourceExportInterface resourceExportInterface, VariableSpace space, Repository repository,
+  public static final TopLevelResource serializeResourceExportInterface( Bowl executionBowl, Bowl globalManagementBowl,
+    String zipFilename, ResourceExportInterface resourceExportInterface, VariableSpace space, Repository repository,
     IMetaStore metaStore, String injectXML, String injectFilename ) throws KettleException {
 
     ZipOutputStream out = null;
@@ -106,20 +109,22 @@ public class ResourceUtil {
       ResourceNamingInterface namingInterface = new SequenceResourceNaming();
 
       String topLevelResource =
-        resourceExportInterface.exportResources( space, definitions, namingInterface, repository, metaStore );
+        resourceExportInterface.exportResources( executionBowl, globalManagementBowl, space, definitions,
+          namingInterface, repository, metaStore );
 
       if ( topLevelResource != null && !definitions.isEmpty() ) {
 
         // Create the ZIP file...
         //
-        FileObject fileObject = KettleVFS.getFileObject( zipFilename, space );
+        FileObject fileObject = KettleVFS.getInstance( executionBowl ).getFileObject( zipFilename, space );
 
         // Store the XML in the definitions in a ZIP file...
         //
-        out = new ZipOutputStream( KettleVFS.getOutputStream( fileObject, false ) );
+        out = new ZipOutputStream( KettleVFS.getInstance( executionBowl ).getOutputStream( fileObject, false ) );
 
-        for ( String filename : definitions.keySet() ) {
-          ResourceDefinition resourceDefinition = definitions.get( filename );
+        for ( Map.Entry<String, ResourceDefinition> entry : definitions.entrySet() ) {
+          String filename = entry.getKey();
+          ResourceDefinition resourceDefinition = entry.getValue();
 
           ZipEntry zipEntry = new ZipEntry( resourceDefinition.getFilename() );
 

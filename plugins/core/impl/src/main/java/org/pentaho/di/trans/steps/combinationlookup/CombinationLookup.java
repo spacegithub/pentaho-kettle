@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.combinationlookup;
 
@@ -34,7 +26,6 @@ import java.util.List;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.RowMetaAndData;
-import org.pentaho.di.core.database.Database;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleConfigException;
 import org.pentaho.di.core.exception.KettleDatabaseException;
@@ -49,11 +40,7 @@ import org.pentaho.di.core.row.value.ValueMetaInteger;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
-import org.pentaho.di.trans.step.BaseStep;
-import org.pentaho.di.trans.step.StepDataInterface;
-import org.pentaho.di.trans.step.StepInterface;
-import org.pentaho.di.trans.step.StepMeta;
-import org.pentaho.di.trans.step.StepMetaInterface;
+import org.pentaho.di.trans.step.*;
 
 /**
  * Manages or looks up information in a Type 1 or junk dimension.
@@ -72,7 +59,7 @@ import org.pentaho.di.trans.step.StepMetaInterface;
  * @author Matt
  * @since 22-jul-2003
  */
-public class CombinationLookup extends BaseStep implements StepInterface {
+public class CombinationLookup extends BaseDatabaseStep implements StepInterface {
   private static Class<?> PKG = CombinationLookupMeta.class; // for i18n purposes, needed by Translator2!!
 
   private static final int CREATION_METHOD_AUTOINC = 1;
@@ -341,7 +328,8 @@ public class CombinationLookup extends BaseStep implements StepInterface {
       first = false;
 
       data.outputRowMeta = getInputRowMeta().clone();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+        metaStore );
 
       data.schemaTable =
         meta.getDatabaseMeta().getQuotedSchemaTableCombination( data.realSchemaName, data.realTableName );
@@ -674,37 +662,17 @@ public class CombinationLookup extends BaseStep implements StepInterface {
       data.realSchemaName = environmentSubstitute( meta.getSchemaName() );
       data.realTableName = environmentSubstitute( meta.getTableName() );
 
-      if ( meta.getCacheSize() > 0 ) {
-        data.cache = new HashMap<RowMetaAndData, Long>( (int) ( meta.getCacheSize() * 1.5 ) );
-      } else {
-        data.cache = new HashMap<RowMetaAndData, Long>();
-      }
-      if ( meta.getDatabaseMeta() == null ) {
-        logError( BaseMessages.getString( PKG, "CombinationLookup.Init.ConnectionMissing", getStepname() ) );
-        return false;
-      }
-      data.db = new Database( this, meta.getDatabaseMeta() );
-      data.db.shareVariablesWith( this );
-      try {
-        if ( getTransMeta().isUsingUniqueConnections() ) {
-          synchronized ( getTrans() ) {
-            data.db.connect( getTrans().getTransactionId(), getPartitionID() );
-          }
-        } else {
-          data.db.connect( getPartitionID() );
-        }
+      data.cache = meta.getCacheSize() > 0 ? new HashMap<>( (int) ( meta.getCacheSize() * 1.5 ) ) : new HashMap<>();
 
-        if ( log.isDetailed() ) {
-          logDetailed( BaseMessages.getString( PKG, "CombinationLookup.Log.ConnectedToDB" ) );
-        }
-        data.db.setCommit( meta.getCommitSize() );
-
-        return true;
-      } catch ( KettleDatabaseException dbe ) {
-        logError( BaseMessages.getString( PKG, "CombinationLookup.Log.UnableToConnectDB" ) + dbe.getMessage() );
-      }
+      data.db.setCommitSize( meta.getCommitSize() );
+      return true;
     }
     return false;
+  }
+
+  @Override
+  protected Class<?> getPKG() {
+    return PKG;
   }
 
   public void dispose( StepMetaInterface smi, StepDataInterface sdi ) {
@@ -722,8 +690,6 @@ public class CombinationLookup extends BaseStep implements StepInterface {
         }
       } catch ( KettleDatabaseException e ) {
         logError( BaseMessages.getString( PKG, "CombinationLookup.Log.UnexpectedError" ) + " : " + e.toString() );
-      } finally {
-        data.db.disconnect();
       }
     }
 

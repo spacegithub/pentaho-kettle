@@ -1,19 +1,16 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.pur;
 
 import java.lang.reflect.InvocationHandler;
@@ -22,12 +19,13 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.net.ConnectException;
 
+import com.sun.xml.ws.client.ClientTransportException;
+import org.pentaho.di.repository.KettleAuthenticationException;
 import org.pentaho.di.repository.KettleRepositoryLostException;
 
 class UnifiedRepositoryInvocationHandler<T> implements InvocationHandler {
   private T rep;
 
-  // private Repository owner;
 
   UnifiedRepositoryInvocationHandler( T rep ) {
     this.rep = rep;
@@ -38,6 +36,13 @@ class UnifiedRepositoryInvocationHandler<T> implements InvocationHandler {
     try {
       return method.invoke( rep, args );
     } catch ( InvocationTargetException ex ) {
+      // Check authentication errors FIRST - session expiry must be detected immediately
+      if ( lookupAuthenticationException( ex ) ) {
+        // DO NOT close web services here
+        // DO NOT retry
+        throw new KettleAuthenticationException( "Session expired", ex.getCause() );
+      }
+
       if ( lookupConnectException( ex ) ) {
         throw new KettleRepositoryLostException( ex.getCause() );
       }
@@ -49,6 +54,18 @@ class UnifiedRepositoryInvocationHandler<T> implements InvocationHandler {
   private boolean lookupConnectException( Throwable root ) {
     while ( root != null ) {
       if ( root instanceof ConnectException ) {
+        return true;
+      } else {
+        root = root.getCause();
+      }
+    }
+
+    return false;
+  }
+
+  private boolean lookupAuthenticationException( Throwable root ) {
+    while ( root != null ) {
+      if ( root instanceof ClientTransportException ) {
         return true;
       } else {
         root = root.getCause();

@@ -1,27 +1,20 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.dialog;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jface.dialogs.ProgressMonitorDialog;
 import org.eclipse.jface.operation.IRunnableWithProgress;
@@ -39,7 +32,9 @@ import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.ui.core.dialog.ErrorDialog;
 
 import java.lang.reflect.InvocationTargetException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -139,13 +134,13 @@ public class TransPreviewProgressDialog {
   }
 
   private void doPreview( final IProgressMonitor progressMonitor, final boolean showErrorDialogs  ) {
+    Date now = new Date(); // capture the date/time before trying to preview...used only if there is an error.
     progressMonitor.beginTask(
       BaseMessages.getString( PKG, "TransPreviewProgressDialog.Monitor.BeginTask.Title" ), 100 );
 
     // This transformation is ready to run in preview!
     trans = new Trans( transMeta );
     trans.setPreview( true );
-
     // Prepare the execution...
     //
     try {
@@ -154,9 +149,15 @@ public class TransPreviewProgressDialog {
       if ( showErrorDialogs ) {
         shell.getDisplay().asyncExec( new Runnable() {
           public void run() {
+            // We do not want to display all of the error messages for this ktr's log channel ID
+            // So we must parse out the error messages to display only the messages that are specific
+            // to this preview Exception
+            //
+            String errorMessage = parseErrorMessage( e.getMessage(), now );
             new ErrorDialog( shell,
               BaseMessages.getString( PKG, "System.Dialog.Error.Title" ),
-              BaseMessages.getString( PKG, "TransPreviewProgressDialog.Exception.ErrorPreparingTransformation" ), e );
+              BaseMessages.getString( PKG, "TransPreviewProgressDialog.Exception.ErrorPreparingTransformation" ),
+                new Exception( errorMessage, e.getCause() ) );
           }
         } );
       }
@@ -177,6 +178,20 @@ public class TransPreviewProgressDialog {
       transDebugMeta.getStepDebugMetaMap().put( stepMeta, stepDebugMeta );
     }
 
+    int previousPct = 0;
+    final List<String> previewComplete = new ArrayList<String>();
+    // We add a break-point that is called every time we have a step with a full preview row buffer
+    // That makes it easy and fast to see if we have all the rows we need
+    //
+    transDebugMeta.addBreakPointListers( new BreakPointListener() {
+      public void breakPointHit( TransDebugMeta transDebugMeta, StepDebugMeta stepDebugMeta,
+                                 RowMetaInterface rowBufferMeta, List<Object[]> rowBuffer ) {
+        String stepName = stepDebugMeta.getStepMeta().getName();
+        previewComplete.add( stepName );
+        progressMonitor.subTask( BaseMessages.getString(
+          PKG, "TransPreviewProgressDialog.SubTask.StepPreviewFinished", stepName ) );
+      }
+    } );
     // set the appropriate listeners on the transformation...
     //
     transDebugMeta.addRowListenersToTransformation( trans );
@@ -198,23 +213,8 @@ public class TransPreviewProgressDialog {
       return;
     }
 
-    int previousPct = 0;
-    final List<String> previewComplete = new ArrayList<String>();
-
     while ( previewComplete.size() < previewStepNames.length
       && !trans.isFinished() && !progressMonitor.isCanceled() ) {
-      // We add a break-point that is called every time we have a step with a full preview row buffer
-      // That makes it easy and fast to see if we have all the rows we need
-      //
-      transDebugMeta.addBreakPointListers( new BreakPointListener() {
-        public void breakPointHit( TransDebugMeta transDebugMeta, StepDebugMeta stepDebugMeta,
-          RowMetaInterface rowBufferMeta, List<Object[]> rowBuffer ) {
-          String stepName = stepDebugMeta.getStepMeta().getName();
-          previewComplete.add( stepName );
-          progressMonitor.subTask( BaseMessages.getString(
-            PKG, "TransPreviewProgressDialog.SubTask.StepPreviewFinished", stepName ) );
-        }
-      } );
 
       // How many rows are done?
       int nrDone = 0;
@@ -253,6 +253,56 @@ public class TransPreviewProgressDialog {
       KettleLogStore.getAppender().getBuffer( trans.getLogChannel().getLogChannelId(), true ).toString();
 
     progressMonitor.done();
+  }
+
+  /**
+   * Parse the error message to return only those whose date/time stamp is after "now" Date
+   * @param errorMessage - String to parse
+   * @param now - Date before error message occurred
+   * @return - The parsed error message with only errors that occurred after "now"
+   */
+  @VisibleForTesting
+  public static String parseErrorMessage( String errorMessage, Date now ) {
+    StringBuilder parsed = new StringBuilder();
+    try {
+      String[] splitString = errorMessage.split( "\\n" );
+      parsed.append( splitString[1] ).append( "\n" );
+      for ( int i = 2; i < splitString.length; i++ ) {
+        String dateStr = splitString[i].substring( 0, splitString[i].indexOf( " -" ) );
+        if ( isDateAfterOrSame( formatDate( now ), dateStr ) ) {
+          parsed.append( splitString[i] ).append( "\n" );
+        }
+      }
+    } catch ( Exception e ) {
+      return errorMessage;
+    }
+    return parsed.toString();
+  }
+
+  /**
+   * Compares 2 date/times lexicographically
+   * @param date1 - String representation of date 1
+   * @param date2 - String representation of date 2
+   * @return - true
+   * true if date2 is lexicographically greater than date1
+   */
+  @VisibleForTesting
+  public static boolean isDateAfterOrSame( String date1, String date2 ) {
+    return date2.compareTo( date1 ) >= 0;
+  }
+
+  /**
+   * Formats a Date object as a String in the form yyyy/MM/dd HH:mm:ss format where HH is 0-23 hour
+   * @param date - Date to format
+   * @return - String representation of Date
+   */
+  private static String formatDate( Date date ) {
+    SimpleDateFormat sdf = new SimpleDateFormat( "yyyy/MM/dd HH:mm:ss" );
+    try {
+      return sdf.format( date );
+    } catch ( Exception e ) {
+      return sdf.format( new Date() );
+    }
   }
 
   /**

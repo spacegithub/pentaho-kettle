@@ -1,38 +1,20 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.denormaliser;
 
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Hashtable;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.core.exception.KettleValueException;
@@ -43,6 +25,7 @@ import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaBase;
 import org.pentaho.di.core.row.value.ValueMetaDate;
 import org.pentaho.di.core.row.value.ValueMetaInteger;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
@@ -51,6 +34,15 @@ import org.pentaho.di.trans.step.StepDataInterface;
 import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepMetaInterface;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Denormalises data based on key-value pairs
@@ -133,7 +125,8 @@ public class Denormaliser extends BaseStep implements StepInterface {
     this.minNullIsValued = ValueMetaBase.convertStringToBoolean( val );
     data.inputRowMeta = getInputRowMeta();
     data.outputRowMeta = data.inputRowMeta.clone();
-    meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+    meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+      metaStore );
 
     data.keyFieldNr = data.inputRowMeta.indexOfValue( meta.getKeyField() );
     if ( data.keyFieldNr < 0 ) {
@@ -352,6 +345,19 @@ public class Denormaliser extends BaseStep implements StepInterface {
       //
       ValueMetaInterface sourceMeta = rowMeta.getValueMeta( data.fieldNameIndex[idx] );
       Object sourceData = rowData[data.fieldNameIndex[idx]];
+      if ( field.getTargetNullString() != null && field.getTargetNullString().length() > 0 && sourceData != null ) {
+        //We have a "null if" value to check against.  To check for equality we must convert the sourceData value to a
+        // string
+        ValueMetaInterface stringMeta = new ValueMetaBase( "stringSource", ValueMetaInterface.TYPE_STRING );
+        if ( sourceMeta.getConversionMask() != null ) {
+          stringMeta.setConversionMask( sourceMeta.getConversionMask() );
+        }
+        Object stringValue = stringMeta.convertData( sourceMeta, sourceData );
+        if ( field.getTargetNullString().equalsIgnoreCase( stringValue.toString() ) ) {
+          sourceData = null;
+        }
+      }
+
       Object targetData;
       // What is the target value metadata??
       //

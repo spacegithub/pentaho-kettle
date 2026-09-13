@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.xslt;
 
@@ -81,7 +73,8 @@ public class Xslt extends BaseStep implements StepInterface {
     if ( first ) {
       first = false;
       data.outputRowMeta = getInputRowMeta().clone();
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+                      metaStore );
 
       // Check if The result field is given
       if ( Utils.isEmpty( meta.getResultfieldname() ) ) {
@@ -138,7 +131,7 @@ public class Xslt extends BaseStep implements StepInterface {
         data.xslfilename = environmentSubstitute( meta.getXslFilename() );
         FileObject file = null;
         try {
-          file = KettleVFS.getFileObject( data.xslfilename );
+          file = KettleVFS.getInstance( getTransMeta().getBowl() ).getFileObject( data.xslfilename );
           if ( !file.exists() ) {
             logError( BaseMessages.getString( PKG, "Xslt.Log.ErrorXSLFileNotExists", data.xslfilename ) );
             throw new KettleStepException( BaseMessages.getString( PKG, "Xslt.Exception.ErrorXSLFileNotExists",
@@ -224,7 +217,7 @@ public class Xslt extends BaseStep implements StepInterface {
       }
 
       // Get the template from the cache
-      Transformer transformer = data.getTemplate( data.xslfilename, data.xslIsAfile );
+      Transformer transformer = data.getTemplate( getTransMeta().getBowl(), data.xslfilename, data.xslIsAfile );
 
       // Do we need to set output properties?
       if ( data.setOutputProperties ) {

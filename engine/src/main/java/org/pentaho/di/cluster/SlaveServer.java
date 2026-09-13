@@ -1,28 +1,20 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.cluster;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
@@ -45,6 +37,7 @@ import org.apache.http.impl.auth.BasicScheme;
 import org.apache.http.impl.client.BasicAuthCache;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.message.BasicHeader;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.changed.ChangedFlag;
 import org.pentaho.di.core.encryption.Encr;
@@ -104,6 +97,7 @@ import java.net.InetAddress;
 import java.net.URLEncoder;
 import java.text.MessageFormat;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -113,11 +107,12 @@ import java.util.Random;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectInterface, VariableSpace,
+public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectInterface<SlaveServer>, VariableSpace,
   RepositoryElementInterface, XMLInterface {
   private static Class<?> PKG = SlaveServer.class; // for i18n purposes, needed by Translator2!!
 
   public static final String STRING_SLAVESERVER = "Slave Server";
+  public static final Comparator<SlaveServer> COMPARATOR = Comparator.comparing( SlaveServer::getName, String.CASE_INSENSITIVE_ORDER );
 
   private static final Random RANDOM = new Random();
 
@@ -150,7 +145,7 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
     }
   }
 
-  private LogChannelInterface log;
+  private static LogChannelInterface log = new LogChannel( STRING_SLAVESERVER );
 
   private String name;
 
@@ -193,9 +188,7 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
   private ReadWriteLock lock;
 
   public SlaveServer() {
-    initializeVariablesFrom( null );
     id = null;
-    this.log = new LogChannel( STRING_SLAVESERVER );
     this.changedDate = new Date();
     lock = new ReentrantReadWriteLock();
   }
@@ -223,8 +216,7 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
     this.nonProxyHosts = nonProxyHosts;
 
     this.master = master;
-    initializeVariablesFrom( null );
-    this.log = new LogChannel( this );
+    this.sslMode = ssl;
   }
 
   public SlaveServer( Node slaveNode ) {
@@ -242,8 +234,7 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
     this.overrideExistingProperties =
       "Y".equalsIgnoreCase( XMLHandler.getTagValue( slaveNode, "override_existing_properties" ) );
     this.master = "Y".equalsIgnoreCase( XMLHandler.getTagValue( slaveNode, "master" ) );
-    initializeVariablesFrom( null );
-    this.log = new LogChannel( this );
+    readObjectId( slaveNode );
 
     setSslMode( "Y".equalsIgnoreCase( XMLHandler.getTagValue( slaveNode, SSL_MODE_TAG ) ) );
     Node sslConfig = XMLHandler.getSubNode( slaveNode, SslConfiguration.XML_TAG );
@@ -275,6 +266,7 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
       xml.append( "        " ).append( XMLHandler.addTagValue( "non_proxy_hosts", nonProxyHosts ) );
       xml.append( "        " ).append( XMLHandler.addTagValue( "master", master ) );
       xml.append( "        " ).append( XMLHandler.addTagValue( SSL_MODE_TAG, isSslMode(), false ) );
+      appendObjectId( xml );
       if ( sslConfig != null ) {
         xml.append( sslConfig.getXML() );
       }
@@ -310,6 +302,8 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
       this.proxyHostname = slaveServer.proxyHostname;
       this.proxyPort = slaveServer.proxyPort;
       this.nonProxyHosts = slaveServer.nonProxyHosts;
+      this.propertiesMasterName = slaveServer.propertiesMasterName;
+      this.overrideExistingProperties = slaveServer.overrideExistingProperties;
       this.master = slaveServer.master;
 
       this.id = slaveServer.id;
@@ -518,6 +512,15 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
   }
 
   /**
+   * @param propertiesMasterName the master name for reading properties
+   */
+  public void setPropertiesMasterName( String propertiesMasterName ) {
+    lock.writeLock().lock();
+    this.propertiesMasterName = propertiesMasterName;
+    lock.writeLock().unlock();
+  }
+
+  /**
    * @return flag for read properties from Master
    */
   public boolean isOverrideExistingProperties() {
@@ -527,6 +530,15 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
     } finally {
       lock.readLock().unlock();
     }
+  }
+
+  /**
+   * @param overrideExistingProperties flag for overriding existing properties from master
+   */
+  public void setOverrideExistingProperties( boolean overrideExistingProperties ) {
+    lock.writeLock().lock();
+    this.overrideExistingProperties = overrideExistingProperties;
+    lock.writeLock().unlock();
   }
 
   /**
@@ -627,7 +639,7 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
   /**
    * Throws if not ok
    */
-  private void handleStatus( HttpUriRequest method, StatusLine statusLine, int status ) throws KettleException {
+  private void handleStatus( HttpUriRequest method, StatusLine statusLine, int status, String responseBody ) throws KettleException {
     if ( status >= 300 ) {
       String message;
       if ( status == HttpStatus.SC_NOT_FOUND ) {
@@ -637,10 +649,16 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
           BaseMessages.getString( PKG, "SlaveServer.Error.404.Message" )
         );
       } else {
-        message = String.format( "HTTP Status %d - %s - %s",
+        String responseMessage = null;
+        if ( responseBody != null ) {
+          WebResult webResult = WebResult.fromXMLString( responseBody );
+          responseMessage = webResult.getMessage();
+        }
+        message = String.format( "HTTP Status %d - %s - %s%s",
           status,
           method.getURI().toString(),
-          statusLine.getReasonPhrase() );
+          statusLine.getReasonPhrase(),
+          responseMessage == null ? "" : "\n" + responseMessage );
       }
       throw new KettleException( message );
     }
@@ -678,7 +696,8 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
    */
   public String sendExport( String filename, String type, String load ) throws Exception {
     // Request content will be retrieved directly from the input stream
-    try ( InputStream is = KettleVFS.getInputStream( KettleVFS.getFileObject( filename ) ) ) {
+    try ( InputStream is = KettleVFS.getInputStream( KettleVFS.getInstance( DefaultBowl.getInstance() )
+                                                     .getFileObject( filename ) ) ) {
       // Execute request
       HttpPost method = buildSendExportMethod( type, load, is );
       try {
@@ -721,7 +740,7 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
     }
 
     // throw if not ok
-    handleStatus( method, statusLine, statusCode );
+    handleStatus( method, statusLine, statusCode, responseBody );
 
     return responseBody;
   }
@@ -949,7 +968,7 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
 
     List<SlaveServerDetection> detections = new ArrayList<SlaveServerDetection>();
     for ( int i = 0; i < nrDetections; i++ ) {
-      Node detectionNode = XMLHandler.getSubNodeByNr( detectionsNode, SlaveServerDetection.XML_TAG, i );
+      Node detectionNode = XMLHandler.getSubNodeByNr( detectionsNode, SlaveServerDetection.XML_TAG, i, false );
       SlaveServerDetection detection = new SlaveServerDetection( detectionNode );
       detections.add( detection );
     }
@@ -978,6 +997,14 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
     String xml =
       execService( GetJobStatusServlet.CONTEXT_PATH + "/?name=" + URLEncoder.encode( jobName, "UTF-8" ) + "&id="
         + Const.NVL( carteObjectId, "" ) + "&xml=Y&from=" + startLogLineNr, true );
+    return SlaveServerJobStatus.fromXML( xml );
+  }
+
+  public SlaveServerJobStatus getJobStatusTail( String jobName, String carteObjectId, int maxNumberOfLines )
+    throws Exception {
+    String xml =
+      execService( GetJobStatusServlet.CONTEXT_PATH + "/?name=" + URLEncoder.encode( jobName, "UTF-8" ) + "&id="
+        + Const.NVL( carteObjectId, "" ) + "&xml=Y&tail=" + maxNumberOfLines, true );
     return SlaveServerJobStatus.fromXML( xml );
   }
 
@@ -1398,5 +1425,15 @@ public class SlaveServer extends ChangedFlag implements Cloneable, SharedObjectI
     } finally {
       lock.readLock().unlock();
     }
+  }
+  @Override
+  public SlaveServer makeClone() {
+    return (SlaveServer) clone();
+  }
+
+  @Override
+  public Node toNode() throws KettleException {
+    Document doc = XMLHandler.loadXMLString( getXML() );
+    return XMLHandler.getSubNode( doc, XML_TAG );
   }
 }

@@ -1,29 +1,22 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.tableexists;
 
 import java.util.List;
 
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.database.DatabaseMeta;
@@ -39,14 +32,9 @@ import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.Repository;
-import org.pentaho.di.shared.SharedObjectInterface;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
-import org.pentaho.di.trans.step.BaseStepMeta;
-import org.pentaho.di.trans.step.StepDataInterface;
-import org.pentaho.di.trans.step.StepInterface;
-import org.pentaho.di.trans.step.StepMeta;
-import org.pentaho.di.trans.step.StepMetaInterface;
+import org.pentaho.di.trans.step.*;
 import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
 
@@ -55,11 +43,11 @@ import org.w3c.dom.Node;
  *
  */
 
-public class TableExistsMeta extends BaseStepMeta implements StepMetaInterface {
+public class TableExistsMeta extends BaseDatabaseStepMeta implements StepMetaInterface {
   private static Class<?> PKG = TableExistsMeta.class; // for i18n purposes, needed by Translator2!!
 
   /** database connection */
-  private DatabaseMeta database;
+  private DatabaseMeta databaseMeta;
 
   /** dynamuc tablename */
   private String tablenamefield;
@@ -76,16 +64,17 @@ public class TableExistsMeta extends BaseStepMeta implements StepMetaInterface {
   /**
    * @return Returns the database.
    */
-  public DatabaseMeta getDatabase() {
-    return database;
+  @Override
+  public DatabaseMeta getDatabaseMeta() {
+    return databaseMeta;
   }
 
   /**
-   * @param database
+   * @param databaseMeta
    *          The database to set.
    */
-  public void setDatabase( DatabaseMeta database ) {
-    this.database = database;
+  public void setDatabaseMeta( DatabaseMeta databaseMeta ) {
+    this.databaseMeta = databaseMeta;
   }
 
   /**
@@ -137,12 +126,13 @@ public class TableExistsMeta extends BaseStepMeta implements StepMetaInterface {
   }
 
   public void setDefault() {
-    database = null;
+    databaseMeta = null;
     schemaname = null;
     resultfieldname = "result";
   }
 
-  public void getFields( RowMetaInterface inputRowMeta, String name, RowMetaInterface[] info, StepMeta nextStep,
+  @Override
+  public void getFields( Bowl bowl, RowMetaInterface inputRowMeta, String name, RowMetaInterface[] info, StepMeta nextStep,
     VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
     // Output field (String)
     if ( !Utils.isEmpty( resultfieldname ) ) {
@@ -156,7 +146,7 @@ public class TableExistsMeta extends BaseStepMeta implements StepMetaInterface {
   public String getXML() {
     StringBuilder retval = new StringBuilder();
 
-    retval.append( "    " + XMLHandler.addTagValue( "connection", database == null ? "" : database.getName() ) );
+    retval.append( "    " + XMLHandler.addTagValue( "connection", databaseMeta == null ? "" : databaseMeta.getName() ) );
     retval.append( "    " + XMLHandler.addTagValue( "tablenamefield", tablenamefield ) );
     retval.append( "    " + XMLHandler.addTagValue( "resultfieldname", resultfieldname ) );
     retval.append( "    " + XMLHandler.addTagValue( "schemaname", schemaname ) );
@@ -164,10 +154,10 @@ public class TableExistsMeta extends BaseStepMeta implements StepMetaInterface {
     return retval.toString();
   }
 
-  private void readData( Node stepnode, List<? extends SharedObjectInterface> databases ) throws KettleXMLException {
+  private void readData( Node stepnode, List<DatabaseMeta> databases ) throws KettleXMLException {
     try {
       String con = XMLHandler.getTagValue( stepnode, "connection" );
-      database = DatabaseMeta.findDatabase( databases, con );
+      databaseMeta = DatabaseMeta.findDatabase( databases, con );
       tablenamefield = XMLHandler.getTagValue( stepnode, "tablenamefield" );
       resultfieldname = XMLHandler.getTagValue( stepnode, "resultfieldname" );
       schemaname = XMLHandler.getTagValue( stepnode, "schemaname" );
@@ -180,7 +170,7 @@ public class TableExistsMeta extends BaseStepMeta implements StepMetaInterface {
 
   public void readRep( Repository rep, IMetaStore metaStore, ObjectId id_step, List<DatabaseMeta> databases ) throws KettleException {
     try {
-      database = rep.loadDatabaseMetaFromStepAttribute( id_step, "id_connection", databases );
+      databaseMeta = rep.loadDatabaseMetaFromStepAttribute( id_step, "id_connection", databases );
       tablenamefield = rep.getStepAttributeString( id_step, "tablenamefield" );
       schemaname = rep.getStepAttributeString( id_step, "schemaname" );
 
@@ -193,15 +183,15 @@ public class TableExistsMeta extends BaseStepMeta implements StepMetaInterface {
 
   public void saveRep( Repository rep, IMetaStore metaStore, ObjectId id_transformation, ObjectId id_step ) throws KettleException {
     try {
-      rep.saveDatabaseMetaStepAttribute( id_transformation, id_step, "id_connection", database );
+      rep.saveDatabaseMetaStepAttribute( id_transformation, id_step, "id_connection", databaseMeta );
       rep.saveStepAttribute( id_transformation, id_step, "tablenamefield", tablenamefield );
       rep.saveStepAttribute( id_transformation, id_step, "schemaname", schemaname );
 
       rep.saveStepAttribute( id_transformation, id_step, "resultfieldname", resultfieldname );
 
       // Also, save the step-database relationship!
-      if ( database != null ) {
-        rep.insertStepDatabase( id_transformation, id_step, database.getObjectId() );
+      if ( databaseMeta != null ) {
+        rep.insertStepDatabase( id_transformation, id_step, databaseMeta.getObjectId() );
       }
     } catch ( Exception e ) {
       throw new KettleException( BaseMessages.getString( PKG, "TableExistsMeta.Exception.UnableToSaveStepInfo" )
@@ -215,7 +205,7 @@ public class TableExistsMeta extends BaseStepMeta implements StepMetaInterface {
     CheckResult cr;
     String error_message = "";
 
-    if ( database == null ) {
+    if ( databaseMeta == null ) {
       error_message = BaseMessages.getString( PKG, "TableExistsMeta.CheckResult.InvalidConnection" );
       cr = new CheckResult( CheckResult.TYPE_RESULT_ERROR, error_message, stepMeta );
       remarks.add( cr );
@@ -263,8 +253,8 @@ public class TableExistsMeta extends BaseStepMeta implements StepMetaInterface {
   }
 
   public DatabaseMeta[] getUsedDatabaseConnections() {
-    if ( database != null ) {
-      return new DatabaseMeta[] { database };
+    if ( databaseMeta != null ) {
+      return new DatabaseMeta[] {databaseMeta};
     } else {
       return super.getUsedDatabaseConnections();
     }

@@ -1,29 +1,21 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.job.entries.job;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
@@ -35,7 +27,6 @@ import org.eclipse.swt.layout.FormData;
 import org.eclipse.swt.layout.FormLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.Shell;
@@ -47,7 +38,6 @@ import org.pentaho.di.core.extension.ExtensionPointHandler;
 import org.pentaho.di.core.extension.KettleExtensionPoint;
 import org.pentaho.di.core.logging.LogLevel;
 import org.pentaho.di.core.util.Utils;
-import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.job.JobExecutionConfiguration;
 import org.pentaho.di.job.JobMeta;
@@ -62,6 +52,8 @@ import org.pentaho.di.repository.RepositoryObject;
 import org.pentaho.di.repository.RepositoryObjectType;
 import org.pentaho.di.ui.core.ConstUI;
 import org.pentaho.di.ui.core.dialog.ErrorDialog;
+import org.pentaho.di.ui.core.events.dialog.FilterType;
+import org.pentaho.di.ui.core.events.dialog.SelectionOperation;
 import org.pentaho.di.ui.core.gui.WindowProperty;
 import org.pentaho.di.ui.core.widget.ComboVar;
 import org.pentaho.di.ui.job.dialog.JobDialog;
@@ -72,7 +64,6 @@ import org.pentaho.di.ui.util.DialogHelper;
 import org.pentaho.di.ui.util.DialogUtils;
 import org.pentaho.di.ui.util.SwtSvgImageUtil;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -218,15 +209,8 @@ public class JobEntryJobDialog extends JobEntryBaseDialog implements JobEntryDia
       }
     } );
 
-    wbBrowse.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        if ( rep != null ) {
-          selectJob();
-        } else {
-          pickFileVFS();
-        }
-      }
-    } );
+    wbBrowse.addSelectionListener(DialogHelper.constructSelectionAdapterFileDialogTextVarForKettleFile(log, wPath, jobMeta
+        ,SelectionOperation.FILE, FilterType.KJB, rep ) );
 
     wbLogFilename.addSelectionListener( new SelectionAdapter() {
       public void widgetSelected( SelectionEvent e ) {
@@ -257,10 +241,16 @@ public class JobEntryJobDialog extends JobEntryBaseDialog implements JobEntryDia
     return jobEntry.parameters;
   }
 
+  @VisibleForTesting
+  protected JobEntryJob newJobEntryJob() {
+    return new JobEntryJob();
+  }
+
   protected void getParameters( JobMeta inputJobMeta ) {
     try {
       if ( inputJobMeta == null ) {
-        JobEntryJob jej = new JobEntryJob();
+        JobEntryJob jej = newJobEntryJob();
+        getSpecificationPath( jej );
         getInfo( jej );
         inputJobMeta = jej.getJobMeta( rep, metaStore, jobMeta );
       }
@@ -284,16 +274,6 @@ public class JobEntryJobDialog extends JobEntryBaseDialog implements JobEntryDia
     }
   }
 
-  private void selectJob() {
-    RepositoryObject repositoryObject = DialogHelper.selectRepositoryObject( "*.kjb", log );
-
-    if ( repositoryObject != null ) {
-      String path = DialogUtils
-        .getPath( jobMeta.getRepositoryDirectory().getPath(), repositoryObject.getRepositoryDirectory().getPath() );
-      String fullPath = ( path.equals( "/" ) ? "/" : path + "/" ) + repositoryObject.getName();
-      wPath.setText( fullPath );
-    }
-  }
 
   private void updateByReferenceField( RepositoryElementMetaInterface element ) {
     String path = getPathOf( element );
@@ -301,75 +281,6 @@ public class JobEntryJobDialog extends JobEntryBaseDialog implements JobEntryDia
       path = "";
     }
     wByReference.setText( path );
-  }
-
-  protected void pickFileVFS() {
-    FileDialog dialog = new FileDialog( shell, SWT.OPEN );
-    dialog.setFilterExtensions( Const.STRING_JOB_FILTER_EXT );
-    dialog.setFilterNames( Const.getJobFilterNames() );
-    String prevName = jobMeta.environmentSubstitute( getPath() );
-    String parentFolder = null;
-    try {
-      parentFolder =
-        KettleVFS.getFilename( KettleVFS
-          .getFileObject( jobMeta.environmentSubstitute( jobMeta.getFilename() ) ).getParent() );
-    } catch ( Exception e ) {
-      // not that important
-    }
-    if ( !Utils.isEmpty( prevName ) ) {
-      try {
-        if ( KettleVFS.fileExists( prevName ) ) {
-          dialog.setFilterPath( KettleVFS.getFilename( KettleVFS.getFileObject( prevName ).getParent() ) );
-        } else {
-
-          if ( !prevName.endsWith( ".kjb" ) ) {
-            prevName = getEntryName( Const.trim( getPath() ) + ".kjb" );
-          }
-          if ( KettleVFS.fileExists( prevName ) ) {
-            wPath.setText( prevName );
-            specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
-            return;
-          } else {
-            // File specified doesn't exist. Ask if we should create the file...
-            //
-            MessageBox mb = new MessageBox( shell, SWT.YES | SWT.NO | SWT.ICON_QUESTION );
-            mb.setMessage( BaseMessages.getString( PKG, "JobJob.Dialog.CreateJobQuestion.Message" ) );
-            mb.setText( BaseMessages.getString( PKG, "JobJob.Dialog.CreateJobQuestion.Title" ) ); // Sorry!
-            int answer = mb.open();
-            if ( answer == SWT.YES ) {
-
-              Spoon spoon = Spoon.getInstance();
-              spoon.newJobFile();
-              JobMeta newJobMeta = spoon.getActiveJob();
-              newJobMeta.initializeVariablesFrom( jobEntry );
-              newJobMeta.setFilename( jobMeta.environmentSubstitute( prevName ) );
-              wPath.setText( prevName );
-              specificationMethod = ObjectLocationSpecificationMethod.FILENAME;
-              spoon.saveFile();
-              return;
-            }
-          }
-        }
-      } catch ( Exception e ) {
-        dialog.setFilterPath( parentFolder );
-      }
-    } else if ( !Utils.isEmpty( parentFolder ) ) {
-      dialog.setFilterPath( parentFolder );
-    }
-
-    String fname = dialog.open();
-    if ( fname != null ) {
-      File file = new File( fname );
-      String name = file.getName();
-      String parentFolderSelection = file.getParentFile().toString();
-
-      if ( !Utils.isEmpty( parentFolder ) && parentFolder.equals( parentFolderSelection ) ) {
-        wPath.setText( getEntryName( name ) );
-      } else {
-        wPath.setText( fname );
-      }
-
-    }
   }
 
   String getEntryName( String name ) {
@@ -431,6 +342,8 @@ public class JobEntryJobDialog extends JobEntryBaseDialog implements JobEntryDia
           ti.setText( 1, Const.NVL( jobEntry.parameters[i], "" ) );
           ti.setText( 2, Const.NVL( jobEntry.parameterFieldNames[i], "" ) );
           ti.setText( 3, Const.NVL( jobEntry.parameterValues[i], "" ) );
+          // Check disable listeners to shade fields gray
+          parameterTableHelper.checkTableOnOpen( ti, i );
         }
       }
       wParameters.setRowNums();
@@ -511,6 +424,7 @@ public class JobEntryJobDialog extends JobEntryBaseDialog implements JobEntryDia
   protected void getInfo( JobEntryJob jej ) {
     String jobPath = getPath();
     jej.setName( getName() );
+    jej.setParentJobMeta( jobMeta );
     switch ( specificationMethod ) {
       case FILENAME:
         jej.setFileName( jobPath );
@@ -639,6 +553,10 @@ public class JobEntryJobDialog extends JobEntryBaseDialog implements JobEntryDia
       mb.setText( BaseMessages.getString( PKG, "System.StepJobEntryNameMissing.Title" ) );
       mb.setMessage( BaseMessages.getString( PKG, "System.JobEntryNameMissing.Msg" ) );
       mb.open();
+      return;
+    }
+    // Check if all parameters have names. If so, continue on.
+    if ( parameterTableHelper.checkParams( shell ) ) {
       return;
     }
     getSpecificationPath( jobEntry );

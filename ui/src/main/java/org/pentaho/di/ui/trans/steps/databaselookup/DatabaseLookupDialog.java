@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.databaselookup;
 
@@ -373,82 +365,8 @@ public class DatabaseLookupDialog extends BaseStepDialog implements StepDialogIn
     fdKey.left = new FormAttachment( 0, 0 );
     fdKey.top = new FormAttachment( wlKey, margin );
     fdKey.right = new FormAttachment( 100, 0 );
-    fdKey.bottom = new FormAttachment( wlKey, 250 );
+    fdKey.bottom = new FormAttachment( wlKey, 190 );
     wKey.setLayoutData( fdKey );
-
-    // THE BUTTONS
-    wOK = new Button( shell, SWT.PUSH );
-    wOK.setText( BaseMessages.getString( PKG, "System.Button.OK" ) );
-    wGet = new Button( shell, SWT.PUSH );
-    wGet.setText( BaseMessages.getString( PKG, "DatabaseLookupDialog.GetFields.Button" ) );
-    wGetLU = new Button( shell, SWT.PUSH );
-    wGetLU.setText( BaseMessages.getString( PKG, "DatabaseLookupDialog.GetLookupFields.Button" ) );
-    wCancel = new Button( shell, SWT.PUSH );
-    wCancel.setText( BaseMessages.getString( PKG, "System.Button.Cancel" ) );
-
-    setButtonPositions( new Button[] { wOK, wCancel, wGet, wGetLU }, margin, null );
-
-    // OderBy line
-    wlOrderBy = new Label( shell, SWT.RIGHT );
-    wlOrderBy.setText( BaseMessages.getString( PKG, "DatabaseLookupDialog.Orderby.Label" ) );
-    props.setLook( wlOrderBy );
-    fdlOrderBy = new FormData();
-    fdlOrderBy.left = new FormAttachment( 0, 0 );
-    fdlOrderBy.right = new FormAttachment( middle, -margin );
-    fdlOrderBy.bottom = new FormAttachment( wOK, -2 * margin );
-    wlOrderBy.setLayoutData( fdlOrderBy );
-    wOrderBy = new Text( shell, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
-    props.setLook( wOrderBy );
-    fdOrderBy = new FormData();
-    fdOrderBy.left = new FormAttachment( middle, 0 );
-    fdOrderBy.bottom = new FormAttachment( wOK, -2 * margin );
-    fdOrderBy.right = new FormAttachment( 100, 0 );
-    wOrderBy.setLayoutData( fdOrderBy );
-    wOrderBy.addModifyListener( lsMod );
-
-    // FailMultiple?
-    wlFailMultiple = new Label( shell, SWT.RIGHT );
-    wlFailMultiple.setText( BaseMessages.getString( PKG, "DatabaseLookupDialog.FailMultiple.Label" ) );
-    props.setLook( wlFailMultiple );
-    fdlFailMultiple = new FormData();
-    fdlFailMultiple.left = new FormAttachment( 0, 0 );
-    fdlFailMultiple.right = new FormAttachment( middle, -margin );
-    fdlFailMultiple.bottom = new FormAttachment( wOrderBy, -margin );
-    wlFailMultiple.setLayoutData( fdlFailMultiple );
-    wFailMultiple = new Button( shell, SWT.CHECK );
-    props.setLook( wFailMultiple );
-    fdFailMultiple = new FormData();
-    fdFailMultiple.left = new FormAttachment( middle, 0 );
-    fdFailMultiple.bottom = new FormAttachment( wOrderBy, -margin );
-    wFailMultiple.setLayoutData( fdFailMultiple );
-    wFailMultiple.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        input.setChanged();
-        enableFields();
-      }
-    } );
-
-    // EatRows?
-    wlEatRows = new Label( shell, SWT.RIGHT );
-    wlEatRows.setText( BaseMessages.getString( PKG, "DatabaseLookupDialog.EatRows.Label" ) );
-    props.setLook( wlEatRows );
-    fdlEatRows = new FormData();
-    fdlEatRows.left = new FormAttachment( 0, 0 );
-    fdlEatRows.right = new FormAttachment( middle, -margin );
-    fdlEatRows.bottom = new FormAttachment( wFailMultiple, -margin );
-    wlEatRows.setLayoutData( fdlEatRows );
-    wEatRows = new Button( shell, SWT.CHECK );
-    props.setLook( wEatRows );
-    fdEatRows = new FormData();
-    fdEatRows.left = new FormAttachment( middle, 0 );
-    fdEatRows.bottom = new FormAttachment( wFailMultiple, -margin );
-    wEatRows.setLayoutData( fdEatRows );
-    wEatRows.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        input.setChanged();
-        enableFields();
-      }
-    } );
 
     // THE UPDATE/INSERT TABLE
     wlReturn = new Label( shell, SWT.NONE );
@@ -490,8 +408,82 @@ public class DatabaseLookupDialog extends BaseStepDialog implements StepDialogIn
     fdReturn.left = new FormAttachment( 0, 0 );
     fdReturn.top = new FormAttachment( wlReturn, margin );
     fdReturn.right = new FormAttachment( 100, 0 );
-    fdReturn.bottom = new FormAttachment( wEatRows, -margin );
+    fdReturn.bottom = new FormAttachment( wlReturn, 190 );
     wReturn.setLayoutData( fdReturn );
+
+    // EatRows?
+    wlEatRows = new Label( shell, SWT.RIGHT );
+    wlEatRows.setText( BaseMessages.getString( PKG, "DatabaseLookupDialog.EatRows.Label" ) );
+    props.setLook( wlEatRows );
+    fdlEatRows = new FormData();
+    fdlEatRows.left = new FormAttachment( 0, 0 );
+    fdlEatRows.top = new FormAttachment( wReturn, margin );
+    fdlEatRows.right = new FormAttachment( middle, -margin );
+    wlEatRows.setLayoutData( fdlEatRows );
+    wEatRows = new Button( shell, SWT.CHECK );
+    props.setLook( wEatRows );
+    fdEatRows = new FormData();
+    fdEatRows.left = new FormAttachment( middle, 0 );
+    fdEatRows.top = new FormAttachment( wReturn, margin );
+    wEatRows.setLayoutData( fdEatRows );
+    wEatRows.addSelectionListener( new SelectionAdapter() {
+      public void widgetSelected( SelectionEvent e ) {
+        input.setChanged();
+        enableFields();
+      }
+    } );
+
+    // FailMultiple?
+    wlFailMultiple = new Label( shell, SWT.RIGHT );
+    wlFailMultiple.setText( BaseMessages.getString( PKG, "DatabaseLookupDialog.FailMultiple.Label" ) );
+    props.setLook( wlFailMultiple );
+    fdlFailMultiple = new FormData();
+    fdlFailMultiple.left = new FormAttachment( 0, 0 );
+    fdlFailMultiple.top = new FormAttachment( wEatRows, margin );
+    fdlFailMultiple.right = new FormAttachment( middle, -margin );
+    wlFailMultiple.setLayoutData( fdlFailMultiple );
+    wFailMultiple = new Button( shell, SWT.CHECK );
+    props.setLook( wFailMultiple );
+    fdFailMultiple = new FormData();
+    fdFailMultiple.left = new FormAttachment( middle, 0 );
+    fdFailMultiple.top = new FormAttachment( wEatRows, margin );
+    wFailMultiple.setLayoutData( fdFailMultiple );
+    wFailMultiple.addSelectionListener( new SelectionAdapter() {
+      public void widgetSelected( SelectionEvent e ) {
+        input.setChanged();
+        enableFields();
+      }
+    } );
+
+    // OderBy line
+    wlOrderBy = new Label( shell, SWT.RIGHT );
+    wlOrderBy.setText( BaseMessages.getString( PKG, "DatabaseLookupDialog.Orderby.Label" ) );
+    props.setLook( wlOrderBy );
+    fdlOrderBy = new FormData();
+    fdlOrderBy.left = new FormAttachment( 0, 0 );
+    fdlOrderBy.top = new FormAttachment( wFailMultiple, margin );
+    fdlOrderBy.right = new FormAttachment( middle, -margin );
+    wlOrderBy.setLayoutData( fdlOrderBy );
+    wOrderBy = new Text( shell, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
+    props.setLook( wOrderBy );
+    fdOrderBy = new FormData();
+    fdOrderBy.left = new FormAttachment( middle, 0 );
+    fdOrderBy.top = new FormAttachment( wFailMultiple, margin );
+    fdOrderBy.right = new FormAttachment( 100, 0 );
+    wOrderBy.setLayoutData( fdOrderBy );
+    wOrderBy.addModifyListener( lsMod );
+
+    // THE BUTTONS
+    wOK = new Button( shell, SWT.PUSH );
+    wOK.setText( BaseMessages.getString( PKG, "System.Button.OK" ) );
+    wGet = new Button( shell, SWT.PUSH );
+    wGet.setText( BaseMessages.getString( PKG, "DatabaseLookupDialog.GetFields.Button" ) );
+    wGetLU = new Button( shell, SWT.PUSH );
+    wGetLU.setText( BaseMessages.getString( PKG, "DatabaseLookupDialog.GetLookupFields.Button" ) );
+    wCancel = new Button( shell, SWT.PUSH );
+    wCancel.setText( BaseMessages.getString( PKG, "System.Button.Cancel" ) );
+
+    setButtonPositions( new Button[] { wOK, wCancel, wGet, wGetLU }, margin, wOrderBy );
 
     // Add listeners
     lsOK = new Listener() {
@@ -599,7 +591,10 @@ public class DatabaseLookupDialog extends BaseStepDialog implements StepDialogIn
               try {
                 db.connect();
 
-                RowMetaInterface r = db.getTableFieldsMeta( schemaName, tableName );
+                //RowMetaInterface r = db.getTableFieldsMeta( schemaName, tableName );
+                String schemaTable = ci.getQuotedSchemaTableCombination( schemaName, tableName );
+                RowMetaInterface r = db.getTableFields( schemaTable );
+
                 if ( null != r ) {
                   String[] fieldNames = r.getFieldNames();
                   if ( null != fieldNames ) {
@@ -617,7 +612,7 @@ public class DatabaseLookupDialog extends BaseStepDialog implements StepDialogIn
               } finally {
                 try {
                   if ( db != null ) {
-                    db.disconnect();
+                    db.close();
                   }
                 } catch ( Exception ignored ) {
                   // ignore any errors here.
@@ -842,14 +837,12 @@ public class DatabaseLookupDialog extends BaseStepDialog implements StepDialogIn
         db.connect();
 
         if ( !Utils.isEmpty( wTable.getText() ) ) {
-          RowMetaInterface r =
-            db.getTableFieldsMeta(
-              db.environmentSubstitute( wSchema.getText() ),
-              db.environmentSubstitute( wTable.getText() ) );
+          String schemaTable =
+            ci.getQuotedSchemaTableCombination( db.environmentSubstitute( wSchema.getText() ), db
+              .environmentSubstitute( wTable.getText() ) );
+          RowMetaInterface r = db.getTableFields( schemaTable );
+
           if ( r != null && !r.isEmpty() ) {
-            String schemaTable =
-              ci.getQuotedSchemaTableCombination( db.environmentSubstitute( wSchema.getText() ), db
-                .environmentSubstitute( wTable.getText() ) );
             logDebug( BaseMessages.getString( PKG, "DatabaseLookupDialog.Log.FoundTableFields" )
               + schemaTable + " --> " + r.toStringMeta() );
             BaseStepDialog
@@ -907,7 +900,7 @@ public class DatabaseLookupDialog extends BaseStepDialog implements StepDialogIn
         new ErrorDialog( shell, BaseMessages.getString( PKG, "System.Dialog.Error.Title" ), BaseMessages
           .getString( PKG, "DatabaseLookupDialog.ErrorGettingSchemas" ), e );
       } finally {
-        database.disconnect();
+        database.close();
       }
     }
   }

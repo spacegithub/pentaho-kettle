@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.job.entry;
 
@@ -26,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.pentaho.di.cluster.SlaveServer;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.core.SQLStatement;
@@ -144,6 +137,7 @@ import org.w3c.dom.Node;
  */
 
 public interface JobEntryInterface {
+
 
   /**
    * Execute the job entry. The previous result and number of rows are provided to the method for the purpose of
@@ -665,9 +659,39 @@ public interface JobEntryInterface {
    * @return The filename for this object. (also contained in the definitions map)
    * @throws KettleException
    *           in case something goes wrong during the export
+   * @deprecated Use the version with the Bowl
    */
+  @Deprecated
   String exportResources( VariableSpace space, Map<String, ResourceDefinition> definitions,
     ResourceNamingInterface namingInterface, Repository repository, IMetaStore metaStore ) throws KettleException;
+
+  /**
+   * Exports the object to a flat-file system, adding content with filename keys to a set of definitions. The supplied
+   * resource naming interface allows the object to name appropriately without worrying about those parts of the
+   * implementation specific details.
+   *
+   * @param executionBowl
+   *          For file access
+   * @param globalManagementBowl
+   *          if needed for access to the current "global" (System or Repository) level config
+   * @param space
+   *          The variable space to resolve (environment) variables with.
+   * @param definitions
+   *          The map containing the filenames and content
+   * @param namingInterface
+   *          The resource naming interface allows the object to be named appropriately
+   * @param repository
+   *          The repository to load resources from
+   * @param metaStore
+   *          the metaStore to load external metadata from
+   *
+   * @return The filename for this object. (also contained in the definitions map)
+   * @throws KettleException
+   *           in case something goes wrong during the export
+   */
+  String exportResources( Bowl executionBowl, Bowl globalManagementBowl, VariableSpace space,
+    Map<String, ResourceDefinition> definitions, ResourceNamingInterface namingInterface, Repository repository,
+    IMetaStore metaStore ) throws KettleException;
 
   /**
    * Checks whether the job entry defines one or more references to a repository object
@@ -710,7 +734,7 @@ public interface JobEntryInterface {
    * @deprecated use {@link #loadReferencedObject(int, Repository, IMetaStore, VariableSpace)}
    */
   @Deprecated
-  Object loadReferencedObject( int index, Repository rep, VariableSpace space ) throws KettleException;
+  Object loadReferencedObject( Bowl bowl, int index, Repository rep, VariableSpace space ) throws KettleException;
 
   /**
    * Load the referenced object
@@ -726,7 +750,8 @@ public interface JobEntryInterface {
    * @return the referenced object once loaded
    * @throws KettleException
    */
-  Object loadReferencedObject( int index, Repository rep, IMetaStore metaStore, VariableSpace space ) throws KettleException;
+  Object loadReferencedObject( Bowl bowl, int index, Repository rep, IMetaStore metaStore, VariableSpace space )
+    throws KettleException;
 
   /**
    * At save and run time, the system will attempt to set the jobMeta so that it can be accessed by the jobEntries
@@ -746,4 +771,7 @@ public interface JobEntryInterface {
     throw new UnsupportedOperationException( "Attemped access of getJobMet not supported by JobEntryInterface implementation" );
   }
 
+  default JobEntryHelperInterface getJobEntryHelperInterface() {
+    return null; // default
+  }
 }

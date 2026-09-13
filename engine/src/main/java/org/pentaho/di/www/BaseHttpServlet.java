@@ -1,37 +1,35 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.www;
 
 import java.io.IOException;
+import java.util.Enumeration;
 import java.util.List;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.logging.LogChannel;
 import org.pentaho.di.core.logging.LogChannelInterface;
+import org.pentaho.di.core.variables.VariableSpace;
+import org.pentaho.di.repository.Repository;
+
 
 public class BaseHttpServlet extends HttpServlet {
 
@@ -186,6 +184,31 @@ public class BaseHttpServlet extends HttpServlet {
     this.jobMap = jobMap;
     this.socketRepository = socketRepository;
     this.detections = detections;
+  }
+
+  /**
+   * Read the request parameters from the request and add it to the VariableSpace
+   * @param request Input HttpServletRequest
+   * @return VariableSpace Return the populated VariableSpace
+   */
+  protected VariableSpace getPopulatedVariableSpaceFromRequest( HttpServletRequest request, VariableSpace variableSpace ) {
+    Enumeration<?> parameterNames = request.getParameterNames();
+    while ( parameterNames.hasMoreElements() ) {
+      String parameter = (String) parameterNames.nextElement();
+      String[] values = request.getParameterValues( parameter );
+      variableSpace.setVariable( parameter, values != null && values.length > 0 ? values[0] : "" );
+    }
+    return variableSpace;
+  }
+
+  protected void clearBowlCache( Repository repository ) {
+    clearBowlCache( repository == null ? DefaultBowl.getInstance() : repository.getBowl() );
+  }
+
+  protected void clearBowlCache( Bowl bowl ) {
+    if ( bowl != null ) {
+      bowl.clearCache();
+    }
   }
 
 }

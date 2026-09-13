@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.fileinput.text;
 
@@ -28,6 +20,13 @@ import org.mockito.Mockito;
 import org.pentaho.di.core.logging.LogChannelInterface;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.trans.steps.file.BaseFileField;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 public class TextFileInputUtilsTest {
   @Test
@@ -156,4 +155,83 @@ public class TextFileInputUtilsTest {
     Assert.assertEquals( "C", strings[ 1 ] );
   }
 
+  @Test
+  public void getLineWithEnclosureTest() throws Exception {
+    String text = "\"firstLine\"\n\"secondLine\"";
+    StringBuilder linebuilder = new StringBuilder( "" );
+    InputStream is = new ByteArrayInputStream( text.getBytes() );
+    BufferedInputStreamReader isr = new BufferedInputStreamReader( new InputStreamReader( is ) );
+    TextFileLine line = TextFileInputUtils.getLine( Mockito.mock( LogChannelInterface.class ), isr, EncodingType.SINGLE, 1, linebuilder, "\"", "", 0 );
+    Assert.assertEquals( "\"firstLine\"", line.getLine() );
+  }
+
+  @Test
+  public void getLineBrokenByEnclosureTest() throws Exception {
+    String text = "\"firstLine\n\"\"secondLine\"";
+    StringBuilder linebuilder = new StringBuilder( "" );
+    InputStream is = new ByteArrayInputStream( text.getBytes() );
+    BufferedInputStreamReader isr = new BufferedInputStreamReader( new InputStreamReader( is ) );
+    TextFileLine line = TextFileInputUtils.getLine( Mockito.mock( LogChannelInterface.class ), isr, EncodingType.SINGLE, 1, linebuilder, "\"", "", 0 );
+    Assert.assertEquals( text, line.getLine() );
+  }
+
+  @Test
+  public void getLineBrokenByEnclosureLenientTest() throws Exception {
+    System.setProperty( "KETTLE_COMPATIBILITY_TEXT_FILE_INPUT_USE_LENIENT_ENCLOSURE_HANDLING", "Y" );
+    String text = "\"firstLine\n\"\"secondLine\"";
+    StringBuilder linebuilder = new StringBuilder( "" );
+    InputStream is = new ByteArrayInputStream( text.getBytes() );
+    BufferedInputStreamReader isr = new BufferedInputStreamReader( new InputStreamReader( is ) );
+    TextFileLine line = TextFileInputUtils.getLine( Mockito.mock( LogChannelInterface.class ), isr, EncodingType.SINGLE, 1, linebuilder, "\"", "", 0 );
+    Assert.assertEquals( "\"firstLine", line.getLine() );
+    System.clearProperty( "KETTLE_COMPATIBILITY_TEXT_FILE_INPUT_USE_LENIENT_ENCLOSURE_HANDLING" );
+  }
+
+  @Test
+  public void testCheckPattern() {
+    // Check more information in:
+    // https://docs.oracle.com/javase/tutorial/essential/regex/literals.html
+    String metacharacters = "<([{\\^-=$!|]})?*+.>";
+    for( int i = 0; i < metacharacters.length(); i++ ) {
+      int matches = TextFileInputUtils.checkPattern( metacharacters, String.valueOf( metacharacters.charAt( i ) ), null );
+      Assert.assertEquals( 1, matches );
+    }
+  }
+
+  @Test
+  public void testCheckPatternWithEscapeCharacter() {
+    List<String> texts = new ArrayList<>();
+    texts.add( "\"valueA\"|\"valueB\\\\\"|\"valueC\"" );
+    texts.add( "\"valueA\"|\"va\\\"lueB\"|\"valueC\"" );
+
+    for ( String text : texts ) {
+      int matches = TextFileInputUtils.checkPattern( text, "\"", "\\" );
+      Assert.assertEquals( 6, matches );
+    }
+
+  }
+
+  @Test
+  public void convertCSVLinesToStringsWithSameEnclosureAndEscape() throws Exception {
+    TextFileInputMeta inputMeta = Mockito.mock(TextFileInputMeta.class);
+    inputMeta.content = new TextFileInputMeta.Content();
+    inputMeta.content.fileType = "CSV";
+    inputMeta.inputFields = new BaseFileField[2];
+    inputMeta.content.escapeCharacter = "\"";
+    inputMeta.content.enclosure = "\"";
+    //the escape character is same as enclosure
+    String line = "\"\"\"\"\"\""; // """"""
+
+    String[] strings = TextFileInputUtils
+            .convertLineToStrings(Mockito.mock(LogChannelInterface.class), line, inputMeta, ",", "\"", "\"");
+    Assert.assertNotNull(strings);
+    Assert.assertEquals("\"\"", strings[0]);//""""
+
+    line = "\"{\"\"Example1\"\":\"\"\"\",\"\"Example\"\":\"\"Test\"\"}\""; // """"""
+
+    strings = TextFileInputUtils
+            .convertLineToStrings(Mockito.mock(LogChannelInterface.class), line, inputMeta, ",", "\"", "\"");
+    Assert.assertNotNull(strings);
+    Assert.assertEquals("{\"Example1\":\"\",\"Example\":\"Test\"}", strings[0]);//""""
+  }
 }

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.writetolog;
 
@@ -99,30 +91,42 @@ public class WriteToLog extends BaseStep implements StepInterface {
       if ( !Utils.isEmpty( data.logmessage ) ) {
         data.logmessage += Const.CR + Const.CR;
       }
-
     } // end if first
 
-    StringBuilder out = new StringBuilder();
-    out.append( Const.CR
-      + "------------> " + BaseMessages.getString( PKG, "WriteToLog.Log.NLigne", "" + getLinesRead() )
-      + "------------------------------" + Const.CR );
+    // We don't need to calculate if step log level is lower than the run log level
+    if ( getLogLevel().getLevel() >= data.loglevel.getLevel() ) {
+      StringBuilder out = new StringBuilder();
+      out.append( Const.CR ).append( "------------> " )
+        .append( BaseMessages.getString(
+          PKG, "WriteToLog.Log.NLigne", "" + getLinesRead() ) )
+        .append( "------------------------------" )
+        .append( Const.CR );
 
-    out.append( getRealLogMessage() );
+      out.append( getRealLogMessage() );
 
-    // Loop through fields
-    for ( int i = 0; i < data.fieldnr; i++ ) {
-      String fieldvalue = getInputRowMeta().getString( r, data.fieldnrs[i] );
+      String[] fieldNames = {};
 
-      if ( meta.isdisplayHeader() ) {
-        String fieldname = getInputRowMeta().getFieldNames()[data.fieldnrs[i]];
-        out.append( fieldname + " = " + fieldvalue + Const.CR );
-      } else {
-        out.append( fieldvalue + Const.CR );
+      // Obtaining the field name list is a heavy operation, as so, it was removed from the loop.
+      // And, as it's only needed if the header is to be printed, I conditioned the calculation to that scenario.
+      if ( meta.isDisplayHeader() ) {
+        fieldNames = getInputRowMeta().getFieldNames();
       }
-    }
-    out.append( Const.CR + "====================" );
 
-    setLog( data.loglevel, out );
+      // Loop through fields
+      for ( int i = 0; i < data.fieldnr; i++ ) {
+        String fieldValue = getInputRowMeta().getString( r, data.fieldnrs[ i ] );
+
+        if ( meta.isDisplayHeader() ) {
+          out.append( fieldNames[ data.fieldnrs[ i ] ] ).append( " = " );
+        }
+
+        out.append( fieldValue ).append( Const.CR );
+      }
+
+      out.append( Const.CR ).append( "====================" );
+
+      setLog( data.loglevel, out );
+    }
 
     // Increment counter
     if ( meta.isLimitRows() && ++rowCounter >= meta.getLimitRowsNumber() ) {

@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.s3csvinput;
 
@@ -26,7 +18,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.amazonaws.SdkClientException;
-import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.regions.Regions;
@@ -35,8 +26,12 @@ import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
+import org.pentaho.di.core.row.value.ValueMetaBase;
+import org.pentaho.di.core.util.EnvUtil;
+import org.pentaho.di.core.util.StringUtil;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.annotations.Step;
+import org.pentaho.di.core.bowl.Bowl;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.encryption.Encr;
 import org.pentaho.di.core.exception.KettleException;
@@ -70,6 +65,7 @@ import org.pentaho.di.trans.steps.textfileinput.TextFileInputField;
 import org.pentaho.di.trans.steps.textfileinput.TextFileInputMeta;
 import org.pentaho.metastore.api.IMetaStore;
 import org.w3c.dom.Node;
+import org.pentaho.di.trans.step.StepHelperInterface;
 
 /**
  * @since 2008-04-28
@@ -79,7 +75,7 @@ import org.w3c.dom.Node;
 
 @Step( id = "S3CSVINPUT", image = "S3I.svg", i18nPackageName = "org.pentaho.di.trans.steps.s3csvinput",
     name = "S3CsvInput.Step.Name", description = "S3CsvInput.Step.Description", categoryDescription = "Input",
-    documentationUrl = "Products/Data_Integration/Transformation_Step_Reference/S3_CSV_Input" )
+    documentationUrl = "pdi-transformation-steps-reference-overview/s3-csv-input-cp" )
 @InjectionSupported( localizationPrefix = "S3CsvInput.Injection.", groups = { "INPUT_FIELDS" } )
 public class S3CsvInputMeta extends BaseStepMeta implements StepMetaInterface, InputFileMetaInterface {
 
@@ -119,8 +115,10 @@ public class S3CsvInputMeta extends BaseStepMeta implements StepMetaInterface, I
   @Injection( name = "RUNNING_IN_PARALLEL" )
   private boolean runningInParallel;
 
+  @Injection( name = "AWS_ACCESS_KEY" )
   private String awsAccessKey;
 
+  @Injection( name = "AWS_SECRET_KEY" )
   private String awsSecretKey;
 
   public S3CsvInputMeta() {
@@ -316,7 +314,7 @@ public class S3CsvInputMeta extends BaseStepMeta implements StepMetaInterface, I
   }
 
   @Override
-  public void getFields( RowMetaInterface rowMeta, String origin, RowMetaInterface[] info, StepMeta nextStep,
+  public void getFields( Bowl bowl, RowMetaInterface rowMeta, String origin, RowMetaInterface[] info, StepMeta nextStep,
       VariableSpace space, Repository repository, IMetaStore metaStore ) throws KettleStepException {
     rowMeta.clear(); // Start with a clean slate, eats the input
 
@@ -371,9 +369,9 @@ public class S3CsvInputMeta extends BaseStepMeta implements StepMetaInterface, I
   }
 
   @Override
-  public void getFields( RowMetaInterface rowMeta, String origin, RowMetaInterface[] info, StepMeta nextStep,
+  public void getFields( Bowl bowl, RowMetaInterface rowMeta, String origin, RowMetaInterface[] info, StepMeta nextStep,
       VariableSpace space ) throws KettleStepException {
-    getFields( rowMeta, origin, info, nextStep, space, null, null );
+    getFields( bowl, rowMeta, origin, info, nextStep, space, null, null );
   }
 
   @Override
@@ -420,6 +418,11 @@ public class S3CsvInputMeta extends BaseStepMeta implements StepMetaInterface, I
   @Override
   public StepDataInterface getStepData() {
     return new S3CsvInputData();
+  }
+
+  @Override
+  public StepHelperInterface getStepHelperInterface() {
+    return new S3CsvInputHelper();
   }
 
   /**
@@ -677,6 +680,21 @@ public class S3CsvInputMeta extends BaseStepMeta implements StepMetaInterface, I
   }
 
   /**
+   * For legacy transformations containing AWS S3 access credentials, {@link Const#KETTLE_USE_AWS_DEFAULT_CREDENTIALS} can force Spoon to use
+   * the Amazon Default Credentials Provider Chain instead of using the credentials embedded in the transformation metadata.
+   *
+   * @return true if {@link Const#KETTLE_USE_AWS_DEFAULT_CREDENTIALS} is true or AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are not specified
+   */
+  public boolean getUseAwsDefaultCredentials() {
+    if ( ValueMetaBase.convertStringToBoolean( Const.NVL( EnvUtil.getSystemProperty( Const.KETTLE_USE_AWS_DEFAULT_CREDENTIALS ), "N" ) ) ) {
+      return true;
+    } else if ( StringUtil.isEmpty( awsAccessKey ) && StringUtil.isEmpty( awsSecretKey ) ) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * @return the bucket
    */
   public String getBucket() {
@@ -722,18 +740,17 @@ public class S3CsvInputMeta extends BaseStepMeta implements StepMetaInterface, I
   }
 
   public AmazonS3 getS3Client( VariableSpace space ) throws SdkClientException {
-    String accessKey = Encr.decryptPasswordOptionallyEncrypted( space.environmentSubstitute( awsAccessKey ) );
-    String secretKey = Encr.decryptPasswordOptionallyEncrypted( space.environmentSubstitute( awsSecretKey ) );
-    AWSCredentials credentials = null;
-
-    if ( !isEmpty( accessKey ) && !isEmpty( secretKey ) ) {
+    if ( !getUseAwsDefaultCredentials() ) {
       // Handle legacy credentials ( embedded in the step ).  We'll force a region since it not specified and
       // then turn on GlobalBucketAccess so if the files accessed are elsewhere it won't matter.
-      BasicAWSCredentials awsCreds = new BasicAWSCredentials( accessKey, secretKey );
+      BasicAWSCredentials credentials = new BasicAWSCredentials(
+        Encr.decryptPasswordOptionallyEncrypted( space.environmentSubstitute( awsAccessKey ) ),
+        Encr.decryptPasswordOptionallyEncrypted( space.environmentSubstitute( awsSecretKey ) ) );
+
       return AmazonS3ClientBuilder.standard()
-        .withCredentials( new AWSStaticCredentialsProvider( awsCreds ) )
-        .enableForceGlobalBucketAccess()
+        .withCredentials( new AWSStaticCredentialsProvider( credentials ) )
         .withRegion( Regions.US_EAST_1 )
+        .enableForceGlobalBucketAccess()
         .build();
     } else {
       // Get Credentials the new way
@@ -741,9 +758,5 @@ public class S3CsvInputMeta extends BaseStepMeta implements StepMetaInterface, I
         .enableForceGlobalBucketAccess()
         .build();
     }
-  }
-
-  private boolean isEmpty( String value ) {
-    return value == null || value.length() <= 0;
   }
 }

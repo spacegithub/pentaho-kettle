@@ -1,25 +1,21 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.pur;
 
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.partition.PartitionSchema;
-import org.pentaho.di.repository.ObjectId;
 import org.pentaho.di.repository.RepositoryElementInterface;
 import org.pentaho.di.repository.StringObjectId;
 import org.pentaho.platform.api.repository2.unified.RepositoryFile;
@@ -81,13 +77,6 @@ public class PartitionDelegate extends AbstractDelegate implements ITransformer,
     PartitionSchema partitionSchema = (PartitionSchema) element;
     DataNode rootNode = new DataNode( NODE_ROOT );
 
-    // Check for naming collision
-    ObjectId partitionId = repo.getPartitionSchemaID( partitionSchema.getName() );
-    if ( partitionId != null && !partitionSchema.getObjectId().equals( partitionId ) ) {
-      // We have a naming collision, abort the save
-      throw new KettleException( "Failed to save object to repository. Object [" + partitionSchema.getName()
-          + "] already exists." );
-    }
     rootNode.setProperty( PROP_DYNAMIC_DEFINITION, partitionSchema.isDynamicallyDefined() );
     rootNode.setProperty( PROP_PARTITIONS_PER_SLAVE, partitionSchema.getNumberOfPartitionsPerSlave() );
 

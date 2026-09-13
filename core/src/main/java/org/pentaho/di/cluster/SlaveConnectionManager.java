@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.cluster;
 
@@ -32,6 +24,7 @@ import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.pentaho.di.core.logging.LogChannel;
 
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
@@ -62,7 +55,8 @@ public class SlaveConnectionManager {
         context.init( new KeyManager[ 0 ], new X509TrustManager[] { getDefaultTrustManager() }, new SecureRandom() );
         SSLContext.setDefault( context );
       } catch ( Exception e ) {
-        //log.logError( "Default SSL context hasn't been initialized", e );
+        new LogChannel( "SlaveConnectionManager" )
+          .logDebug( "Default SSL context hasn't been initialized.\n" + e.getMessage() );
       }
     }
     manager = new PoolingHttpClientConnectionManager();
@@ -128,6 +122,7 @@ public class SlaveConnectionManager {
     return new X509TrustManager() {
       @Override
       public void checkClientTrusted( X509Certificate[] certs, String param ) throws CertificateException {
+        throw new CertificateException( "Client Authentication not implemented" );
       }
 
       @Override
@@ -141,7 +136,7 @@ public class SlaveConnectionManager {
 
       @Override
       public X509Certificate[] getAcceptedIssuers() {
-        return null;
+        return new X509Certificate[0];
       }
     };
   }

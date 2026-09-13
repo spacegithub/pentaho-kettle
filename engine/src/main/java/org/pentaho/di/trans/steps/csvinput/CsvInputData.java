@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.csvinput;
 
@@ -201,6 +193,12 @@ public class CsvInputData extends BaseStepData implements StepDataInterface {
     return moveEndBufferPointer( true );
   }
 
+  void moveEndBufferPointerXTimes( int xTimes ) throws IOException {
+    for ( int i = 0; i < xTimes; i++ ) {
+      moveEndBufferPointer( true );
+    }
+  }
+
   /**
    * This method should be used very carefully. Moving pointer without increasing number of written bytes
    * can lead to data corruption.
@@ -285,11 +283,16 @@ public class CsvInputData extends BaseStepData implements StepDataInterface {
     return endBuffer;
   }
 
+  boolean isCarriageReturn() {
+    return encodingType.isReturn( byteBuffer[endBuffer] );
+  }
+
   boolean newLineFound() {
     return crLfMatcher.isReturn( byteBuffer, endBuffer ) || crLfMatcher.isLineFeed( byteBuffer, endBuffer );
   }
 
-  boolean delimiterFound() {
+  boolean delimiterFound() throws IOException {
+    checkMinimumBytesAvailable( delimiter.length );
     return delimiterMatcher.matchesPattern( byteBuffer, endBuffer, delimiter );
   }
 
@@ -300,4 +303,35 @@ public class CsvInputData extends BaseStepData implements StepDataInterface {
   boolean endOfBuffer() {
     return endBuffer >= bufferSize;
   }
+
+  /**
+   * Ensure there are at least a minimum number of bytes in the buffer.  If not then pull in another block of data.
+   * @param bytesNeeded bytes to ensure are present in the buffer
+   */
+  private void checkMinimumBytesAvailable( int bytesNeeded ) throws IOException {
+    if ( bufferSize - endBuffer < bytesNeeded ) {
+
+      int newSize = bufferSize - startBuffer + Math.max( preferredBufferSize, bytesNeeded );
+      byte[] newByteBuffer = new byte[ newSize + 100 ];
+
+      // copy over the old data...
+      System.arraycopy( byteBuffer, startBuffer, newByteBuffer, 0, bufferSize - startBuffer );
+
+      // replace the old byte buffer...
+      byteBuffer = newByteBuffer;
+
+      // Adjust start and end point of data in the byte buffer
+      //
+      int newEndBuffer = endBuffer - startBuffer;
+      bufferSize =
+        endBuffer = bufferSize - startBuffer;  //Set endBuffer to bufferSize temporarily so readBufferFromFile works
+      startBuffer = 0;
+
+      readBufferFromFile();
+
+      endBuffer = newEndBuffer;
+
+    }
+  }
+
 }

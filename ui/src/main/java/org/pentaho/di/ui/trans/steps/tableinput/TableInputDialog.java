@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.tableinput;
 
@@ -105,6 +97,10 @@ public class TableInputDialog extends BaseStepDialog implements StepDialogInterf
   private Label wlLazyConversion;
   private Button wLazyConversion;
   private FormData fdlLazyConversion, fdLazyConversion;
+
+  private Label wlCachedRowMeta;
+  private Button wCachedRowMeta;
+  private FormData fdlCachedRowMeta, fdCachedRowMeta;
 
   private Button wbTable;
   private FormData fdbTable;
@@ -297,12 +293,35 @@ public class TableInputDialog extends BaseStepDialog implements StepDialogInterf
       }
     } );
 
+    // Cached Row Meta conversion?
+    //
+    wlCachedRowMeta = new Label( shell, SWT.RIGHT );
+    wlCachedRowMeta.setText( BaseMessages.getString( PKG, "TableInputDialog.CacheRowMeta" ) );
+    props.setLook( wlCachedRowMeta );
+    fdlCachedRowMeta = new FormData();
+    fdlCachedRowMeta.left = new FormAttachment( 0, 0 );
+    fdlCachedRowMeta.right = new FormAttachment( middle, -margin );
+    fdlCachedRowMeta.bottom = new FormAttachment( wLazyConversion, -margin );
+    wlCachedRowMeta.setLayoutData( fdlCachedRowMeta );
+    wCachedRowMeta = new Button( shell, SWT.CHECK );
+    props.setLook( wCachedRowMeta );
+    fdCachedRowMeta = new FormData();
+    fdCachedRowMeta.left = new FormAttachment( middle, 0 );
+    fdCachedRowMeta.right = new FormAttachment( 100, 0 );
+    fdCachedRowMeta.bottom = new FormAttachment( wLazyConversion, -margin );
+    wCachedRowMeta.setLayoutData( fdCachedRowMeta );
+    wCachedRowMeta.addSelectionListener( new SelectionAdapter() {
+      public void widgetSelected( SelectionEvent arg0 ) {
+        input.setChanged();
+      }
+    } );
+
     wlPosition = new Label( shell, SWT.NONE );
     props.setLook( wlPosition );
     fdlPosition = new FormData();
     fdlPosition.left = new FormAttachment( 0, 0 );
     fdlPosition.right = new FormAttachment( 100, 0 );
-    fdlPosition.bottom = new FormAttachment( wLazyConversion, -margin );
+    fdlPosition.bottom = new FormAttachment( wCachedRowMeta, -margin );
     wlPosition.setLayoutData( fdlPosition );
 
     // Table line...
@@ -485,6 +504,7 @@ public class TableInputDialog extends BaseStepDialog implements StepDialogInterf
 
     wVariables.setSelection( input.isVariableReplacementActive() );
     wLazyConversion.setSelection( input.isLazyConversionActive() );
+    wCachedRowMeta.setSelection( input.isCachedRowMetaActive() );
 
     setSQLToolTip();
     setFlags();
@@ -523,6 +543,7 @@ public class TableInputDialog extends BaseStepDialog implements StepDialogInterf
     meta.setExecuteEachInputRow( wEachRow.getSelection() );
     meta.setVariableReplacementActive( wVariables.getSelection() );
     meta.setLazyConversionActive( wLazyConversion.getSelection() );
+    meta.setCachedRowMetaActive( wCachedRowMeta.getSelection() );
   }
 
   private void ok() {
@@ -534,6 +555,7 @@ public class TableInputDialog extends BaseStepDialog implements StepDialogInterf
     // copy info to TextFileInputMeta class (input)
 
     getInfo( input, false );
+    input.updateCachedRowMeta();
 
     if ( input.getDatabaseMeta() == null ) {
       MessageBox mb = new MessageBox( shell, SWT.OK | SWT.ICON_ERROR );
@@ -603,7 +625,7 @@ public class TableInputDialog extends BaseStepDialog implements StepDialogInterf
                 + Const.CR + e.getMessage() );
               mb.open();
             } finally {
-              db.disconnect();
+              db.close();
             }
             break;
           default:

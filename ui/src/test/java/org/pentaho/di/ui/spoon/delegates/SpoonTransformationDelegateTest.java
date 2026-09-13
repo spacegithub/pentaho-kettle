@@ -1,30 +1,23 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.spoon.delegates;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -38,6 +31,7 @@ import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.logging.LogLevel;
 import org.pentaho.di.core.logging.TransLogTable;
 import org.pentaho.di.core.row.RowMetaInterface;
+import org.pentaho.di.job.JobMeta;
 import org.pentaho.di.trans.TransExecutionConfiguration;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.ui.spoon.Spoon;
@@ -68,6 +62,7 @@ public class SpoonTransformationDelegateTest {
   private TransLogTable transLogTable;
   private TransMeta transMeta;
   private List<TransMeta> transformationMap;
+  private List<String> vars;
 
   @Before
   public void before() {
@@ -83,8 +78,10 @@ public class SpoonTransformationDelegateTest {
 
     doReturn( transformationMap ).when( delegate ).getTransformationList();
     doReturn( spoon ).when( delegate ).getSpoon();
+    doCallRealMethod().when( delegate ).isDefaultTransformationName( any() );
     doCallRealMethod().when( delegate ).isLogTableDefined( any() );
     transLogTable = mock( TransLogTable.class );
+    vars = new ArrayList<>();
   }
 
   @Test
@@ -128,12 +125,17 @@ public class SpoonTransformationDelegateTest {
     doReturn( rowMeta ).when( spoon.variables ).getRowMeta();
     doReturn( EMPTY_STRING_ARRAY ).when( rowMeta ).getFieldNames();
     doReturn( transExecutionConfiguration ).when( spoon ).getTransExecutionConfiguration();
+    doReturn( new TransMeta[0] ).when( spoon ).getLoadedTransformations();
+    doReturn( new JobMeta[0] ).when( spoon ).getLoadedJobs();
     doReturn( MAP_WITH_TEST_PARAM ).when( transExecutionConfiguration ).getParams();
     doReturn( activeTransGraph ).when( spoon ).getActiveTransGraph();
     doReturn( TEST_LOG_LEVEL ).when( transExecutionConfiguration ).getLogLevel();
     doReturn( TEST_BOOLEAN_PARAM ).when( transExecutionConfiguration ).isClearingLog();
     doReturn( TEST_BOOLEAN_PARAM ).when( transExecutionConfiguration ).isSafeModeEnabled();
     doReturn( TEST_BOOLEAN_PARAM ).when( transExecutionConfiguration ).isGatheringMetrics();
+    doReturn( EMPTY_STRING_ARRAY ).when( transMeta ).listVariables();
+    doReturn( vars ).when( transMeta ).getUsedVariables();
+    doReturn( "" ).when( transMeta ).getVariable( anyString() );
 
     delegate.executeTransformation( transMeta, true, false, false, false, false,
             null, false, LogLevel.BASIC );
@@ -144,5 +146,16 @@ public class SpoonTransformationDelegateTest {
     verify( transMeta ).setClearingLog( TEST_BOOLEAN_PARAM );
     verify( transMeta ).setSafeModeEnabled( TEST_BOOLEAN_PARAM );
     verify( transMeta ).setGatheringMetrics( TEST_BOOLEAN_PARAM );
+  }
+
+  @Test
+  public void testDefaultTransformationName() {
+    assertTrue( delegate.isDefaultTransformationName( "Transformation" ) );
+    assertTrue( delegate.isDefaultTransformationName( "Transformation " ) );
+    assertTrue( delegate.isDefaultTransformationName( "Transformation 1" ) );
+    assertTrue( delegate.isDefaultTransformationName( "Transformation 2" ) );
+    assertFalse( delegate.isDefaultTransformationName( "Transformation1" ) );
+    assertFalse( delegate.isDefaultTransformationName( "Transformation  2" ) );
+    assertFalse( delegate.isDefaultTransformationName( "Transformation203" ) );
   }
 }

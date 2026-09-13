@@ -1,19 +1,16 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.pur;
 
 import java.util.ArrayList;
@@ -47,7 +44,7 @@ public class PurRepositoryImporter extends RepositoryImporter implements java.io
   }
 
   @Override
-  protected <T extends SharedObjectInterface> List<T> getSharedObjects( Class<T> clazz ) {
+  protected <T extends SharedObjectInterface<T>> List<T> getSharedObjects( Class<T> clazz ) {
     List<T> result = new ArrayList<T>();
     List<?> typeList = sharedObjectsByType.get( clazz );
     if ( typeList != null ) {
@@ -60,7 +57,7 @@ public class PurRepositoryImporter extends RepositoryImporter implements java.io
 
   private void populateSharedObjectsMap() throws KettleException {
     sharedObjectsByType = new HashMap<Class<?>, List<?>>();
-    for ( Entry<RepositoryObjectType, List<? extends SharedObjectInterface>> entry : rep.loadAndCacheSharedObjects()
+    for ( Entry<RepositoryObjectType, List<? extends SharedObjectInterface<?>>> entry : rep.loadAndCacheSharedObjects()
         .entrySet() ) {
       Class<?> clazz = null;
       switch ( entry.getKey() ) {
@@ -91,19 +88,7 @@ public class PurRepositoryImporter extends RepositoryImporter implements java.io
   }
 
   @Override
-  protected void replaceSharedObjects( TransMeta transMeta ) throws KettleException {
-    populateSharedObjectsMap();
-    super.replaceSharedObjects( transMeta );
-  }
-
-  @Override
-  protected void replaceSharedObjects( JobMeta jobMeta ) throws KettleException {
-    populateSharedObjectsMap();
-    super.replaceSharedObjects( jobMeta );
-  }
-
-  @Override
-  protected boolean equals( DatabaseMeta databaseMeta, DatabaseMeta databaseMeta2 ) {
+  public boolean equals( DatabaseMeta databaseMeta, DatabaseMeta databaseMeta2 ) {
     return rep.getDatabaseMetaTransformer().equals( databaseMeta, databaseMeta2 );
   }
 
@@ -114,7 +99,10 @@ public class PurRepositoryImporter extends RepositoryImporter implements java.io
 
   @Override
   protected boolean equals( ClusterSchema clusterSchema, ClusterSchema clusterSchema2 ) {
-    return rep.getClusterTransformer().equals( clusterSchema, clusterSchema2 );
+    // Compare at the field level rather than using the Repository DataNode 
+    // representation so we can compare by Slave Server name instead of 
+    // object id, which might not have been set yet. 
+    return super.equals( clusterSchema, clusterSchema2 );
   }
 
   @Override

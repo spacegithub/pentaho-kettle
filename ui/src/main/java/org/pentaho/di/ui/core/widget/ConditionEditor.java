@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.core.widget;
 
@@ -44,6 +36,7 @@ import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
+import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
@@ -76,7 +69,7 @@ import org.w3c.dom.Node;
  *
  */
 
-public class ConditionEditor extends Composite {
+public class ConditionEditor extends Canvas {
   private static Class<?> PKG = ConditionEditor.class; // for i18n purposes, needed by Translator2!!
 
   private static final int X_PADDING = 18;
@@ -96,7 +89,7 @@ public class ConditionEditor extends Composite {
   private static final int AREA_RIGHT_EXACT = 10;
   private static final int AREA_ICON_ADD = 11;
 
-  protected Composite widget;
+  protected Canvas widget;
   private Shell shell;
   private Display display;
   private Condition active_condition;
@@ -325,6 +318,7 @@ public class ConditionEditor extends Composite {
             case AREA_UP:
               // Go to the parent condition...
               goUp();
+              redraw();
               break;
             case AREA_FUNCTION:
               if ( active_condition.isAtomic() ) {
@@ -339,6 +333,12 @@ public class ConditionEditor extends Composite {
                 if ( selection != null ) {
                   int fnnr = Condition.getFunction( selection );
                   active_condition.setFunction( fnnr );
+
+                  if ( active_condition.getFunction() == Condition.FUNC_NOT_NULL || active_condition.getFunction() == Condition.FUNC_NULL ) {
+                    active_condition.setRightValuename( null );
+                    active_condition.setRightExact( null );
+                  }
+
                   setModified();
                 }
                 widget.redraw();
@@ -495,8 +495,6 @@ public class ConditionEditor extends Composite {
       int last = parents.size() - 1;
       active_condition = parents.get( last );
       parents.remove( last );
-
-      redraw();
     }
     if ( getLevel() > 0 ) {
       setMessageString( BaseMessages.getString( PKG, "ConditionEditor.GoUpOneLevel.Label", "" + getLevel() ) );
@@ -504,6 +502,14 @@ public class ConditionEditor extends Composite {
       setMessageString( BaseMessages.getString( PKG, "ConditionEditor.EditSubCondition" ) );
     }
 
+  }
+
+  @Override
+  public void setMenu( Menu menu ) {
+    if ( menu != null ) {
+      menu.setLocation( this.getDisplay().getCursorLocation() );
+      menu.setVisible( true );
+    }
   }
 
   private void setMenu( int area, Point screen ) {
@@ -515,7 +521,7 @@ public class ConditionEditor extends Composite {
     switch ( area ) {
       case AREA_NOT:
         mPop = new Menu( widget );
-        MenuItem miNegate = new MenuItem( mPop, SWT.CASCADE );
+        MenuItem miNegate = new MenuItem( mPop, SWT.PUSH );
         miNegate.setText( BaseMessages.getString( PKG, "ConditionEditor.NegateCondition" ) );
         miNegate.addSelectionListener( new SelectionAdapter() {
           @Override
@@ -530,7 +536,7 @@ public class ConditionEditor extends Composite {
       case AREA_BACKGROUND:
       case AREA_ICON_ADD:
         mPop = new Menu( widget );
-        MenuItem miAdd = new MenuItem( mPop, SWT.CASCADE );
+        MenuItem miAdd = new MenuItem( mPop, SWT.PUSH );
         miAdd.setText( BaseMessages.getString( PKG, "ConditionEditor.AddCondition.Label" ) );
         miAdd.addSelectionListener( new SelectionAdapter() {
           @Override
@@ -542,8 +548,8 @@ public class ConditionEditor extends Composite {
         break;
       case AREA_SUBCONDITION:
         mPop = new Menu( widget );
-        MenuItem miEdit = new MenuItem( mPop, SWT.CASCADE );
-        miEdit.setText( "Edit condition" );
+        MenuItem miEdit = new MenuItem( mPop, SWT.PUSH );
+        miEdit.setText( BaseMessages.getString( PKG, "ConditionEditor.EditCondition.Label" ) );
         miEdit.addSelectionListener( new SelectionAdapter() {
           @Override
           public void widgetSelected( SelectionEvent e ) {
@@ -552,7 +558,7 @@ public class ConditionEditor extends Composite {
             widget.redraw();
           }
         } );
-        MenuItem miDel = new MenuItem( mPop, SWT.CASCADE );
+        MenuItem miDel = new MenuItem( mPop, SWT.PUSH );
         miDel.setText( BaseMessages.getString( PKG, "ConditionEditor.DeleteCondition.Label" ) );
         miDel.addSelectionListener( new SelectionAdapter() {
           @Override
@@ -565,7 +571,7 @@ public class ConditionEditor extends Composite {
         // Add a sub-condition in the subcondition... (move down)
         final Condition sub = active_condition.getCondition( cond_nr );
         if ( sub.getLeftValuename() != null ) {
-          miAdd = new MenuItem( mPop, SWT.CASCADE );
+          miAdd = new MenuItem( mPop, SWT.PUSH );
           miAdd.setText( BaseMessages.getString( PKG, "ConditionEditor.AddSubCondition.Label" ) );
           miAdd.addSelectionListener( new SelectionAdapter() {
             @Override
@@ -581,7 +587,7 @@ public class ConditionEditor extends Composite {
         // --------------------------------------------------
         new MenuItem( mPop, SWT.SEPARATOR );
 
-        MenuItem miCopy = new MenuItem( mPop, SWT.CASCADE );
+        MenuItem miCopy = new MenuItem( mPop, SWT.PUSH );
         miCopy.setText( BaseMessages.getString( PKG, "ConditionEditor.CopyToClipboard" ) );
         miCopy.addSelectionListener( new SelectionAdapter() {
           @Override
@@ -597,7 +603,7 @@ public class ConditionEditor extends Composite {
 
           }
         } );
-        MenuItem miPasteBef = new MenuItem( mPop, SWT.CASCADE );
+        MenuItem miPasteBef = new MenuItem( mPop, SWT.PUSH );
         miPasteBef.setText( BaseMessages.getString( PKG, "ConditionEditor.PasteFromClipboardBeforeCondition" ) );
         miPasteBef.addSelectionListener( new SelectionAdapter() {
           @Override
@@ -624,7 +630,7 @@ public class ConditionEditor extends Composite {
         // --------------------------------------------------
         new MenuItem( mPop, SWT.SEPARATOR );
 
-        MenuItem miPasteAft = new MenuItem( mPop, SWT.CASCADE );
+        MenuItem miPasteAft = new MenuItem( mPop, SWT.PUSH );
         miPasteAft.setText( BaseMessages.getString( PKG, "ConditionEditor.PasteFromClipboardAfterCondition" ) );
         miPasteAft.addSelectionListener( new SelectionAdapter() {
           @Override
@@ -650,7 +656,7 @@ public class ConditionEditor extends Composite {
         } );
         // --------------------------------------------------
         new MenuItem( mPop, SWT.SEPARATOR );
-        MenuItem miMoveSub = new MenuItem( mPop, SWT.CASCADE );
+        MenuItem miMoveSub = new MenuItem( mPop, SWT.PUSH );
         miMoveSub.setText( BaseMessages.getString( PKG, "ConditionEditor.MoveConditionToSubCondition" ) );
         miMoveSub.addSelectionListener( new SelectionAdapter() {
           @Override
@@ -667,7 +673,7 @@ public class ConditionEditor extends Composite {
             widget.redraw();
           }
         } );
-        MenuItem miMoveParent = new MenuItem( mPop, SWT.CASCADE );
+        MenuItem miMoveParent = new MenuItem( mPop, SWT.PUSH );
         miMoveParent.setText( BaseMessages.getString( PKG, "ConditionEditor.MoveConditionToParentCondition" ) );
         if ( getLevel() == 0 ) {
           miMoveParent.setEnabled( false );
@@ -691,7 +697,7 @@ public class ConditionEditor extends Composite {
         } );
         // --------------------------------------------------
         new MenuItem( mPop, SWT.SEPARATOR );
-        MenuItem miMoveDown = new MenuItem( mPop, SWT.CASCADE );
+        MenuItem miMoveDown = new MenuItem( mPop, SWT.PUSH );
         miMoveDown.setText( BaseMessages.getString( PKG, "ConditionEditor.MoveConditionDown" ) );
         if ( cond_nr >= active_condition.nrConditions() - 1 ) {
           miMoveDown.setEnabled( false );
@@ -706,7 +712,7 @@ public class ConditionEditor extends Composite {
             widget.redraw();
           }
         } );
-        MenuItem miMoveUp = new MenuItem( mPop, SWT.CASCADE );
+        MenuItem miMoveUp = new MenuItem( mPop, SWT.PUSH );
         miMoveUp.setText( BaseMessages.getString( PKG, "ConditionEditor.MoveConditionUp" ) );
         if ( cond_nr == 0 ) {
           miMoveUp.setEnabled( false );
@@ -727,7 +733,7 @@ public class ConditionEditor extends Composite {
         break;
       case AREA_OPERATOR:
         Menu mPop = new Menu( widget );
-        MenuItem miDown = new MenuItem( mPop, SWT.CASCADE );
+        MenuItem miDown = new MenuItem( mPop, SWT.PUSH );
         miDown.setText( BaseMessages.getString( PKG, "ConditionEditor.MoveDown" ) );
         miDown.addSelectionListener( new SelectionAdapter() {
           @Override
@@ -747,10 +753,7 @@ public class ConditionEditor extends Composite {
     }
   }
 
-  public void repaint( GC dgc, int width, int height ) {
-    Image im = new Image( display, width, height );
-    GC gc = new GC( im );
-
+  public void repaint( GC gc, int width, int height ) {
     // Initialize some information
     size_not = getNotSize( gc );
     size_widget = getWidgetSize( gc );
@@ -815,11 +818,6 @@ public class ConditionEditor extends Composite {
      * Set the scroll bars: show/don't show and set the size
      */
     setBars();
-
-    // Draw the result on the canvas, all in 1 go.
-    dgc.drawImage( im, 0, 0 );
-
-    im.dispose();
   }
 
   private Rectangle getNotSize( GC gc ) {
@@ -828,7 +826,8 @@ public class ConditionEditor extends Composite {
   }
 
   private Rectangle getWidgetSize( GC gc ) {
-    return widget.getBounds();
+    Rectangle cs = widget.getBounds(); // Canvas size
+    return new Rectangle( 0, 0, cs.width, cs.height );
   }
 
   private Rectangle getAndNotSize( GC gc ) {

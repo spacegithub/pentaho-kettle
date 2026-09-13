@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.repository.repositoryexplorer.controllers;
 
@@ -115,7 +107,9 @@ public class BrowseController extends AbstractXulEventHandler implements IUISupp
 
   private Shell shell;
 
-  private static final int DIALOG_WIDTH = 357, DIALOG_HEIGHT = 165, DIALOG_COLOR = SWT.COLOR_WHITE;
+  private static final int DIALOG_WIDTH = 365, DIALOG_HEIGHT = 195, DIALOG_COLOR = SWT.COLOR_WHITE;
+
+  protected static final String HOME_PATH = "/home", PUBLIC_PATH = "/public";
 
   /**
    * Allows for lookup of a UIRepositoryDirectory by ObjectId. This allows the reuse of instances that are inside a UI
@@ -396,11 +390,6 @@ public class BrowseController extends AbstractXulEventHandler implements IUISupp
     MessageDialog confirmDialog =
       new MessageDialog( getShell(), title, null, msg, MessageDialog.NONE, new String[] { ok }, 0 ) {
         @Override
-        protected Point getInitialSize() {
-          return new Point( DIALOG_WIDTH, DIALOG_HEIGHT );
-        }
-
-        @Override
         protected void configureShell( Shell shell ) {
           super.configureShell( shell );
           shell.setBackground( shell.getDisplay().getSystemColor( DIALOG_COLOR ) );
@@ -663,6 +652,15 @@ public class BrowseController extends AbstractXulEventHandler implements IUISupp
 
   // Object being dragged from the hierarchical folder tree
   public void onDragFromGlobalTree( DropEvent event ) {
+    for ( UIRepositoryDirectory uiRepositoryDirectory : this.getSelectedFolderItems() ) {
+      String path = uiRepositoryDirectory.getDirectory().getPath();
+
+      if ( path.equals( HOME_PATH ) || path.equals( PUBLIC_PATH ) ) {
+        event.setAccepted( false );
+        return;
+      }
+    }
+
     event.setAccepted( true );
   }
 

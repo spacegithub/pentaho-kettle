@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.propertyinput;
 
@@ -62,7 +54,7 @@ public class PropertyInputField implements Cloneable {
   private int type;
   private int length;
   private String format;
-  private int trimtype;
+  private int trimType;
   private int precision;
   private String currencySymbol;
   private String decimalSymbol;
@@ -71,13 +63,13 @@ public class PropertyInputField implements Cloneable {
 
   private String[] samples;
 
-  public PropertyInputField( String fieldname ) {
-    this.name = fieldname;
+  public PropertyInputField( String fieldName ) {
+    this.name = fieldName;
     this.column = COLUMN_KEY;
     this.length = -1;
     this.type = ValueMetaInterface.TYPE_STRING;
     this.format = "";
-    this.trimtype = TYPE_TRIM_NONE;
+    this.trimType = TYPE_TRIM_NONE;
     this.groupSymbol = "";
     this.decimalSymbol = "";
     this.currencySymbol = "";
@@ -87,7 +79,7 @@ public class PropertyInputField implements Cloneable {
   @Override
   public String toString() {
     return String.format( "PropertyInputField: (%s, %d, %d, %d, %s, %d, %d, %s, %s, %s, %b)",
-        name, column, type, length, format, trimtype, precision,
+        name, column, type, length, format, trimType, precision,
         currencySymbol, decimalSymbol, groupSymbol, repeat );
   }
 
@@ -95,7 +87,7 @@ public class PropertyInputField implements Cloneable {
     this( null );
   }
 
-  public static final int getTrimTypeByCode( String tt ) {
+  public static int getTrimTypeByCode( String tt ) {
     if ( tt == null ) {
       return 0;
     }
@@ -112,14 +104,14 @@ public class PropertyInputField implements Cloneable {
     return getColumnDesc( column );
   }
 
-  public static final String getColumnDesc( int i ) {
+  public static String getColumnDesc( int i ) {
     if ( i < 0 || i >= ColumnDesc.length ) {
       return ColumnDesc[0];
     }
     return ColumnDesc[i];
   }
 
-  public static final int getTrimTypeByDesc( String tt ) {
+  public static int getTrimTypeByDesc( String tt ) {
     if ( tt == null ) {
       return 0;
     }
@@ -136,14 +128,14 @@ public class PropertyInputField implements Cloneable {
     return getColumnCode( column );
   }
 
-  public static final String getColumnCode( int i ) {
+  public static String getColumnCode( int i ) {
     if ( i < 0 || i >= ColumnCode.length ) {
       return ColumnCode[0];
     }
     return ColumnCode[i];
   }
 
-  public static final int getColumnByCode( String tt ) {
+  public static int getColumnByCode( String tt ) {
     if ( tt == null ) {
       return 0;
     }
@@ -156,14 +148,14 @@ public class PropertyInputField implements Cloneable {
     return 0;
   }
 
-  public static final String getTrimTypeCode( int i ) {
+  public static String getTrimTypeCode( int i ) {
     if ( i < 0 || i >= trimTypeCode.length ) {
       return trimTypeCode[0];
     }
     return trimTypeCode[i];
   }
 
-  public static final String getTrimTypeDesc( int i ) {
+  public static String getTrimTypeDesc( int i ) {
     if ( i < 0 || i >= trimTypeDesc.length ) {
       return trimTypeDesc[0];
     }
@@ -173,9 +165,7 @@ public class PropertyInputField implements Cloneable {
   @Override
   public Object clone() {
     try {
-      PropertyInputField retval = (PropertyInputField) super.clone();
-
-      return retval;
+      return super.clone();
     } catch ( CloneNotSupportedException e ) {
       return null;
     }
@@ -193,8 +183,8 @@ public class PropertyInputField implements Cloneable {
     return name;
   }
 
-  public void setName( String fieldname ) {
-    this.name = fieldname;
+  public void setName( String fieldName ) {
+    this.name = fieldName;
   }
 
   public int getType() {
@@ -226,43 +216,43 @@ public class PropertyInputField implements Cloneable {
   }
 
   public int getTrimType() {
-    return trimtype;
+    return trimType;
   }
 
   public String getTrimTypeCode() {
-    return getTrimTypeCode( trimtype );
+    return getTrimTypeCode( trimType );
   }
 
   public String getTrimTypeDesc() {
-    return getTrimTypeDesc( trimtype );
+    return getTrimTypeDesc( trimType );
   }
 
-  public void setTrimType( int trimtype ) {
-    this.trimtype = trimtype;
+  public void setTrimType( int trimType ) {
+    this.trimType = trimType;
   }
 
   public String getGroupSymbol() {
     return groupSymbol;
   }
 
-  public void setGroupSymbol( String group_symbol ) {
-    this.groupSymbol = group_symbol;
+  public void setGroupSymbol( String groupSymbol ) {
+    this.groupSymbol = groupSymbol;
   }
 
   public String getDecimalSymbol() {
     return decimalSymbol;
   }
 
-  public void setDecimalSymbol( String decimal_symbol ) {
-    this.decimalSymbol = decimal_symbol;
+  public void setDecimalSymbol( String decimalSymbol ) {
+    this.decimalSymbol = decimalSymbol;
   }
 
   public String getCurrencySymbol() {
     return currencySymbol;
   }
 
-  public void setCurrencySymbol( String currency_symbol ) {
-    this.currencySymbol = currency_symbol;
+  public void setCurrencySymbol( String currencySymbol ) {
+    this.currencySymbol = currencySymbol;
   }
 
   public int getPrecision() {
@@ -285,7 +275,7 @@ public class PropertyInputField implements Cloneable {
     repeat = !repeat;
   }
 
-  public static final int getColumnByDesc( String tt ) {
+  public static int getColumnByDesc( String tt ) {
     if ( tt == null ) {
       return 0;
     }

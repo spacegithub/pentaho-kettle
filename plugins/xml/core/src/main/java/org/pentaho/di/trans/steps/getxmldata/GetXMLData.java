@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.getxmldata;
 
@@ -65,6 +57,8 @@ import org.pentaho.di.trans.step.StepDataInterface;
 import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.step.StepMeta;
 import org.pentaho.di.trans.step.StepMetaInterface;
+
+import static org.pentaho.di.core.row.value.ValueMetaBase.convertStringToBoolean;
 
 /**
  * Read XML files, parse them and convert them to rows and writes these to one or more output streams.
@@ -122,7 +116,8 @@ public class GetXMLData extends BaseStep implements StepInterface {
           }
 
           public void onEnd( ElementPath path ) {
-            if ( isStopped() ) {
+            long rowLimit = meta.getRowLimit();
+            if ( isStopped() || ( rowLimit > 0 && data.rownr > rowLimit ) ) {
               // when a large file is processed and it should be stopped it is still reading the hole thing
               // the only solution I see is to prune / detach the document and this will lead into a
               // NPE or other errors depending on the parsing location - this will be treated in the catch part below
@@ -162,7 +157,7 @@ public class GetXMLData extends BaseStep implements StepInterface {
         // read string to parse
         data.document = reader.read( new StringReader( StringXML ) );
       } else if ( readurl && KettleVFS.startsWithScheme( StringXML ) ) {
-        data.document = reader.read( KettleVFS.getInputStream( StringXML ) );
+        data.document = reader.read( KettleVFS.getInstance( getTransMeta().getBowl() ).getInputStream( StringXML ) );
       } else if ( readurl ) {
         // read url as source
         HttpClient client = HttpClientManager.getInstance().createDefaultClient();
@@ -350,7 +345,8 @@ public class GetXMLData extends BaseStep implements StepInterface {
         data.nrReadRow = getInputRowMeta().size();
         data.inputRowMeta = getInputRowMeta();
         data.outputRowMeta = data.inputRowMeta.clone();
-        meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+        meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+                        metaStore );
 
         // Get total previous fields
         data.totalpreviousfields = data.inputRowMeta.size();
@@ -396,7 +392,8 @@ public class GetXMLData extends BaseStep implements StepInterface {
           FileObject file = null;
           try {
             // XML source is a file.
-            file = KettleVFS.getFileObject( Fieldvalue, getTransMeta() );
+            file = KettleVFS.getInstance( getTransMeta().getBowl() )
+              .getFileObject( environmentSubstitute( Fieldvalue ), getTransMeta() );
 
             if ( meta.isIgnoreEmptyFile() && file.getContent().getSize() == 0 ) {
               logBasic( BaseMessages.getString( PKG, "GetXMLData.Error.FileSizeZero", "" + file.getName() ) );
@@ -634,7 +631,7 @@ public class GetXMLData extends BaseStep implements StepInterface {
     if ( first && !meta.isInFields() ) {
       first = false;
 
-      data.files = meta.getFiles( this );
+      data.files = meta.getFiles( getTransMeta().getBowl(), this );
 
       if ( !meta.isdoNotFailIfNoFile() && data.files.nrOfFiles() == 0 ) {
         throw new KettleException( BaseMessages.getString( PKG, "GetXMLData.Log.NoFiles" ) );
@@ -645,7 +642,8 @@ public class GetXMLData extends BaseStep implements StepInterface {
       // Create the output row meta-data
       data.outputRowMeta = new RowMeta();
 
-      meta.getFields( data.outputRowMeta, getStepname(), null, null, this, repository, metaStore );
+      meta.getFields( getTransMeta().getBowl(), data.outputRowMeta, getStepname(), null, null, this, repository,
+                      metaStore );
 
       // Create convert meta-data objects that will contain Date & Number formatters
       // For String to <type> conversions, we allocate a conversion meta data row as well...
@@ -752,31 +750,40 @@ public class GetXMLData extends BaseStep implements StepInterface {
         // Get node value
         String nodevalue;
 
+        Boolean xmlMissingTagYieldsNullValue = convertStringToBoolean(
+          Const.NVL( System.getProperty( Const.KETTLE_XML_MISSING_TAG_YIELDS_NULL_VALUE, "N" ), "N" ) );
+
         // Handle namespaces
         if ( meta.isNamespaceAware() ) {
           XPath xpathField = node.createXPath( addNSPrefix( XPathValue, data.PathValue ) );
           xpathField.setNamespaceURIs( data.NAMESPACE );
           if ( xmlDataField.getResultType() == GetXMLDataField.RESULT_TYPE_VALUE_OF ) {
-            nodevalue = xpathField.valueOf( node );
+            if ( xmlMissingTagYieldsNullValue ) {
+              nodevalue = xpathField.selectSingleNode( node ) != null ? xpathField.valueOf( node ) : null;
+            } else {
+              nodevalue = xpathField.valueOf( node );
+            }
           } else {
-            // nodevalue=xpathField.selectSingleNode(node).asXML();
             Node n = xpathField.selectSingleNode( node );
             if ( n != null ) {
               nodevalue = n.asXML();
             } else {
-              nodevalue = "";
+              nodevalue = xmlMissingTagYieldsNullValue ? null : "";
             }
           }
         } else {
           if ( xmlDataField.getResultType() == GetXMLDataField.RESULT_TYPE_VALUE_OF ) {
-            nodevalue = node.valueOf( XPathValue );
+            if ( xmlMissingTagYieldsNullValue ) {
+              nodevalue = node.selectSingleNode( XPathValue ) != null ? node.valueOf( XPathValue ) : null;
+            } else {
+              nodevalue = node.valueOf( XPathValue );
+            }
           } else {
-            // nodevalue=node.selectSingleNode(XPathValue).asXML();
             Node n = node.selectSingleNode( XPathValue );
             if ( n != null ) {
               nodevalue = n.asXML();
             } else {
-              nodevalue = "";
+              nodevalue = xmlMissingTagYieldsNullValue ? null : "";
             }
           }
         }

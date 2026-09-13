@@ -1,30 +1,24 @@
 // CHECKSTYLE:FileLength:OFF
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.ServerSocket;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
@@ -44,11 +38,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.json.simple.JSONObject;
 import org.pentaho.di.core.BlockingRowSet;
 import org.pentaho.di.core.Const;
-import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.ExtensionDataInterface;
 import org.pentaho.di.core.ResultFile;
 import org.pentaho.di.core.RowMetaAndData;
@@ -69,6 +62,7 @@ import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.core.row.value.ValueMetaDate;
 import org.pentaho.di.core.row.value.ValueMetaNumber;
 import org.pentaho.di.core.row.value.ValueMetaString;
+import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.variables.Variables;
 import org.pentaho.di.i18n.BaseMessages;
@@ -2025,31 +2019,33 @@ public class BaseStep implements VariableSpace, StepInterface, LoggingObjectInte
    * <b>This method should be called before any data is read from previous steps.</b> <br>
    * This action is executed only once.
    *
-   * @throws KettleStepException
+   * @throws KettleStepException if there is an error opening socket connections to the remote input steps
    */
   protected void openRemoteInputStepSocketsOnce() throws KettleStepException {
-    if ( !remoteInputSteps.isEmpty() ) {
-      if ( !remoteInputStepsInitialized ) {
-        // Loop over the remote steps and open client sockets to them
-        // Just be careful in case we're dealing with a partitioned clustered step.
-        // A partitioned clustered step has only one. (see dispatch())
-        //
-        inputRowSetsLock.writeLock().lock();
-        try {
-          for ( RemoteStep remoteStep : remoteInputSteps ) {
-            try {
-              BlockingRowSet rowSet = remoteStep.openReaderSocket( this );
-              inputRowSets.add( rowSet );
-            } catch ( Exception e ) {
-              throw new KettleStepException( "Error opening reader socket to remote step '" + remoteStep + "'", e );
-            }
-          }
-        } finally {
-          inputRowSetsLock.writeLock().unlock();
-        }
-        remoteInputStepsInitialized = true;
-      }
+    if ( remoteInputSteps.isEmpty()
+      || remoteInputStepsInitialized ) {
+
+      return;
     }
+
+    // Loop over the remote steps and open client sockets to them
+    // Just be careful in case we're dealing with a partitioned clustered step.
+    // A partitioned clustered step has only one. (see dispatch())
+    //
+    inputRowSetsLock.writeLock().lock();
+    try {
+      for ( RemoteStep remoteStep : remoteInputSteps ) {
+        try {
+          BlockingRowSet rowSet = remoteStep.openReaderSocket( this );
+          inputRowSets.add( rowSet );
+        } catch ( Exception e ) {
+          throw new KettleStepException( "Error opening reader socket to remote step '" + remoteStep + "'", e );
+        }
+      }
+    } finally {
+      inputRowSetsLock.writeLock().unlock();
+    }
+    remoteInputStepsInitialized = true;
   }
 
   /**
@@ -2058,48 +2054,49 @@ public class BaseStep implements VariableSpace, StepInterface, LoggingObjectInte
    * as soon as possible to avoid time-out situations. <br>
    * This action is executed only once.
    *
-   * @throws KettleStepException
+   * @throws KettleStepException if there is an error opening socket connections to the remote output steps
    */
   protected void openRemoteOutputStepSocketsOnce() throws KettleStepException {
-    if ( !remoteOutputSteps.isEmpty() ) {
-      if ( !remoteOutputStepsInitialized ) {
+    if ( remoteOutputSteps.isEmpty()
+      || remoteOutputStepsInitialized
+      || stepMeta.isMappingOutput() ) { // PDI-20183 MappingOutput is configured in the Mapping step
 
-        outputRowSetsLock.writeLock().lock();
-        try {
-          // Set the current slave target name on all the current output steps (local)
-          //
-          for ( RowSet rowSet : outputRowSets ) {
-            rowSet.setRemoteSlaveServerName( getVariable( Const.INTERNAL_VARIABLE_SLAVE_SERVER_NAME ) );
-            if ( getVariable( Const.INTERNAL_VARIABLE_SLAVE_SERVER_NAME ) == null ) {
-              throw new KettleStepException( "Variable '"
-                + Const.INTERNAL_VARIABLE_SLAVE_SERVER_NAME + "' is not defined." );
-            }
-          }
-
-          // Start threads: one per remote step to funnel the data through...
-          //
-          for ( RemoteStep remoteStep : remoteOutputSteps ) {
-            try {
-              if ( remoteStep.getTargetSlaveServerName() == null ) {
-                throw new KettleStepException(
-                  "The target slave server name is not defined for remote output step: " + remoteStep );
-              }
-              BlockingRowSet rowSet = remoteStep.openWriterSocket();
-              if ( log.isDetailed() ) {
-                logDetailed( BaseMessages.getString( PKG, "BaseStep.Log.OpenedWriterSocketToRemoteStep", remoteStep ) );
-              }
-              outputRowSets.add( rowSet );
-            } catch ( IOException e ) {
-              throw new KettleStepException( "Error opening writer socket to remote step '" + remoteStep + "'", e );
-            }
-          }
-        } finally {
-          outputRowSetsLock.writeLock().unlock();
-        }
-
-        remoteOutputStepsInitialized = true;
-      }
+      return;
     }
+
+    outputRowSetsLock.writeLock().lock();
+    try {
+      // Set the current slave target name on all the current output steps (local)
+      //
+      for ( RowSet rowSet : outputRowSets ) {
+        rowSet.setRemoteSlaveServerName( getVariable( Const.INTERNAL_VARIABLE_SLAVE_SERVER_NAME ) );
+        if ( getVariable( Const.INTERNAL_VARIABLE_SLAVE_SERVER_NAME ) == null ) {
+          throw new KettleStepException( "Variable '"
+            + Const.INTERNAL_VARIABLE_SLAVE_SERVER_NAME + "' is not defined." );
+        }
+      }
+
+      // Start threads: one per remote step to funnel the data through...
+      //
+      for ( RemoteStep remoteStep : remoteOutputSteps ) {
+        try {
+          if ( remoteStep.getTargetSlaveServerName() == null ) {
+            throw new KettleStepException(
+              "The target slave server name is not defined for remote output step: " + remoteStep );
+          }
+          BlockingRowSet rowSet = remoteStep.openWriterSocket();
+          if ( log.isDetailed() ) {
+            logDetailed( BaseMessages.getString( PKG, "BaseStep.Log.OpenedWriterSocketToRemoteStep", remoteStep ) );
+          }
+          outputRowSets.add( rowSet );
+        } catch ( IOException e ) {
+          throw new KettleStepException( "Error opening writer socket to remote step '" + remoteStep + "'", e );
+        }
+      }
+    } finally {
+      outputRowSetsLock.writeLock().unlock();
+    }
+    remoteOutputStepsInitialized = true;
   }
 
   /**
@@ -3461,11 +3458,11 @@ public class BaseStep implements VariableSpace, StepInterface, LoggingObjectInte
     inputRowSetsLock.writeLock().lock();
     try {
       for ( int i = 0; i < inputRowSets.size(); i++ ) {
-        BlockingRowSet rs = (BlockingRowSet) inputRowSets.get( i );
+        RowSet rs = inputRowSets.get( i );
         if ( rs.getOriginStepName().equalsIgnoreCase( stepName ) ) {
           // swap this one and position 0...that means, the main stream is always stream 0 --> easy!
           //
-          BlockingRowSet zero = (BlockingRowSet) inputRowSets.get( 0 );
+          RowSet zero = inputRowSets.get( 0 );
           inputRowSets.set( 0, rs );
           inputRowSets.set( i, zero );
         }
@@ -3799,6 +3796,16 @@ public class BaseStep implements VariableSpace, StepInterface, LoggingObjectInte
   /*
    * (non-Javadoc)
    *
+   * @see org.pentaho.di.core.variables.VariableSpace#environmentSubstitute(java.lang.String)
+   */
+  @Override
+  public String environmentSubstitute( String aString, boolean escapeHexDelimiter ) {
+    return variables.environmentSubstitute( aString, escapeHexDelimiter );
+  }
+
+  /*
+   * (non-Javadoc)
+   *
    * @see org.pentaho.di.core.variables.VariableSpace#environmentSubstitute(java.lang.String[])
    */
   @Override
@@ -4041,6 +4048,11 @@ public class BaseStep implements VariableSpace, StepInterface, LoggingObjectInte
   @Override
   public boolean processRow( StepMetaInterface smi, StepDataInterface sdi ) throws KettleException {
     return false;
+  }
+
+  @Override
+  public boolean beforeStartProcessing( StepMetaInterface smi, StepDataInterface sdi ) throws KettleException {
+    return true;
   }
 
   /*
@@ -4400,6 +4412,14 @@ public class BaseStep implements VariableSpace, StepInterface, LoggingObjectInte
       handlePutRowTo( rowMeta, row, rowSet );
     }
 
+  }
+
+  private boolean isFailedResponse( JSONObject response ) {
+    if ( response != null && response.get( StepInterface.ACTION_STATUS ) != null ) {
+      return StepInterface.FAILURE_RESPONSE.equalsIgnoreCase( (String) response.get( StepInterface.ACTION_STATUS ) );
+    }
+
+    return false;
   }
 }
 

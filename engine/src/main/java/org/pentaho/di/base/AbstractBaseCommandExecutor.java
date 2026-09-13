@@ -1,48 +1,53 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.base;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.Serializable;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
+import org.apache.commons.lang3.StringUtils;
+import org.pentaho.di.core.bowl.Bowl;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.core.logging.LogChannelInterface;
 import org.pentaho.di.core.exception.KettleException;
-import org.pentaho.di.core.exception.KettleSecurityException;
 import org.pentaho.di.core.plugins.PluginRegistry;
 import org.pentaho.di.core.plugins.RepositoryPluginType;
+import org.pentaho.di.core.service.PluginServiceLoader;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.i18n.BaseMessages;
 import org.pentaho.di.metastore.MetaStoreConst;
+import org.pentaho.di.pan.CommandExecutorResult;
+import org.pentaho.di.pan.CommandLineOptionProvider;
 import org.pentaho.di.repository.RepositoriesMeta;
 import org.pentaho.di.repository.Repository;
 import org.pentaho.di.repository.RepositoryDirectoryInterface;
 import org.pentaho.di.repository.RepositoryMeta;
 import org.pentaho.di.repository.RepositoryOperation;
-import org.pentaho.metastore.api.exceptions.MetaStoreException;
-import org.pentaho.metastore.stores.delegate.DelegatingMetaStore;
 import org.pentaho.di.version.BuildVersion;
+import org.pentaho.metastore.api.IMetaStore;
 
 public abstract class AbstractBaseCommandExecutor {
 
@@ -52,20 +57,14 @@ public abstract class AbstractBaseCommandExecutor {
 
   private LogChannelInterface log;
   private Class<?> pkgClazz;
-  DelegatingMetaStore metaStore;
+  IMetaStore metaStore = MetaStoreConst.getDefaultMetastore();
+  private Bowl bowl = DefaultBowl.getInstance();
 
   private Result result = new Result();
 
   protected Result exitWithStatus( final int exitStatus ) {
     getResult().setExitStatus( exitStatus );
     return getResult();
-  }
-
-  public DelegatingMetaStore createDefaultMetastore() throws MetaStoreException {
-    DelegatingMetaStore metaStore = new DelegatingMetaStore();
-    metaStore.addMetaStore( MetaStoreConst.openLocalPentahoMetaStore() );
-    metaStore.setActiveMetaStoreName( metaStore.getName() );
-    return metaStore;
   }
 
   protected void logDebug( final String messageKey ) {
@@ -84,8 +83,8 @@ public abstract class AbstractBaseCommandExecutor {
                                               String processingEndAfterLongMsgTkn, String processingEndAfterLongerMsgTkn,
                                               String processingEndAfterLongestMsgTkn ) {
 
-    String begin = getDateFormat().format( start ).toString();
-    String end = getDateFormat().format( stop ).toString();
+    String begin = getDateFormat().format( start );
+    String end = getDateFormat().format( stop );
 
     getLog().logMinimal( BaseMessages.getString( getPkgClazz(), startStopMsgTkn, begin, end ) );
 
@@ -156,8 +155,33 @@ public abstract class AbstractBaseCommandExecutor {
     return repsinfo;
   }
 
+  public RepositoryDirectoryInterface loadRepositoryDirectory( Repository repository, String dirName, String noRepoProvidedMsgTkn,
+                                                                  String allocateAndConnectRepoMsgTkn, String cannotFindDirMsgTkn ) throws KettleException {
+
+    if ( repository == null ) {
+      System.out.println( BaseMessages.getString( getPkgClazz(), noRepoProvidedMsgTkn ) );
+      return null;
+    }
+
+    RepositoryDirectoryInterface directory;
+
+    // Default is the root directory
+    logDebug( allocateAndConnectRepoMsgTkn );
+    directory = repository.loadRepositoryDirectoryTree();
+
+    if ( !StringUtils.isEmpty( dirName ) ) {
+
+      directory = directory.findDirectory( dirName ); // Find the directory name if one is specified...
+
+      if ( directory == null ) {
+        System.out.println( BaseMessages.getString( getPkgClazz(), cannotFindDirMsgTkn, "" + dirName ) );
+      }
+    }
+    return directory;
+  }
+
   public Repository establishRepositoryConnection( RepositoryMeta repositoryMeta, final String username, final String password,
-                                                     final RepositoryOperation... operations ) throws KettleException, KettleSecurityException {
+                                                     final RepositoryOperation... operations ) throws KettleException {
 
     Repository rep = PluginRegistry.getInstance().loadClass( RepositoryPluginType.class, repositoryMeta, Repository.class );
     rep.init( repositoryMeta );
@@ -191,8 +215,88 @@ public abstract class AbstractBaseCommandExecutor {
     }
   }
 
+  protected String[] convert( Map<String, String> map ) {
+
+    List<String> list = new ArrayList<>();
+
+    if ( map != null ) {
+      map.keySet().forEach( key -> list.add( key + "=" + map.get( key ) ) );
+    }
+
+    return list.toArray( new String[] {} );
+  }
+
   public boolean isEnabled( final String value ) {
     return YES.equalsIgnoreCase( value ) || Boolean.parseBoolean( value ); // both are NPE safe, both are case-insensitive
+  }
+
+  /**
+   * Decodes the provided base64String into a default path. Resulting zip file is UUID-named for concurrency sake.
+   *
+   * @param base64Zip BASE64 representation of a file
+   * @param deleteOnJvmExit true if we want this newly generated file to be marked for deletion on JVM termination, false otherwise
+   * @return File the newly created File
+   */
+  public File decodeBase64ToZipFile( Serializable base64Zip, boolean deleteOnJvmExit ) throws IOException {
+
+    String basePath = !StringUtils.isEmpty( Const.getUserHomeDirectory() ) ? Const.getUserHomeDirectory() : new File( "." ).getAbsolutePath();
+    String zipFilePath = basePath + File.separator + java.util.UUID.randomUUID().toString() + ".zip";
+    File f = decodeBase64ToZipFile( base64Zip, zipFilePath );
+
+    if ( f != null && deleteOnJvmExit ) {
+      f.deleteOnExit();
+    }
+
+    return f;
+  }
+
+  /**
+   * Decodes the provided base64String into the specified filePath. Parent directories must already exist.
+   *
+   * @param base64Zip BASE64 representation of a file
+   * @param filePath String The path to which the base64String is to be decoded
+   * @return File the newly created File
+   */
+  public File decodeBase64ToZipFile( Serializable base64Zip, String filePath ) throws IOException {
+
+    if ( base64Zip == null || Utils.isEmpty( base64Zip.toString() ) ) {
+      return null;
+    }
+
+    //Decode base64String to byte[]
+    byte[] decodedBytes = Base64.getDecoder().decode( base64Zip.toString() );
+    File file = new File( filePath );
+
+    //Try-with-resources, write to file, ensure fos is always closed
+    try ( FileOutputStream fos = new FileOutputStream( file ) ) {
+      fos.write( decodedBytes );
+    } catch ( IOException e ) {
+      throw e;
+    }
+
+    return file;
+  }
+
+  /**
+   * Pass the plugin parameters to the CommandLineOptionProvider for validation and setting the plugin context.
+   * @param log LogChannelInterface for logging
+   * @param params Params containing the plugin parameters
+   * @param repository Repository object when connected
+   * @return CommandExecutorResult contains the result of the of validation.
+   */
+  protected static CommandExecutorResult validateAndSetPluginContext( LogChannelInterface log, Params params, Repository repository ) throws KettleException {
+    CommandExecutorResult result = null;
+    Map<String, String> paramMap = params.getPluginParams();
+
+    for ( CommandLineOptionProvider provider : PluginServiceLoader.loadServices( CommandLineOptionProvider.class ) ) {
+      result = provider.handleParameter( log, paramMap, repository );
+      if ( result.getCode() != 0 ) {
+        log.logError( result.getDescription() );
+        break; // if result is NOT SUCCESS, break out of the loop
+      }
+    }
+
+    return result;
   }
 
   public LogChannelInterface getLog() {
@@ -211,11 +315,11 @@ public abstract class AbstractBaseCommandExecutor {
     this.pkgClazz = pkgClazz;
   }
 
-  public DelegatingMetaStore getMetaStore() {
+  public IMetaStore getMetaStore() {
     return metaStore;
   }
 
-  public void setMetaStore( DelegatingMetaStore metaStore ) {
+  public void setMetaStore( IMetaStore metaStore ) {
     this.metaStore = metaStore;
   }
 
@@ -233,5 +337,13 @@ public abstract class AbstractBaseCommandExecutor {
 
   public void setResult( Result result ) {
     this.result = result;
+  }
+
+  public Bowl getBowl() {
+    return bowl;
+  }
+
+  public void setBowl( Bowl bowl ) {
+    this.bowl = Objects.requireNonNull( bowl );
   }
 }

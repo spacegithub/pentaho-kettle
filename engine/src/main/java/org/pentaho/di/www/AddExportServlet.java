@@ -1,32 +1,26 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.www;
 
 import org.apache.commons.vfs2.FileObject;
+import org.pentaho.di.core.bowl.DefaultBowl;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.util.Utils;
 import org.pentaho.di.core.logging.LoggingObjectType;
 import org.pentaho.di.core.logging.SimpleLoggingObject;
+import org.pentaho.di.core.vfs.IKettleVFS;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.core.xml.XMLHandler;
 import org.pentaho.di.job.Job;
@@ -46,9 +40,9 @@ import java.io.PrintWriter;
 import java.util.Map;
 import java.util.UUID;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * This servlet allows you to transport an exported job or transformation over to the carte server as a zip file. It
@@ -197,8 +191,10 @@ public class AddExportServlet extends BaseHttpServlet implements CartePluginInte
     OutputStream outputStream = null;
 
     try {
-      FileObject tempFile = KettleVFS.createTempFile( "export", ".zip", System.getProperty( "java.io.tmpdir" ) );
-      outputStream = KettleVFS.getOutputStream( tempFile, false );
+      IKettleVFS vfs = KettleVFS.getInstance( DefaultBowl.getInstance() );
+
+      FileObject tempFile = vfs.createTempFile( "export", ".zip", System.getProperty( "java.io.tmpdir" ) );
+      outputStream = vfs.getOutputStream( tempFile, false );
 
       // Pass the input directly to a temporary file
       //
@@ -229,13 +225,13 @@ public class AddExportServlet extends BaseHttpServlet implements CartePluginInte
         if ( isJob ) {
           // Open the job from inside the ZIP archive
           //
-          KettleVFS.getFileObject( fileUrl );
+          vfs.getFileObject( fileUrl );
 
-          JobMeta jobMeta = new JobMeta( fileUrl, null ); // never with a repository
+          JobMeta jobMeta = new JobMeta( DefaultBowl.getInstance(), fileUrl, null ); // never with a repository
           // Also read the execution configuration information
           //
           String configUrl = "zip:" + archiveUrl + "!" + Job.CONFIGURATION_IN_EXPORT_FILENAME;
-          Document configDoc = XMLHandler.loadXMLFile( configUrl );
+          Document configDoc = XMLHandler.loadXMLFile( DefaultBowl.getInstance(), configUrl );
           JobExecutionConfiguration jobExecutionConfiguration =
             new JobExecutionConfiguration( XMLHandler.getSubNode( configDoc, JobExecutionConfiguration.XML_TAG ) );
 
@@ -266,19 +262,18 @@ public class AddExportServlet extends BaseHttpServlet implements CartePluginInte
           // Also copy the parameters over...
           //
           Map<String, String> params = jobExecutionConfiguration.getParams();
-          for ( String param : params.keySet() ) {
-            String value = params.get( param );
-            jobMeta.setParameterValue( param, value );
+          for ( Map.Entry<String, String> entry : params.entrySet() ) {
+            jobMeta.setParameterValue( entry.getKey(), entry.getValue() );
           }
 
         } else {
           // Open the transformation from inside the ZIP archive
           //
-          TransMeta transMeta = new TransMeta( fileUrl );
+          TransMeta transMeta = new TransMeta( DefaultBowl.getInstance(), fileUrl );
           // Also read the execution configuration information
           //
           String configUrl = "zip:" + archiveUrl + "!" + Trans.CONFIGURATION_IN_EXPORT_FILENAME;
-          Document configDoc = XMLHandler.loadXMLFile( configUrl );
+          Document configDoc = XMLHandler.loadXMLFile( DefaultBowl.getInstance(), configUrl );
           TransExecutionConfiguration executionConfiguration =
             new TransExecutionConfiguration( XMLHandler.getSubNode(
               configDoc, TransExecutionConfiguration.XML_TAG ) );

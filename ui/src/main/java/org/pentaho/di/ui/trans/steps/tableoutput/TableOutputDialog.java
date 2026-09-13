@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.trans.steps.tableoutput;
 
@@ -911,7 +903,7 @@ public class TableOutputDialog extends BaseStepDialog implements StepDialogInter
       } catch ( KettleException ke ) {
         new ErrorDialog(
           shell, BaseMessages.getString( PKG, "TableOutputDialog.FailedToGetFields.DialogTitle" ), BaseMessages
-            .getString( PKG, "TableOutputDialog.FailedToGetFields.DialogMessage" ), ke );
+          .getString( PKG, "TableOutputDialog.FailedToGetFields.DialogMessage" ), ke );
       }
       gotPreviousFields = true;
     }
@@ -1008,16 +1000,17 @@ public class TableOutputDialog extends BaseStepDialog implements StepDialogInter
         return;
       }
     }
+    List<SourceToTargetMapping> preMappings = new ArrayList<>( mappings );
     EnterMappingDialog d =
       new EnterMappingDialog( TableOutputDialog.this.shell, sourceFields.getFieldNames(), targetFields
         .getFieldNames(), mappings );
     mappings = d.open();
-
     // mappings == null if the user pressed cancel
     //
     if ( mappings != null ) {
       // Clear and re-populate!
       //
+      isMappingModified( preMappings, mappings );
       wFields.table.removeAll();
       wFields.table.setItemCount( mappings.size() );
       for ( int i = 0; i < mappings.size(); i++ ) {
@@ -1030,7 +1023,22 @@ public class TableOutputDialog extends BaseStepDialog implements StepDialogInter
       wFields.optWidth( true );
     }
   }
-
+  private void isMappingModified( List<SourceToTargetMapping> preMappings, List<SourceToTargetMapping> postMappings ) {
+    boolean modified = false;
+    if ( preMappings.size() != postMappings.size() ) {
+      modified = true;
+    } else {
+      for ( int i = 0; i < preMappings.size(); i++ ) {
+        if ( preMappings.get( i ).getSourcePosition() != postMappings.get( i ).getSourcePosition() || preMappings.get( i ).getTargetPosition() != postMappings.get( i ).getTargetPosition() ) {
+          modified = true;
+          break;
+        }
+      }
+    }
+    if ( modified ) {
+      input.setChanged();
+    }
+  }
   private void getSchemaNames() {
     DatabaseMeta databaseMeta = transMeta.findDatabase( wConnection.getText() );
     if ( databaseMeta != null ) {
@@ -1061,7 +1069,7 @@ public class TableOutputDialog extends BaseStepDialog implements StepDialogInter
         new ErrorDialog( shell, BaseMessages.getString( PKG, "System.Dialog.Error.Title" ), BaseMessages
           .getString( PKG, "TableOutputDialog.ErrorGettingSchemas" ), e );
       } finally {
-        database.disconnect();
+        database.close();
       }
     }
   }
@@ -1134,7 +1142,7 @@ public class TableOutputDialog extends BaseStepDialog implements StepDialogInter
               } finally {
                 try {
                   if ( db != null ) {
-                    db.disconnect();
+                    db.close();
                   }
                 } catch ( Exception ignored ) {
                   // ignore any errors here. Nothing we can do if
@@ -1421,7 +1429,7 @@ public class TableOutputDialog extends BaseStepDialog implements StepDialogInter
     } catch ( KettleException ke ) {
       new ErrorDialog(
         shell, BaseMessages.getString( PKG, "TableOutputDialog.FailedToGetFields.DialogTitle" ), BaseMessages
-          .getString( PKG, "TableOutputDialog.FailedToGetFields.DialogMessage" ), ke );
+        .getString( PKG, "TableOutputDialog.FailedToGetFields.DialogMessage" ), ke );
     }
 
   }
@@ -1478,8 +1486,8 @@ public class TableOutputDialog extends BaseStepDialog implements StepDialogInter
         if ( !sql.hasError() ) {
           if ( sql.hasSQL() ) {
             SQLEditor sqledit =
-                    new SQLEditor( transMeta, shell, SWT.NONE, info.getDatabaseMeta(), transMeta.getDbCache(), sql
-                            .getSQL() );
+              new SQLEditor( transMeta, shell, SWT.NONE, info.getDatabaseMeta(), transMeta.getDbCache(), sql
+                .getSQL() );
             sqledit.open();
           } else {
             String message = getBaseMessage( "TableOutputDialog.NoSQL.DialogMessage" );
@@ -1498,7 +1506,7 @@ public class TableOutputDialog extends BaseStepDialog implements StepDialogInter
     } catch ( KettleException ke ) {
       new ErrorDialog(
         shell, BaseMessages.getString( PKG, "TableOutputDialog.BuildSQLError.DialogTitle" ), BaseMessages
-          .getString( PKG, "TableOutputDialog.BuildSQLError.DialogMessage" ), ke );
+        .getString( PKG, "TableOutputDialog.BuildSQLError.DialogMessage" ), ke );
     }
   }
 

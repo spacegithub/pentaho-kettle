@@ -1,27 +1,20 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.steps.xbaseinput;
 
+import org.pentaho.di.core.Const;
 import org.pentaho.di.core.ResultFile;
 import org.pentaho.di.core.RowSet;
 import org.pentaho.di.core.exception.KettleException;
@@ -91,7 +84,8 @@ public class XBaseInput extends BaseStep implements StepInterface {
           }
           try {
             String filename = fileRowMeta.getString( fileRowData, idx );
-            data.files.addFile( KettleVFS.getFileObject( filename, getTransMeta() ) );
+            data.files.addFile( KettleVFS.getInstance( getTransMeta().getBowl() )
+                                .getFileObject( filename, getTransMeta() ) );
           } catch ( Exception e ) {
             throw new KettleException( e );
           }
@@ -135,7 +129,7 @@ public class XBaseInput extends BaseStep implements StepInterface {
 
     // Possibly add a filename...
     if ( meta.includeFilename() ) {
-      row[outputIndex++] = data.file_dbf.getName().getURI();
+      row[outputIndex++] = Const.optionallyDecodeUriString( data.file_dbf.getName().getURI() );
     }
 
     // Possibly add a row number...
@@ -162,7 +156,7 @@ public class XBaseInput extends BaseStep implements StepInterface {
     data = (XBaseInputData) sdi;
 
     if ( super.init( smi, sdi ) ) {
-      data.files = meta.getTextFileList( this );
+      data.files = meta.getTextFileList( getTransMeta().getBowl(), this );
       data.fileNr = 0;
 
       if ( data.files.nrOfFiles() == 0 && !meta.isAcceptingFilenames() ) {

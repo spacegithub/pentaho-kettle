@@ -1,3 +1,14 @@
+<!-- ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************* -->
 <translator-config>
 
   <system-key-prefix>System</system-key-prefix>
@@ -13,14 +24,12 @@
     <root>plugins/star-modeler/src</root>
     <root>plugins/market/src</root>
     <root>plugins/kettle-palo-plugin/src</root>
-    <root>plugins/kettle-openerp-plugin/src</root>
     <root>plugins/kettle-hl7-plugin/src</root>
-    <root>plugins/kettle5-log4j-plugin/src</root>
 
   </source-directories>
   
   <scan-phrases>
-    <scan-phrase>BaseMessages.getString( PKG,</scan-phrase>
+    <scan-phrase>BaseMessages.getString(PKG,</scan-phrase>
   </scan-phrases>
   
   <locale-list>
@@ -31,6 +40,7 @@
     <locale> <code>de_DE</code> <language>German</language> <country>Germany</country> </locale>
     <locale> <code>es_ES</code> <language>Spanish</language> <country>Spain</country> </locale>
     <locale> <code>zh_CN</code> <language>Simplified Chinese</language> <country>China</country> </locale>
+    <locale> <code>zh_TW</code> <language>Traditional Chinese</language> <country>China</country> </locale>
     <locale> <code>nl_NL</code> <language>Dutch</language> <country>The Netherlands</country> </locale>
     <locale> <code>pt_BR</code> <language>Portuguese</language> <country>Brazil</country> </locale>
     <locale> <code>pt_PT</code> <language>Portuguese</language> <country>Portugal</country> </locale>

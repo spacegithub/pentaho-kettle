@@ -1,40 +1,36 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.spoon.tree;
 
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeItem;
+import org.eclipse.swt.widgets.Widget;
 import org.pentaho.di.base.AbstractMeta;
-import org.pentaho.di.trans.TransMeta;
+import org.pentaho.di.core.Const;
 import org.pentaho.di.ui.core.gui.GUIResource;
 import org.pentaho.di.ui.core.widget.tree.TreeNode;
+import org.pentaho.di.ui.spoon.Spoon;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Created by bmorrise on 5/25/18.
@@ -63,7 +59,7 @@ public class TreeManager {
   public void addRoot( String label, List<TreeFolderProvider> providers ) {
     RootNode treeNode = new RootNode( label, guiResource.getImageFolder(), true );
     treeNode.setLabel( label );
-    treeNode.setImage( GUIResource.getInstance().getImageFolder() );
+    treeNode.setImage( GUIResource.getInstance().getImageMainConfigurations() );
     treeNode.setExpanded( true );
     treeNode.addProviders( providers );
     rootNodes.add( treeNode );
@@ -71,12 +67,18 @@ public class TreeManager {
   }
 
   public void addTreeProvider( String root, TreeFolderProvider treeFolderProvider ) {
-    treeFolderProvider.setTreeManager( this );
-    getRootTreeNodeByName( root ).addProvider( treeFolderProvider );
-  }
+    if ( root == Spoon.STRING_TRANSFORMATIONS || root == Spoon.STRING_JOBS ) {
+      root = Spoon.STRING_CONFIGURATIONS;
+    }
 
-  public boolean hasNode( AbstractMeta abstractMeta ) {
-    return getTreeNode( abstractMeta ) != null;
+    RootNode rootNode = getRootTreeNodeByName( root );
+    String existingName = rootNode.getNameByType( treeFolderProvider.getType() );
+    if ( existingName != null ) {
+      return;
+    }
+
+    treeFolderProvider.setTreeManager( this );
+    rootNode.addProvider( treeFolderProvider );
   }
 
   public void clear() {
@@ -84,7 +86,6 @@ public class TreeManager {
       tree.removeAll();
     }
     treeNodeItemMap.clear();
-    hideAll();
   }
 
   public void render() {
@@ -94,15 +95,7 @@ public class TreeManager {
     setExpanded();
   }
 
-  public void create( AbstractMeta abstractMeta, String name, boolean expanded ) {
-    RootNode rootNode = getRootTreeNodeByName( name );
-    if ( rootNode != null ) {
-      Image image = abstractMeta instanceof TransMeta ? guiResource.getImageTransTree() : guiResource.getImageJobTree();
-      getRootTreeNodeByName( name ).create( abstractMeta, image, expanded );
-    }
-  }
-
-  public void checkUpdate( AbstractMeta abstractMeta, String name ) {
+  public void checkUpdate( Optional<AbstractMeta> abstractMeta, String name ) {
     RootNode rootNode = getRootTreeNodeByName( name );
     if ( rootNode != null ) {
       rootNode.checkUpdate( abstractMeta, filter );
@@ -121,35 +114,27 @@ public class TreeManager {
     } );
   }
 
-  public void show( AbstractMeta abstractMeta ) {
-    TreeNode treeNode = getTreeNode( abstractMeta );
-    if ( treeNode != null ) {
-      treeNode.setHidden( false );
-    }
-  }
-
-  public void hide( AbstractMeta abstractMeta ) {
-    TreeNode treeNode = getTreeNode( abstractMeta );
-    if ( treeNode != null ) {
-      treeNode.setHidden( true );
-    }
-  }
-
   public void setFilter( String filter ) {
     this.filter = filter;
+    // if we are filtering, everything needs to be updated. Will be cleared by Spoon.showMetaTree()
+    updateAll();
   }
 
-  public void reset( AbstractMeta abstractMeta ) {
-    rootNodes.forEach( rootNode -> rootNode.clearUpdates( abstractMeta ) );
+  public void reset() {
+    rootNodes.forEach( rootNode -> rootNode.clearUpdates() );
   }
 
   public void update( String name ) {
     rootNodes.forEach( rootNode -> rootNode.update( name ) );
   }
 
-  public boolean shouldUpdate( AbstractMeta abstractMeta, String name ) {
+  public void updateAll() {
+    rootNodes.forEach( rootNode -> rootNode.updateAll() );
+  }
+
+  public boolean shouldUpdate( String name ) {
     for ( RootNode rootNode : rootNodes ) {
-      if ( rootNode.hasNode( abstractMeta ) && rootNode.shouldUpdate( abstractMeta, name ) ) {
+      if ( rootNode.shouldUpdate( name ) ) {
         return true;
       }
     }
@@ -191,6 +176,15 @@ public class TreeManager {
 
   private TreeItem createTreeItem( TreeNode treeNode, Object tree ) {
     TreeItem childTreeItem = createTreeItem( tree, treeNode.getIndex() );
+    if ( Const.isRunningOnWebspoonMode() && treeNode.hasChildren() ) {
+      try {
+        Class webSpoonUtils = Class.forName( "org.pentaho.di.webspoon.WebSpoonUtils" );
+        Method setTestId = webSpoonUtils.getDeclaredMethod( "setTestId", Widget.class, String.class );
+        setTestId.invoke( null, childTreeItem, "view_" + treeNode.getLabel() );
+      } catch ( ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException e ) {
+        e.printStackTrace();
+      }
+    }
     populateTreeItem( childTreeItem, treeNode );
     return childTreeItem;
   }
@@ -231,17 +225,4 @@ public class TreeManager {
     return null;
   }
 
-  public void remove( AbstractMeta abstractMeta ) {
-    rootNodes.forEach( rootNode -> rootNode.remove( abstractMeta ) );
-  }
-
-  public TreeNode getTreeNode( AbstractMeta abstractMeta ) {
-    for ( RootNode rootNode : rootNodes ) {
-      TreeNode treeNode = rootNode.getTreeNode( abstractMeta );
-      if ( treeNode != null ) {
-        return treeNode;
-      }
-    }
-    return null;
-  }
 }

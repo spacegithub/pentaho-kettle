@@ -1,30 +1,22 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.step.mqtt;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import org.apache.commons.lang.BooleanUtils;
+import org.apache.commons.lang3.BooleanUtils;
 import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttClient;
@@ -62,7 +54,7 @@ public final class MQTTClientBuilder {
   // the paho library specifies ssl prop names as com.ibm, though not necessarily using the ibm implementations
   private static final String SSL_PROP_PREFIX = "com.ibm.";
 
-  public static final Map<String, String> DEFAULT_SSL_OPTS = ImmutableMap.<String, String>builder()
+  static final ImmutableMap<String, String> DEFAULT_SSL_OPTS = ImmutableMap.<String, String>builder()
     .put( "ssl.protocol", "TLS" )
     .put( "ssl.contextProvider", "" )
     .put( "ssl.keyStore", "" )
@@ -113,7 +105,7 @@ public final class MQTTClientBuilder {
     return new MQTTClientBuilder();
   }
 
-  MQTTClientBuilder withCallback( MqttCallback callback ) {
+  public MQTTClientBuilder withCallback( MqttCallback callback ) {
     this.callback = callback;
     return this;
   }
@@ -123,7 +115,7 @@ public final class MQTTClientBuilder {
     return this;
   }
 
-  MQTTClientBuilder withTopics( List<String> topics ) {
+  public MQTTClientBuilder withTopics( List<String> topics ) {
     this.topics = topics;
     return this;
   }
@@ -138,7 +130,7 @@ public final class MQTTClientBuilder {
     return this;
   }
 
-  MQTTClientBuilder withClientId( String clientId ) {
+  public MQTTClientBuilder withClientId( String clientId ) {
     this.clientId = clientId;
     return this;
   }
@@ -169,7 +161,7 @@ public final class MQTTClientBuilder {
     return this;
   }
 
-  MQTTClientBuilder withMaxInflight( String maxInflight ) {
+  public MQTTClientBuilder withMaxInflight( String maxInflight ) {
     this.maxInflight = maxInflight;
     return this;
   }
@@ -184,17 +176,17 @@ public final class MQTTClientBuilder {
     return this;
   }
 
-  MQTTClientBuilder withStorageLevel( String storageLevel ) {
+  public MQTTClientBuilder withStorageLevel( String storageLevel ) {
     this.storageLevel = storageLevel;
     return this;
   }
 
-  MQTTClientBuilder withServerUris( String serverUris ) {
+  public MQTTClientBuilder withServerUris( String serverUris ) {
     this.serverUris = serverUris;
     return this;
   }
 
-  public MQTTClientBuilder withMqttVersion( String mqttVersion ) {
+  public  MQTTClientBuilder withMqttVersion( String mqttVersion ) {
     this.mqttVersion = mqttVersion;
     return this;
   }
@@ -207,7 +199,7 @@ public final class MQTTClientBuilder {
   public MqttClient buildAndConnect() throws MqttException {
     validateArgs();
 
-    String broker = getProtocol() + this.broker;
+    String protocolBroker = getProtocol() + this.broker;
     MqttClientPersistence persistence = new MemoryPersistence();
     if ( StringUtil.isEmpty( storageLevel ) ) {
       logChannel.logDebug( "Using Memory Storage Level" );
@@ -220,7 +212,7 @@ public final class MQTTClientBuilder {
       clientId = MqttAsyncClient.generateClientId();
     }
 
-    MqttClient client = clientFactory.getClient( broker, clientId, persistence );
+    MqttClient client = clientFactory.getClient( protocolBroker, clientId, persistence );
 
     client.setCallback( callback );
 
@@ -231,9 +223,9 @@ public final class MQTTClientBuilder {
     logChannel.logDebug( loggableOptions().toString() );
 
     client.connect( getOptions() );
-    if ( topics != null && topics.size() > 0 ) {
+    if ( topics != null && !topics.isEmpty() ) {
       client.subscribe(
-        topics.toArray( new String[ topics.size() ] ),
+        topics.toArray( new String[ 0 ] ),
         initializedIntAray( Integer.parseInt( this.qos ) )
       );
     }
@@ -329,8 +321,8 @@ public final class MQTTClientBuilder {
     options.setSSLProperties( props );
   }
 
-  public static void checkVersion( List<CheckResultInterface> remarks, StepMeta stepMeta, VariableSpace space,
-                                   String value ) {
+  static void checkVersion( List<CheckResultInterface> remarks, StepMeta stepMeta, VariableSpace space,
+                            String value ) {
     String version = space.environmentSubstitute( value );
     if ( !StringUtil.isEmpty( version ) ) {
       try {

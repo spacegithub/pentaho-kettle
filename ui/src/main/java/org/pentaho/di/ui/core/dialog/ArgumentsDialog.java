@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.core.dialog;
 
@@ -99,7 +91,7 @@ public class ArgumentsDialog extends Dialog {
     fd_argumentsTable.top = new FormAttachment( 0, 15 );
     fd_argumentsTable.left = new FormAttachment( 0, 15 );
     fd_argumentsTable.bottom = new FormAttachment( 0, 221 );
-    fd_argumentsTable.right = new FormAttachment( 0, 371 );
+    fd_argumentsTable.right = new FormAttachment( 100, -15 );
     wArguments.setLayoutData( fd_argumentsTable );
 
     Label separator = new Label( shell, SWT.SEPARATOR | SWT.HORIZONTAL );
@@ -109,27 +101,10 @@ public class ArgumentsDialog extends Dialog {
     fd_separator.left = new FormAttachment( 0, 15 );
     separator.setLayoutData( fd_separator );
 
-    Button okButton = new Button( shell, SWT.NONE );
-    okButton.setText( "OK" );
-    FormData fd_okButton = new FormData();
-    if ( Const.isOSX() ) {
-      fd_okButton.left = new FormAttachment( 0, 215 );
-    } else {
-      fd_okButton.left = new FormAttachment( 0, 269 );
-    }
-    okButton.setLayoutData( fd_okButton );
-    okButton.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        ok();
-      }
-    } );
-
     Button cancelButton = new Button( shell, SWT.NONE );
-    fd_okButton.top = new FormAttachment( cancelButton, 0, SWT.TOP );
-    fd_okButton.right = new FormAttachment( cancelButton, -4 );
     cancelButton.setText( "Cancel" );
     FormData fd_cancelButton = new FormData();
-    fd_cancelButton.top = new FormAttachment( separator, 13 );
+    fd_cancelButton.top = new FormAttachment( separator, 15 );
     fd_cancelButton.right = new FormAttachment( wArguments, 0, SWT.RIGHT );
     cancelButton.setLayoutData( fd_cancelButton );
     cancelButton.addSelectionListener( new SelectionAdapter() {
@@ -138,25 +113,39 @@ public class ArgumentsDialog extends Dialog {
       }
     } );
 
+    Button okButton = new Button( shell, SWT.NONE );
+    okButton.setText( "OK" );
+    FormData fd_okButton = new FormData();
+    fd_okButton.top = new FormAttachment( cancelButton, 0, SWT.TOP );
+    fd_okButton.right = new FormAttachment( cancelButton, -5 );
+    fd_okButton.bottom = new FormAttachment( 100, -15 );
+    okButton.setLayoutData( fd_okButton );
+    okButton.addSelectionListener( new SelectionAdapter() {
+      public void widgetSelected( SelectionEvent e ) {
+        ok();
+      }
+    } );
+
     Button btnHelp = new Button( shell, SWT.NONE );
     btnHelp.setImage( GUIResource.getInstance().getImageHelpWeb() );
     btnHelp.setText( BaseMessages.getString( PKG, "System.Button.Help" ) );
     btnHelp.setToolTipText( BaseMessages.getString( PKG, "System.Tooltip.Help" ) );
     FormData fd_btnHelp = new FormData();
-    fd_btnHelp.top = new FormAttachment( separator, 13 );
-    fd_btnHelp.left = new FormAttachment( separator, 0, SWT.LEFT );
+    fd_btnHelp.bottom = new FormAttachment( 100, -15 );
+    fd_btnHelp.left = new FormAttachment( 0, 15 );
     btnHelp.setLayoutData( fd_btnHelp );
     btnHelp.addSelectionListener( new SelectionAdapter() {
       @Override
       public void widgetSelected( SelectionEvent evt ) {
-        String docUrl = Const.getDocUrl( BaseMessages.getString( Spoon.class, "Spoon.ArgumentsDialog.Help" ) );
+        String docUrl = Const.getDocUrl( "data-integration-perspective-in-the-pdi-client/"
+                + "advanced-topics-pdi-perspective/pdi-run-modifiers" );
         String docTitle = BaseMessages.getString( PKG, "ArgumentsDialog.docTitle" );
         String docHeader = BaseMessages.getString( PKG, "ArgumentsDialog.docHeader" );
         HelpUtils.openHelpDialog( parent.getShell(), docTitle, docUrl, docHeader );
       }
     } );
 
-    shell.setSize( 394, 319 );
+    shell.pack();
     getArgumentsData();
     shell.open();
 

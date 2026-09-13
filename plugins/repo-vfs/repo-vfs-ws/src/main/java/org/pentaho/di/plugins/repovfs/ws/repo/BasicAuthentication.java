@@ -1,0 +1,31 @@
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+package org.pentaho.di.plugins.repovfs.ws.repo;
+
+import jakarta.ws.rs.client.Client;
+import org.glassfish.jersey.client.authentication.HttpAuthenticationFeature;
+
+public class BasicAuthentication {
+
+  private final String user;
+  private final String password;
+
+  public BasicAuthentication( String user, String password ) {
+    this.user = user;
+    this.password = password;
+  }
+
+  public void applyToClient( Client client ) {
+    HttpAuthenticationFeature feature = HttpAuthenticationFeature.basic( user, password );
+    client.register( feature );
+  }
+}

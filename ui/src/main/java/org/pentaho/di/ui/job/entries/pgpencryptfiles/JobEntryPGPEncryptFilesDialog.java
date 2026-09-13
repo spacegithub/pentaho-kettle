@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.job.entries.pgpencryptfiles;
 
@@ -37,10 +29,8 @@ import org.eclipse.swt.layout.FormData;
 import org.eclipse.swt.layout.FormLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
-import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
@@ -57,6 +47,10 @@ import org.pentaho.di.job.entries.pgpencryptfiles.JobEntryPGPEncryptFiles;
 import org.pentaho.di.job.entry.JobEntryDialogInterface;
 import org.pentaho.di.job.entry.JobEntryInterface;
 import org.pentaho.di.repository.Repository;
+import org.pentaho.di.ui.core.events.dialog.FilterType;
+import org.pentaho.di.ui.core.events.dialog.SelectionAdapterFileDialogTextVar;
+import org.pentaho.di.ui.core.events.dialog.SelectionAdapterOptions;
+import org.pentaho.di.ui.core.events.dialog.SelectionOperation;
 import org.pentaho.di.ui.core.gui.WindowProperty;
 import org.pentaho.di.ui.core.widget.ColumnInfo;
 import org.pentaho.di.ui.core.widget.TableView;
@@ -129,6 +123,10 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
   private Label wlWildcard;
   private TextVar wWildcard;
   private FormData fdlWildcard, fdWildcard;
+
+  private Label wlUserId;
+  private TextVar wUserId;
+  private FormData fdlUserId, fdUserId;
 
   private Button wbdSourceFileFolder; // Delete
   private Button wbeSourceFileFolder; // Edit
@@ -215,6 +213,10 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
   private CCombo wIfFileExists;
   private FormData fdlIfFileExists, fdIfFileExists;
 
+  private Label wlAction;
+  private CCombo wAction;
+  private FormData fdlAction, fdAction;
+
   private Label wlIfMovedFileExists;
   private CCombo wIfMovedFileExists;
   private FormData fdlIfMovedFileExists, fdIfMovedFileExists;
@@ -239,6 +241,13 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
   private Label wlasciiMode;
   private Button wasciiMode;
   private FormData fdlasciiMode, fdasciiMode;
+
+  /**
+   * Fields represented in the UI under "File/Folder" corresponds to variable {@link //wFields}
+   */
+  enum FIELDS {
+    ROWNUM, ACTION, SOURCE, WILDCARD, USERID, DESTINATION
+  }
 
   public JobEntryPGPEncryptFilesDialog( Shell parent, JobEntryInterface jobEntryInt, Repository rep,
     JobMeta jobMeta ) {
@@ -346,21 +355,6 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     fdbbGpgExe.top = new FormAttachment( wName, margin );
     wbbGpgExe.setLayoutData( fdbbGpgExe );
 
-    wbbGpgExe.addSelectionListener( new SelectionAdapter() {
-      @Override
-      public void widgetSelected( SelectionEvent e ) {
-        FileDialog dialog = new FileDialog( shell, SWT.OPEN );
-        dialog.setFilterExtensions( new String[] { "*" } );
-        if ( wSourceFileFolder.getText() != null ) {
-          dialog.setFileName( jobMeta.environmentSubstitute( wGpgExe.getText() ) );
-        }
-        dialog.setFilterNames( FILETYPES );
-        if ( dialog.open() != null ) {
-          wGpgExe.setText( dialog.getFilterPath() + Const.FILE_SEPARATOR + dialog.getFileName() );
-        }
-      }
-    } );
-
     wGpgExe = new TextVar( jobMeta, wSettings, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
     wGpgExe.setToolTipText( BaseMessages.getString( PKG, "JobPGPEncryptFiles.GpgExe.Tooltip" ) );
     props.setLook( wGpgExe );
@@ -370,6 +364,10 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     fdGpgExe.top = new FormAttachment( wName, margin );
     fdGpgExe.right = new FormAttachment( wbbGpgExe, -margin );
     wGpgExe.setLayoutData( fdGpgExe );
+
+    wbbGpgExe.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wGpgExe, jobMeta,
+            new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FILE,
+                    new FilterType[] { FilterType.ALL }, FilterType.ALL  ) ) );
 
     wlasciiMode = new Label( wSettings, SWT.RIGHT );
     wlasciiMode.setText( BaseMessages.getString( PKG, "JobPGPEncryptFiles.asciiMode.Label" ) );
@@ -455,13 +453,35 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     // / END OF SETTINGS GROUP
     // ///////////////////////////////////////////////////////////
 
+    // Action
+    wlAction = new Label( wGeneralComp, SWT.RIGHT );
+    wlAction.setText( BaseMessages.getString( PKG, "JobPGPEncryptFiles.Fields.Action.Label" ) );
+    props.setLook( wlAction );
+    fdlAction = new FormData();
+    fdlAction.left = new FormAttachment( 0, 0 );
+    fdlAction.right = new FormAttachment( middle, -margin );
+    fdlAction.top = new FormAttachment( wSettings, margin );
+    wlAction.setLayoutData( fdlAction );
+    wAction = new CCombo( wGeneralComp, SWT.SINGLE | SWT.READ_ONLY | SWT.BORDER );
+    wAction.add( JobEntryPGPEncryptFiles.actionTypeDesc[0] );
+    wAction.add( JobEntryPGPEncryptFiles.actionTypeDesc[1] );
+    wAction.add( JobEntryPGPEncryptFiles.actionTypeDesc[2] );
+    wAction.select( 0 ); // +1: starts at -1
+
+    props.setLook( wAction );
+    fdAction = new FormData();
+    fdAction.left = new FormAttachment( middle, 0 );
+    fdAction.top = new FormAttachment( wSettings, 2 * margin );
+    fdAction.right = new FormAttachment( 100, 0 );
+    wAction.setLayoutData( fdAction );
+
     // SourceFileFolder line
     wlSourceFileFolder = new Label( wGeneralComp, SWT.RIGHT );
     wlSourceFileFolder.setText( BaseMessages.getString( PKG, "JobPGPEncryptFiles.SourceFileFolder.Label" ) );
     props.setLook( wlSourceFileFolder );
     FormData fdlSourceFileFolder = new FormData();
     fdlSourceFileFolder.left = new FormAttachment( 0, 0 );
-    fdlSourceFileFolder.top = new FormAttachment( wSettings, 2 * margin );
+    fdlSourceFileFolder.top = new FormAttachment( wAction, margin );
     fdlSourceFileFolder.right = new FormAttachment( middle, -margin );
     wlSourceFileFolder.setLayoutData( fdlSourceFileFolder );
 
@@ -471,36 +491,18 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     wbSourceDirectory.setText( BaseMessages.getString( PKG, "JobPGPEncryptFiles.BrowseFolders.Label" ) );
     FormData fdbSourceDirectory = new FormData();
     fdbSourceDirectory.right = new FormAttachment( 100, 0 );
-    fdbSourceDirectory.top = new FormAttachment( wSettings, margin );
+    fdbSourceDirectory.top = new FormAttachment( wAction, margin );
     wbSourceDirectory.setLayoutData( fdbSourceDirectory );
 
-    wbSourceDirectory.addSelectionListener( new SelectionAdapter() {
-      @Override
-      public void widgetSelected( SelectionEvent e ) {
-        DirectoryDialog ddialog = new DirectoryDialog( shell, SWT.OPEN );
-        if ( wSourceFileFolder.getText() != null ) {
-          ddialog.setFilterPath( jobMeta.environmentSubstitute( wSourceFileFolder.getText() ) );
-        }
 
-        // Calling open() will open and run the dialog.
-        // It will return the selected directory, or
-        // null if user cancels
-        String dir = ddialog.open();
-        if ( dir != null ) {
-          // Set the text box to the new selection
-          wSourceFileFolder.setText( dir );
-        }
 
-      }
-    } );
-
-    // Browse Source files button ...
+    // Browse Source files button ..
     wbSourceFileFolder = new Button( wGeneralComp, SWT.PUSH | SWT.CENTER );
     props.setLook( wbSourceFileFolder );
     wbSourceFileFolder.setText( BaseMessages.getString( PKG, "JobPGPEncryptFiles.BrowseFiles.Label" ) );
     FormData fdbSourceFileFolder = new FormData();
     fdbSourceFileFolder.right = new FormAttachment( wbSourceDirectory, -margin );
-    fdbSourceFileFolder.top = new FormAttachment( wSettings, margin );
+    fdbSourceFileFolder.top = new FormAttachment( wAction, margin );
     wbSourceFileFolder.setLayoutData( fdbSourceFileFolder );
 
     // Browse Destination file add button ...
@@ -509,7 +511,7 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     wbaSourceFileFolder.setText( BaseMessages.getString( PKG, "JobPGPEncryptFiles.FilenameAdd.Button" ) );
     fdbaSourceFileFolder = new FormData();
     fdbaSourceFileFolder.right = new FormAttachment( wbSourceFileFolder, -margin );
-    fdbaSourceFileFolder.top = new FormAttachment( wSettings, margin );
+    fdbaSourceFileFolder.top = new FormAttachment( wAction, margin );
     wbaSourceFileFolder.setLayoutData( fdbaSourceFileFolder );
 
     wSourceFileFolder = new TextVar( jobMeta, wGeneralComp, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
@@ -520,7 +522,7 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     wSourceFileFolder.addModifyListener( lsMod );
     FormData fdSourceFileFolder = new FormData();
     fdSourceFileFolder.left = new FormAttachment( middle, 0 );
-    fdSourceFileFolder.top = new FormAttachment( wSettings, 2 * margin );
+    fdSourceFileFolder.top = new FormAttachment( wAction, margin );
     fdSourceFileFolder.right = new FormAttachment( wbSourceFileFolder, -55 );
     wSourceFileFolder.setLayoutData( fdSourceFileFolder );
 
@@ -532,20 +534,9 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
       }
     } );
 
-    wbSourceFileFolder.addSelectionListener( new SelectionAdapter() {
-      @Override
-      public void widgetSelected( SelectionEvent e ) {
-        FileDialog dialog = new FileDialog( shell, SWT.OPEN );
-        dialog.setFilterExtensions( new String[] { "*" } );
-        if ( wSourceFileFolder.getText() != null ) {
-          dialog.setFileName( jobMeta.environmentSubstitute( wSourceFileFolder.getText() ) );
-        }
-        dialog.setFilterNames( FILETYPES );
-        if ( dialog.open() != null ) {
-          wSourceFileFolder.setText( dialog.getFilterPath() + Const.FILE_SEPARATOR + dialog.getFileName() );
-        }
-      }
-    } );
+    wbSourceFileFolder.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wSourceFileFolder, jobMeta,
+            new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FILE,
+                    new FilterType[] { FilterType.ALL }, FilterType.ALL  ) ) );
 
     // Destination
     wlDestinationFileFolder = new Label( wGeneralComp, SWT.RIGHT );
@@ -567,25 +558,7 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     fdbDestinationDirectory.top = new FormAttachment( wSourceFileFolder, margin );
     wbDestinationDirectory.setLayoutData( fdbDestinationDirectory );
 
-    wbDestinationDirectory.addSelectionListener( new SelectionAdapter() {
-      @Override
-      public void widgetSelected( SelectionEvent e ) {
-        DirectoryDialog ddialog = new DirectoryDialog( shell, SWT.OPEN );
-        if ( wDestinationFileFolder.getText() != null ) {
-          ddialog.setFilterPath( jobMeta.environmentSubstitute( wDestinationFileFolder.getText() ) );
-        }
 
-        // Calling open() will open and run the dialog.
-        // It will return the selected directory, or
-        // null if user cancels
-        String dir = ddialog.open();
-        if ( dir != null ) {
-          // Set the text box to the new selection
-          wDestinationFileFolder.setText( dir );
-        }
-
-      }
-    } );
 
     // Browse Destination file browse button ...
     wbDestinationFileFolder = new Button( wGeneralComp, SWT.PUSH | SWT.CENTER );
@@ -607,20 +580,15 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     fdDestinationFileFolder.right = new FormAttachment( wbSourceFileFolder, -55 );
     wDestinationFileFolder.setLayoutData( fdDestinationFileFolder );
 
-    wbDestinationFileFolder.addSelectionListener( new SelectionAdapter() {
-      @Override
-      public void widgetSelected( SelectionEvent e ) {
-        FileDialog dialog = new FileDialog( shell, SWT.OPEN );
-        dialog.setFilterExtensions( new String[] { "*" } );
-        if ( wDestinationFileFolder.getText() != null ) {
-          dialog.setFileName( jobMeta.environmentSubstitute( wDestinationFileFolder.getText() ) );
-        }
-        dialog.setFilterNames( FILETYPES );
-        if ( dialog.open() != null ) {
-          wDestinationFileFolder.setText( dialog.getFilterPath() + Const.FILE_SEPARATOR + dialog.getFileName() );
-        }
-      }
-    } );
+    wbSourceDirectory.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wSourceFileFolder, jobMeta,
+            new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FOLDER ) ) );
+
+    wbDestinationDirectory.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wDestinationFileFolder, jobMeta,
+            new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FOLDER ) ) );
+
+    wbDestinationFileFolder.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wDestinationFileFolder, jobMeta,
+            new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FILE,
+                    new FilterType[] { FilterType.ALL }, FilterType.ALL  ) ) );
 
     // Buttons to the right of the screen...
     wbdSourceFileFolder = new Button( wGeneralComp, SWT.PUSH | SWT.CENTER );
@@ -663,14 +631,34 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     fdWildcard.right = new FormAttachment( wbSourceFileFolder, -55 );
     wWildcard.setLayoutData( fdWildcard );
 
+    //User ID
+    wlUserId = new Label( wGeneralComp, SWT.RIGHT );
+    wlUserId.setText( BaseMessages.getString( PKG, "JobPGPEncryptFiles.Fields.UserID.Label" ) );
+    props.setLook( wlUserId );
+    fdlUserId = new FormData();
+    fdlUserId.left = new FormAttachment( 0, 0 );
+    fdlUserId.top = new FormAttachment( wWildcard, margin );
+    fdlUserId.right = new FormAttachment( middle, -margin );
+    wlUserId.setLayoutData( fdlUserId );
+
+    wUserId = new TextVar( jobMeta, wGeneralComp, SWT.SINGLE | SWT.LEFT | SWT.BORDER );
+    props.setLook( wUserId );
+    wUserId.addModifyListener( lsMod );
+    fdUserId = new FormData();
+    fdUserId.left = new FormAttachment( middle, 0 );
+    fdUserId.top = new FormAttachment( wWildcard, margin );
+    fdUserId.right = new FormAttachment( wbSourceFileFolder, -55 );
+    wUserId.setLayoutData( fdUserId );
+
     wlFields = new Label( wGeneralComp, SWT.NONE );
     wlFields.setText( BaseMessages.getString( PKG, "JobPGPEncryptFiles.Fields.Label" ) );
     props.setLook( wlFields );
     fdlFields = new FormData();
     fdlFields.left = new FormAttachment( 0, 0 );
     fdlFields.right = new FormAttachment( middle, -margin );
-    fdlFields.top = new FormAttachment( wWildcard, margin );
+    fdlFields.top = new FormAttachment( wUserId, margin );
     wlFields.setLayoutData( fdlFields );
+
 
     int rows =
       jobEntry.source_filefolder == null ? 1 : ( jobEntry.source_filefolder.length == 0
@@ -719,22 +707,25 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     RefreshArgFromPrevious();
 
     // Add the file to the list of files...
-    SelectionAdapter selA = new SelectionAdapter() {
+    SelectionAdapter selectionAdd = new SelectionAdapter() {
       @Override
       public void widgetSelected( SelectionEvent arg0 ) {
         wFields.add( new String[] {
-          JobEntryPGPEncryptFiles.actionTypeDesc[0], wSourceFileFolder.getText(), wWildcard.getText(), null,
+          wAction.getText(), wSourceFileFolder.getText(), wWildcard.getText(), wUserId.getText(),
           wDestinationFileFolder.getText() } );
+        wAction.setText( "" );
         wSourceFileFolder.setText( "" );
-        wDestinationFileFolder.setText( "" );
         wWildcard.setText( "" );
+        wUserId.setText( "" );
+        wDestinationFileFolder.setText( "" );
+
         wFields.removeEmptyRows();
         wFields.setRowNums();
         wFields.optWidth( true );
       }
     };
-    wbaSourceFileFolder.addSelectionListener( selA );
-    wSourceFileFolder.addSelectionListener( selA );
+    wbaSourceFileFolder.addSelectionListener( selectionAdd );
+    wSourceFileFolder.addSelectionListener( selectionAdd );
 
     // Delete files from the list of files...
     wbdSourceFileFolder.addSelectionListener( new SelectionAdapter() {
@@ -748,21 +739,7 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     } );
 
     // Edit the selected file & remove from the list...
-    wbeSourceFileFolder.addSelectionListener( new SelectionAdapter() {
-      @Override
-      public void widgetSelected( SelectionEvent arg0 ) {
-        int idx = wFields.getSelectionIndex();
-        if ( idx >= 0 ) {
-          String[] string = wFields.getItem( idx );
-          wSourceFileFolder.setText( string[0] );
-          wDestinationFileFolder.setText( string[1] );
-          wWildcard.setText( string[2] );
-          wFields.remove( idx );
-        }
-        wFields.removeEmptyRows();
-        wFields.setRowNums();
-      }
-    } );
+    wbeSourceFileFolder.addSelectionListener( selectionEdit );
 
     fdGeneralComp = new FormData();
     fdGeneralComp.left = new FormAttachment( 0, 0 );
@@ -1107,20 +1084,8 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
       }
     } );
 
-    wbDestinationFolder.addSelectionListener( new SelectionAdapter() {
-      @Override
-      public void widgetSelected( SelectionEvent e ) {
-        DirectoryDialog dialog = new DirectoryDialog( shell, SWT.OPEN );
-        if ( wDestinationFolder.getText() != null ) {
-          dialog.setFilterPath( jobMeta.environmentSubstitute( wDestinationFolder.getText() ) );
-        }
-
-        String dir = dialog.open();
-        if ( dir != null ) {
-          wDestinationFolder.setText( dir );
-        }
-      }
-    } );
+    wbDestinationFolder.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wDestinationFolder, jobMeta,
+      new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FOLDER ) ) );
 
     // Create destination folder/parent folder
     wlCreateMoveToFolder = new Label( wMoveToGroup, SWT.RIGHT );
@@ -1549,6 +1514,27 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     return jobEntry;
   }
 
+  /**
+   * Selection logic to move a row to the Edit section in the UI.
+   */
+  protected SelectionAdapter selectionEdit = new SelectionAdapter() {
+    @Override
+    public void widgetSelected( SelectionEvent arg0 ) {
+      int idx = wFields.getSelectionIndex();
+      if ( idx >= 0 ) {
+        String[] string = wFields.getItem( idx );
+        wAction.setText( string[FIELDS.ACTION.ordinal() - 1 ] );
+        wSourceFileFolder.setText( string[FIELDS.SOURCE.ordinal() - 1 ] );
+        wWildcard.setText( string[FIELDS.WILDCARD.ordinal() - 1] );
+        wUserId.setText( string[FIELDS.USERID.ordinal() - 1] );
+        wDestinationFileFolder.setText( string[FIELDS.DESTINATION.ordinal() - 1] );
+        wFields.remove( idx );
+      }
+      wFields.removeEmptyRows();
+      wFields.setRowNums();
+    }
+  };
+
   private void activeDestinationFolder() {
 
     wbDestinationFolder.setEnabled( wIfFileExists.getSelectionIndex() == 4 );
@@ -1662,19 +1648,19 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     if ( jobEntry.source_filefolder != null ) {
       for ( int i = 0; i < jobEntry.source_filefolder.length; i++ ) {
         TableItem ti = wFields.table.getItem( i );
-        ti.setText( 1, JobEntryPGPEncryptFiles.getActionTypeDesc( jobEntry.action_type[i] ) );
+        ti.setText( FIELDS.ACTION.ordinal(), JobEntryPGPEncryptFiles.getActionTypeDesc( jobEntry.action_type[i] ) );
         if ( jobEntry.source_filefolder[i] != null ) {
-          ti.setText( 2, jobEntry.source_filefolder[i] );
+          ti.setText( FIELDS.SOURCE.ordinal(), jobEntry.source_filefolder[i] );
         }
         if ( jobEntry.wildcard[i] != null ) {
-          ti.setText( 3, jobEntry.wildcard[i] );
+          ti.setText( FIELDS.WILDCARD.ordinal(), jobEntry.wildcard[i] );
         }
         if ( jobEntry.userid[i] != null ) {
-          ti.setText( 4, jobEntry.userid[i] );
+          ti.setText( FIELDS.USERID.ordinal(), jobEntry.userid[i] );
         }
 
         if ( jobEntry.destination_filefolder[i] != null ) {
-          ti.setText( 5, jobEntry.destination_filefolder[i] );
+          ti.setText( FIELDS.DESTINATION.ordinal(), jobEntry.destination_filefolder[i] );
         }
       }
       wFields.setRowNums();
@@ -1862,11 +1848,11 @@ public class JobEntryPGPEncryptFilesDialog extends JobEntryDialog implements Job
     jobEntry.wildcard = new String[nr];
     nr = 0;
     for ( int i = 0; i < nritems; i++ ) {
-      String action = wFields.getNonEmpty( i ).getText( 1 );
-      String source = wFields.getNonEmpty( i ).getText( 2 );
-      String wild = wFields.getNonEmpty( i ).getText( 3 );
-      String userid = wFields.getNonEmpty( i ).getText( 4 );
-      String dest = wFields.getNonEmpty( i ).getText( 5 );
+      String action = wFields.getNonEmpty( i ).getText( FIELDS.ACTION.ordinal() );
+      String source = wFields.getNonEmpty( i ).getText( FIELDS.SOURCE.ordinal() );
+      String wild = wFields.getNonEmpty( i ).getText( FIELDS.WILDCARD.ordinal() );
+      String userid = wFields.getNonEmpty( i ).getText( FIELDS.USERID.ordinal() );
+      String dest = wFields.getNonEmpty( i ).getText( FIELDS.DESTINATION.ordinal() );
 
       if ( source != null && source.length() != 0 ) {
         jobEntry.action_type[nr] = JobEntryPGPEncryptFiles.getActionTypeByDesc( action );

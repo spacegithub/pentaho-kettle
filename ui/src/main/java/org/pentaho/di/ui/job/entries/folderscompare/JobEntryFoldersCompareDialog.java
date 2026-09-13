@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2017 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.ui.job.entries.folderscompare;
 
@@ -34,10 +26,8 @@ import org.eclipse.swt.layout.FormAttachment;
 import org.eclipse.swt.layout.FormData;
 import org.eclipse.swt.layout.FormLayout;
 import org.eclipse.swt.widgets.Button;
-import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
-import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
@@ -52,6 +42,10 @@ import org.pentaho.di.job.entries.folderscompare.JobEntryFoldersCompare;
 import org.pentaho.di.job.entry.JobEntryDialogInterface;
 import org.pentaho.di.job.entry.JobEntryInterface;
 import org.pentaho.di.repository.Repository;
+import org.pentaho.di.ui.core.events.dialog.FilterType;
+import org.pentaho.di.ui.core.events.dialog.SelectionAdapterFileDialogTextVar;
+import org.pentaho.di.ui.core.events.dialog.SelectionAdapterOptions;
+import org.pentaho.di.ui.core.events.dialog.SelectionOperation;
 import org.pentaho.di.ui.core.gui.WindowProperty;
 import org.pentaho.di.ui.core.widget.TextVar;
 import org.pentaho.di.ui.job.dialog.JobDialog;
@@ -330,25 +324,6 @@ public class JobEntryFoldersCompareDialog extends JobEntryDialog implements JobE
     fdbDirectory1.top = new FormAttachment( wSettings, 2 * margin );
     wbDirectory1.setLayoutData( fdbDirectory1 );
 
-    wbDirectory1.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        DirectoryDialog ddialog = new DirectoryDialog( shell, SWT.OPEN );
-        if ( wFilename1.getText() != null ) {
-          ddialog.setFilterPath( jobMeta.environmentSubstitute( wFilename1.getText() ) );
-        }
-
-        // Calling open() will open and run the dialog.
-        // It will return the selected directory, or
-        // null if user cancels
-        String dir = ddialog.open();
-        if ( dir != null ) {
-          // Set the text box to the new selection
-          wFilename1.setText( dir );
-        }
-
-      }
-    } );
-
     // Browse files ..
     wbFilename1 = new Button( shell, SWT.PUSH | SWT.CENTER );
     props.setLook( wbFilename1 );
@@ -367,6 +342,9 @@ public class JobEntryFoldersCompareDialog extends JobEntryDialog implements JobE
     fdFilename1.right = new FormAttachment( wbFilename1, -margin );
     wFilename1.setLayoutData( fdFilename1 );
 
+    wbDirectory1.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wFilename1, jobMeta,
+      new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FOLDER ) ) );
+
     // Whenever something changes, set the tooltip to the expanded version:
     wFilename1.addModifyListener( new ModifyListener() {
       public void modifyText( ModifyEvent e ) {
@@ -374,19 +352,9 @@ public class JobEntryFoldersCompareDialog extends JobEntryDialog implements JobE
       }
     } );
 
-    wbFilename1.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        FileDialog dialog = new FileDialog( shell, SWT.OPEN );
-        dialog.setFilterExtensions( new String[] { "*" } );
-        if ( wFilename1.getText() != null ) {
-          dialog.setFileName( jobMeta.environmentSubstitute( wFilename1.getText() ) );
-        }
-        dialog.setFilterNames( FILETYPES );
-        if ( dialog.open() != null ) {
-          wFilename1.setText( dialog.getFilterPath() + Const.FILE_SEPARATOR + dialog.getFileName() );
-        }
-      }
-    } );
+    wbFilename1.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wFilename1, jobMeta,
+      new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FILE,
+        new FilterType[] { FilterType.ALL }, FilterType.ALL  ) ) );
 
     // Filename 2 line
     wlFilename2 = new Label( shell, SWT.RIGHT );
@@ -406,25 +374,6 @@ public class JobEntryFoldersCompareDialog extends JobEntryDialog implements JobE
     fdbDirectory2.right = new FormAttachment( 100, -margin );
     fdbDirectory2.top = new FormAttachment( wFilename1, margin );
     wbDirectory2.setLayoutData( fdbDirectory2 );
-
-    wbDirectory2.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        DirectoryDialog ddialog = new DirectoryDialog( shell, SWT.OPEN );
-        if ( wFilename2.getText() != null ) {
-          ddialog.setFilterPath( jobMeta.environmentSubstitute( wFilename2.getText() ) );
-        }
-
-        // Calling open() will open and run the dialog.
-        // It will return the selected directory, or
-        // null if user cancels
-        String dir = ddialog.open();
-        if ( dir != null ) {
-          // Set the text box to the new selection
-          wFilename2.setText( dir );
-        }
-
-      }
-    } );
 
     // Browse files...
     wbFilename2 = new Button( shell, SWT.PUSH | SWT.CENTER );
@@ -451,19 +400,12 @@ public class JobEntryFoldersCompareDialog extends JobEntryDialog implements JobE
       }
     } );
 
-    wbFilename2.addSelectionListener( new SelectionAdapter() {
-      public void widgetSelected( SelectionEvent e ) {
-        FileDialog dialog = new FileDialog( shell, SWT.OPEN );
-        dialog.setFilterExtensions( new String[] { "*" } );
-        if ( wFilename2.getText() != null ) {
-          dialog.setFileName( jobMeta.environmentSubstitute( wFilename2.getText() ) );
-        }
-        dialog.setFilterNames( FILETYPES );
-        if ( dialog.open() != null ) {
-          wFilename2.setText( dialog.getFilterPath() + Const.FILE_SEPARATOR + dialog.getFileName() );
-        }
-      }
-    } );
+    wbDirectory2.addSelectionListener( new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wFilename2, jobMeta,
+      new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FOLDER ) ) );
+
+    wbFilename2.addSelectionListener(  new SelectionAdapterFileDialogTextVar( jobMeta.getLogChannel(), wFilename2, jobMeta,
+      new SelectionAdapterOptions( jobMeta.getBowl(), SelectionOperation.FILE,
+        new FilterType[] { FilterType.ALL }, FilterType.ALL ) ) );
 
     wOK = new Button( shell, SWT.PUSH );
     wOK.setText( BaseMessages.getString( PKG, "System.Button.OK" ) );

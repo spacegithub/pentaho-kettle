@@ -1,24 +1,16 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.core;
 
@@ -29,12 +21,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import javax.xml.bind.annotation.XmlRootElement;
+import jakarta.xml.bind.annotation.XmlRootElement;
 
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleFileException;
 import org.pentaho.di.core.row.RowMeta;
 import org.pentaho.di.core.row.RowMetaInterface;
+import org.pentaho.di.core.util.EnvUtil;
 import org.pentaho.di.core.xml.XMLHandler;
 import org.w3c.dom.Node;
 
@@ -76,6 +69,16 @@ public class Result implements Cloneable {
 
   /** A constant specifying the tag value for the XML node for the result rows entry */
   public static final String XML_ROWS_TAG = "result-rows";
+
+  /** Constant for converting MB to bytes */
+  private static final int BYTES_PER_MB = 1024 * 1024;
+
+  /** UTF-8 max bytes per character is 4.0 (for code points above U+FFFF) */
+  private static final float UTF8_MAX_BYTES_PER_CHAR = 4.0f;
+
+  /** Cached maximum character count for log buffer, calculated once during initialization.
+   * -1 = unlimited, 0 = no logging, positive value = character limit */
+  private int maxLogBufferChars = -1;
 
   /** The number of errors during the transformation or job */
   private long nrErrors;
@@ -126,7 +129,7 @@ public class Result implements Cloneable {
   private String logChannelId;
 
   /** The log text. */
-  private String logText;
+  private StringBuilder logText = new StringBuilder( 10000 );
 
   /**
    * safe stop.
@@ -161,6 +164,9 @@ public class Result implements Cloneable {
 
     stopped = false;
     entryNr = 0;
+    
+    // Initialize log buffer size from system properties once during object creation
+    initializeLogBufferSize();
   }
 
   /**
@@ -543,7 +549,7 @@ public class Result implements Cloneable {
     nrLinesDeleted = 0;
     nrErrors = 0;
     nrFilesRetrieved = 0;
-    logText = null;
+    logText = new StringBuilder( 10000 );
   }
 
   /**
@@ -563,8 +569,10 @@ public class Result implements Cloneable {
     nrErrors += res.getNrErrors();
     nrFilesRetrieved += res.getNrFilesRetrieved();
     resultFiles.putAll( res.getResultFiles() );
-    logChannelId = res.getLogChannelId();
-    logText = res.getLogText();
+    logChannelId = res.getLogChannelId();  
+    String newLogText = res.getLogText();
+    safeAppendToLog(newLogText);
+    
     rows.addAll( res.getRows() );
   }
 
@@ -629,7 +637,7 @@ public class Result implements Cloneable {
     xml.append( XMLHandler.addTagValue( "exit_status", exitStatus ) );
     xml.append( XMLHandler.addTagValue( "is_stopped", stopped ) );
     xml.append( XMLHandler.addTagValue( "log_channel_id", logChannelId ) );
-    xml.append( XMLHandler.addTagValue( "log_text", logText ) );
+    xml.append( XMLHandler.addTagValue( "log_text", logText.toString() ) );
     xml.append( XMLHandler.addTagValue( "elapsedTimeMillis", elapsedTimeMillis ) );
     xml.append( XMLHandler.addTagValue( "executionId", executionId ) );
 
@@ -675,8 +683,10 @@ public class Result implements Cloneable {
     stopped = "Y".equalsIgnoreCase( XMLHandler.getTagValue( node, "is_stopped" ) );
 
     logChannelId = XMLHandler.getTagValue( node, "log_channel_id" );
-    logText = XMLHandler.getTagValue( node, "log_text" );
-
+    String tagText = XMLHandler.getTagValue( node, "log_text" );
+    if ( tagText != null ) {
+      logText = new StringBuilder( tagText );
+    }
     elapsedTimeMillis = Const.toLong( XMLHandler.getTagValue( node, "elapsedTimeMillis" ), 0L );
     executionId = XMLHandler.getTagValue( node, "executionId" );
 
@@ -866,7 +876,7 @@ public class Result implements Cloneable {
    * @return the logging text as a string
    */
   public String getLogText() {
-    return logText;
+    return logText.toString();
   }
 
   /**
@@ -876,7 +886,108 @@ public class Result implements Cloneable {
    *          the logText to set
    */
   public void setLogText( String logText ) {
-    this.logText = logText;
+    if ( logText == null ) {
+      this.logText = new StringBuilder( 10000 );
+    } else {
+      this.logText = new StringBuilder( logText );
+    }
+  }
+
+  /**
+   * Initialize the log buffer size from system property once per instance
+   */
+  private void initializeLogBufferSize() {
+    String bufferSizeMBStr = EnvUtil.getSystemProperty("KETTLE_MAX_LOG_BUFFER_SIZE_MB", "-1");
+    
+    try {
+      int bufferSizeMB = Integer.parseInt(bufferSizeMBStr);
+      if (bufferSizeMB == 0) {
+        maxLogBufferChars = 0; // No logging
+      } else if (bufferSizeMB > 0) {
+        // Convert MB to character count using UTF-8 max bytes per character
+        int maxBytes = bufferSizeMB * BYTES_PER_MB;
+        maxLogBufferChars = (int) (maxBytes / UTF8_MAX_BYTES_PER_CHAR);
+      }
+      // For negative values or any other case, keep default -1 (unlimited)
+    } catch (NumberFormatException e) {
+      // If parsing fails, keep default -1 (unlimited)
+    }
+  }
+
+  /**
+   * Safely appends text to the log buffer with configurable size protection
+   * 
+   * @param textToAppend the text to append to the log buffer
+   */
+  private void safeAppendToLog(String textToAppend) {
+    if (textToAppend == null || textToAppend.isEmpty()) {
+      return;
+    }
+    
+    // Use cached character limit
+    if (maxLogBufferChars == 0) {
+      // Zero: no logging
+      return;
+    }
+    
+    if (maxLogBufferChars > 0) {
+      // Positive value: apply character limit
+      appendWithLimit(textToAppend);
+    } else {
+      // Negative: unlimited logging
+      logText.append(textToAppend);
+    }
+  }
+
+  /**
+   * Appends text with size limit enforcement
+   * 
+   * @param textToAppend the text to append
+   */
+  private void appendWithLimit(String textToAppend) {
+    int currentChars = logText.length();
+    int incomingChars = textToAppend.length();
+    
+    if (incomingChars >= maxLogBufferChars) {
+      // Incoming text exceeds limit - keep only the tail of incoming text
+      int startIndex = incomingChars - maxLogBufferChars;
+      String trimmedText = textToAppend.substring(startIndex);
+      logText.setLength(0);
+      logText.append(trimmedText);
+    } else if (currentChars + incomingChars <= maxLogBufferChars) {
+      // Both existing and incoming text fit within limit
+      logText.append(textToAppend);
+    } else {
+      // Need to trim existing content to make room for incoming text
+      int targetCurrentChars = maxLogBufferChars - incomingChars;
+      
+      if (targetCurrentChars <= 0) {
+        // No room for existing content, use only incoming text
+        logText.setLength(0);
+        logText.append(textToAppend);
+      } else {
+        // Keep only the tail of existing content that fits
+        String currentText = logText.toString();
+        int startIndex = currentChars - targetCurrentChars;
+        String keptText = currentText.substring(startIndex);
+        logText.setLength(0);
+        logText.append(keptText);
+        logText.append(textToAppend);
+      }
+    }
+  }
+
+  /**
+   * Returns the maximum character count for the log buffer based on cached configuration.
+   * 
+   * @return the maximum character count, -1 if unlimited, 0 if no logging
+   */
+  public int getMaxCharCount() {
+    return maxLogBufferChars;
+  }
+
+  public void appendLogText( String logTextStr ) {
+    safeAppendToLog(logTextStr);
   }
 
   /**

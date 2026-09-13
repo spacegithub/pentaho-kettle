@@ -1,28 +1,20 @@
 /*! ******************************************************************************
  *
- * Pentaho Data Integration
+ * Pentaho
  *
- * Copyright (C) 2002-2018 by Hitachi Vantara : http://www.pentaho.com
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- *******************************************************************************
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Change Date: 2030-06-15
  ******************************************************************************/
+
+
 
 package org.pentaho.di.trans.streaming.api;
 
-import io.reactivex.Observable;
+import io.reactivex.Flowable;
 
 /** A StreamWindow governs buffering and sending rows to a sub-transformation.
  *
@@ -35,7 +27,7 @@ import io.reactivex.Observable;
 public interface StreamWindow<I, O> {
 
   /**
-   * Takes an iterable (would typically be a {@link StreamSource#observable()}}
+   * Takes an iterable (would typically be a {@link StreamSource#flowable()}}
    * call) and buffers it according to the window strategy.
    *
    * Returns an iterable of data for the window.  Depending on stream implementation,
@@ -44,6 +36,6 @@ public interface StreamWindow<I, O> {
    * will pass windowed data to a subtransformation, and return the
    * transformed results.
    */
-  Iterable<O> buffer( Observable<I> observable );
+  Iterable<O> buffer( Flowable<I> flowable );
 }
 

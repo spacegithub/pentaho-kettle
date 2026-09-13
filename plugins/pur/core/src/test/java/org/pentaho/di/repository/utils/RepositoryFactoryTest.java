@@ -1,22 +1,19 @@
-/*!
- * Copyright 2010 - 2017 Hitachi Vantara.  All rights reserved.
+/*! ******************************************************************************
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Pentaho
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
  *
- */
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
 package org.pentaho.di.repository.utils;
 
-import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -31,9 +28,13 @@ import org.pentaho.platform.engine.core.system.PentahoSystem;
 import org.pentaho.platform.engine.core.system.StandaloneApplicationContext;
 import org.pentaho.platform.engine.core.system.StandaloneSession;
 
+import java.util.function.Supplier;
+
 import static org.hamcrest.CoreMatchers.sameInstance;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -51,8 +52,8 @@ public class RepositoryFactoryTest {
     KettleEnvironment.init();
   }
 
-  @After
-  public void reset() {
+  @AfterClass
+  public static void reset() {
     PentahoSystem.clearObjectFactory();
   }
 
@@ -82,18 +83,26 @@ public class RepositoryFactoryTest {
     IRepositoryFactory.CachingRepositoryFactory cachingRepositoryFactory =
         new IRepositoryFactory.CachingRepositoryFactory( mockFactory );
 
-    cachingRepositoryFactory.connect( "foo" );
+    Repository createdOnCacheMiss = mock( Repository.class );
+    when( mockFactory.connect( "foo" ) ).thenReturn( createdOnCacheMiss );
 
-    verify( mockFactory, times( 1 ) ).connect( "foo" );
-
-    // Test with Cache Hit
+    // First call behaves like cache miss: invoke supplier and return created repository.
+    // Second call behaves like cache hit: return pre-cached repository.
     Repository mockRepository = mock( Repository.class );
-    when( cacheManager.cacheEnabled( IRepositoryFactory.CachingRepositoryFactory.REGION ) ).thenReturn( true );
-    when( cacheManager.getFromRegionCache( IRepositoryFactory.CachingRepositoryFactory.REGION, "joe" ) ).thenReturn(
-        mockRepository );
+    when( cacheManager.getOrCreateFromRegionCache(
+      eq( IRepositoryFactory.CachingRepositoryFactory.REGION ),
+      eq( "joe" ),
+      any() ) )
+      .thenAnswer( invocation -> ( (Supplier<?>) invocation.getArgument( 2 ) ).get() )
+      .thenReturn( mockRepository );
+
+    Repository firstRepo = cachingRepositoryFactory.connect( "foo" );
+    assertThat( firstRepo, sameInstance( createdOnCacheMiss ) );
 
     Repository repo = cachingRepositoryFactory.connect( "foo" );
     assertThat( repo, sameInstance( mockRepository ) );
+
+    verify( mockFactory, times( 1 ) ).connect( "foo" );
   }
 
   @Test
